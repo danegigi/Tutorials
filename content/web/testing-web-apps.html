@@ -1,0 +1,74 @@
+<p class="lead">Testing a frontend means picking the right test for each kind of logic: fast unit tests for pure functions, component tests for UI behavior, and a few end-to-end tests for the critical user journeys. The pyramid keeps the suite fast and trustworthy.</p>
+
+<h2>The testing pyramid</h2>
+<pre><code>        ▲  few     E2E — real browser, whole app, slow but high-confidence
+       ▲▲▲         Component/integration — a UI unit with its DOM
+      ▲▲▲▲▲ many   Unit — pure functions, fast, isolated</code></pre>
+<p><span class="level beginner">Beginner</span> Many fast unit tests, fewer component tests, a handful of E2E. Inverting this (mostly slow E2E) gives a suite that's flaky and takes 20 minutes — the fastest way to make a team stop running tests.</p>
+
+<h2>Unit tests</h2>
+<pre><code>// slugify.test.ts  (Vitest / bun test — same shape)
+import { test, expect } from "vitest";
+import { slugify } from "./slugify";
+
+test("slugify lowercases and dashes", () =&gt; {
+  expect(slugify("Hello World")).toBe("hello-world");
+});
+test("slugify strips punctuation", () =&gt; {
+  expect(slugify("A, B &amp; C!")).toBe("a-b-c");
+});</code></pre>
+<p>Unit tests target pure logic — formatters, validators, reducers, the observable store. No DOM, no network; they run in milliseconds.</p>
+
+<h2>Component tests</h2>
+<p><span class="level intermediate">Intermediate</span> Test a piece of UI the way a user experiences it — query by visible text/role, interact, assert on what's shown — not by poking internal state:</p>
+<pre><code>import { render, screen } from "@testing-library/dom";
+import userEvent from "@testing-library/user-event";
+
+test("counter increments on click", async () =&gt; {
+  document.body.innerHTML = Counter();          // mount
+  await userEvent.click(screen.getByRole("button", { name: /increment/i }));
+  expect(screen.getByText("1")).toBeInTheDocument();
+});</code></pre>
+<blockquote class="tip">Testing Library's guiding principle: <em>"the more your tests resemble the way your software is used, the more confidence they give."</em> Query by role/label/text (what a user sees), not by CSS class or test-id-everywhere. A test that breaks when you rename a class but the UI still works is testing the wrong thing.</blockquote>
+
+<h2>End-to-end with Playwright</h2>
+<pre><code>// e2e/login.spec.ts
+import { test, expect } from "@playwright/test";
+
+test("user can log in", async ({ page }) =&gt; {
+  await page.goto("/login");
+  await page.getByLabel("Email").fill("ada@example.com");
+  await page.getByLabel("Password").fill("hunter2");
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await expect(page).toHaveURL("/dashboard");
+  await expect(page.getByText("Welcome, Ada")).toBeVisible();
+});
+// npx playwright test   (runs in real Chromium/Firefox/WebKit)</code></pre>
+<p>E2E drives a real browser through a whole journey — login, checkout, the one flow that must never break. Reserve them for critical paths; they're the slowest and most prone to flakiness.</p>
+
+<h2>Mocking the network</h2>
+<pre><code>// Deterministic component tests: intercept fetch instead of hitting a real API
+import { http, HttpResponse } from "msw";
+const handlers = [
+  http.get("/api/users", () =&gt; HttpResponse.json([{ id: 1, name: "Ada" }])),
+];
+// Mock Service Worker intercepts requests in tests (and even in the browser).</code></pre>
+
+<h2>Avoiding flaky tests</h2>
+<blockquote class="warn"><strong>The #1 E2E sin is the hard-coded wait</strong> (<code>sleep(2000)</code>). It's slow when things are fast and flaky when they're slow. Use <em>web-first assertions</em> that auto-retry (<code>await expect(locator).toBeVisible()</code>) — Playwright waits for the condition, not a fixed time. Also: isolate tests (fresh state each run), avoid order dependence, and prefer stable role/label queries over brittle CSS selectors.</blockquote>
+
+<h2>In CI</h2>
+<pre><code># Fast feedback: unit + component on every push; E2E on the critical set
+bun test                      # or: vitest run
+npx playwright test --reporter=line
+# Playwright can shard across runners and record traces/video on failure.</code></pre>
+
+<h2>Exercises</h2>
+<ul>
+  <li>Unit-test a validator function with a table of valid/invalid inputs.</li>
+  <li>Component-test a form: fill fields, submit, assert the success message appears (querying by role/text).</li>
+  <li>Write one Playwright E2E for a login or search flow using web-first assertions (no fixed sleeps).</li>
+</ul>
+
+<h2>Mini-project: a tested feature end to end</h2>
+<p>Pick one feature (e.g. the live-search box from the JavaScript lesson) and test it at all three levels: unit-test the debounce/parse helpers, component-test the input rendering results with a mocked API (MSW), and one Playwright E2E of the real search journey. Wire them into a CI workflow (from the GitHub Actions lesson) so unit+component run on every push and E2E on the critical path.</p>

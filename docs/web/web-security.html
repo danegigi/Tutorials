@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en" data-base="../">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0d1117">
+<meta name="description" content="Dev Tutorials — Golang, Bun, Web Development, Linux and DevOps, offline-ready.">
+<title>Web Security — Web Development</title>
+<link rel="manifest" href="../manifest.webmanifest">
+<link rel="icon" href="../icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="../icon-192.png">
+<link rel="stylesheet" href="../app.css">
+<script>/* set theme before paint to avoid flash */(function(){try{var t=localStorage.getItem('tut.theme');document.documentElement.setAttribute('data-theme',t||'dark');}catch(e){document.documentElement.setAttribute('data-theme','dark');}})();</script>
+
+</head>
+<body class="lesson">
+<header class="nav">
+  <a class="brand" href="../index.html">📚 Dev Tutorials</a>
+  <span class="crumb">Web Security — Web Development</span>
+  <span class="spacer"></span>
+  <a class="navbtn" href="../search.html">🔎 Search</a>
+  <button class="navbtn" id="install-btn" type="button">⬇️ Install</button>
+  <button class="navbtn" id="theme-btn" type="button" aria-label="Toggle theme">🌙 Dark</button>
+</header>
+<main class="wrap lesson-body">
+  <h1 class="page-title">Web Security</h1>
+  <div class="lesson-tools" data-lesson-id="web/web-security">
+    <button id="done-btn" type="button" aria-pressed="false">○ Mark complete</button>
+    <button id="mark-btn" type="button" aria-pressed="false">☆ Bookmark</button>
+    <a class="navbtn" href="index.html" style="margin-left:auto">All Web Development lessons →</a>
+  </div>
+<nav class="toc" aria-label="On this page"><strong>On this page</strong><ul>
+<li class="lvl2"><a href="#cross-site-scripting-xss">Cross-Site Scripting (XSS)</a></li>
+<li class="lvl2"><a href="#content-security-policy">Content-Security-Policy</a></li>
+<li class="lvl2"><a href="#cross-site-request-forgery-csrf">Cross-Site Request Forgery (CSRF)</a></li>
+<li class="lvl2"><a href="#security-headers">Security headers</a></li>
+<li class="lvl2"><a href="#https-everywhere">HTTPS everywhere</a></li>
+<li class="lvl2"><a href="#other-must-knows">Other must-knows</a></li>
+<li class="lvl2"><a href="#exercises">Exercises</a></li>
+<li class="lvl2"><a href="#mini-project-harden-a-web-app">Mini-project: harden a web app</a></li>
+</ul></nav>
+<p class="lead">The browser runs untrusted code and handles untrusted input, so the frontend is an attack surface. The Authentication lesson covered logging users in; this one covers keeping the app itself safe: XSS, CSRF, a strong Content-Security-Policy, security headers, and HTTPS.</p>
+
+<h2 id="cross-site-scripting-xss">Cross-Site Scripting (XSS)</h2>
+<p><span class="level beginner">Beginner</span> XSS is injecting attacker-controlled script into your page, where it runs with your users' session. The root cause is almost always rendering untrusted data as HTML.</p>
+<pre><code>// VULNERABLE: a comment of &lt;img src=x onerror=steal()&gt; executes
+el.innerHTML = userComment;
+
+// SAFE: textContent never parses HTML
+el.textContent = userComment;
+
+// If you MUST render HTML, sanitize it first
+import DOMPurify from "dompurify";
+el.innerHTML = DOMPurify.sanitize(userRichText);</code></pre>
+<blockquote class="warn"><strong>The rule:</strong> treat all user input as hostile, and <em>encode on output</em> for the context it lands in (HTML body, attribute, URL, JS). Prefer <code>textContent</code>; reserve <code>innerHTML</code> for sanitized content only. This includes data from your own API — a stored comment is still user input. Server-rendered templates must auto-escape (most do; don't disable it).</blockquote>
+
+<h2 id="content-security-policy">Content-Security-Policy</h2>
+<p><span class="level intermediate">Intermediate</span> CSP is a defense-in-depth header that tells the browser which sources are allowed — so even if an XSS payload slips in, the browser refuses to run it:</p>
+<pre><code>Content-Security-Policy:
+  default-src 'self';
+  script-src 'self';                      # no inline scripts, no CDN unless listed
+  style-src 'self';
+  img-src 'self' data:;
+  connect-src 'self' https://api.example.com;
+  frame-ancestors 'none';                 # can't be framed (clickjacking)
+  base-uri 'self';
+  object-src 'none';</code></pre>
+<blockquote class="warn"><strong>Common mistake:</strong> <code>script-src 'unsafe-inline'</code>, which defeats CSP's main benefit by re-allowing inline <code>&lt;script&gt;</code>/<code>onclick</code> — exactly what XSS injects. Move inline scripts to files (or use a per-request nonce/hash) so you can drop <code>unsafe-inline</code>. Roll CSP out with <code>Content-Security-Policy-Report-Only</code> first to find violations before enforcing.</blockquote>
+
+<h2 id="cross-site-request-forgery-csrf">Cross-Site Request Forgery (CSRF)</h2>
+<p>CSRF tricks a logged-in user's browser into making a state-changing request to your site (cookies ride along automatically). Defenses:</p>
+<pre><code>Set-Cookie: session=…; SameSite=Lax; Secure; HttpOnly   # Lax/Strict blocks cross-site sends
+# Plus a CSRF token for state-changing POSTs:
+&lt;input type="hidden" name="csrf" value="{{ per-session token }}"&gt;
+# Server rejects the request if the token is missing/wrong.</code></pre>
+<p>Pure token-auth APIs (Authorization header, not cookies) aren't CSRF-prone — the browser doesn't attach the header automatically. Cookie-based sessions are, so they need <code>SameSite</code> + tokens.</p>
+
+<h2 id="security-headers">Security headers</h2>
+<table>
+  <thead><tr><th>Header</th><th>Protects against</th></tr></thead>
+  <tbody>
+    <tr><td><code>Strict-Transport-Security</code> (HSTS)</td><td>Downgrade to HTTP; forces HTTPS.</td></tr>
+    <tr><td><code>Content-Security-Policy</code></td><td>XSS, injection, clickjacking.</td></tr>
+    <tr><td><code>X-Content-Type-Options: nosniff</code></td><td>MIME-sniffing attacks.</td></tr>
+    <tr><td><code>Referrer-Policy: strict-origin-when-cross-origin</code></td><td>Leaking URLs to third parties.</td></tr>
+    <tr><td><code>Permissions-Policy</code></td><td>Unwanted camera/mic/geolocation access.</td></tr>
+  </tbody>
+</table>
+<pre><code>Strict-Transport-Security: max-age=63072000; includeSubDomains; preload</code></pre>
+
+<h2 id="https-everywhere">HTTPS everywhere</h2>
+<p>Serve everything over TLS (see the DevOps TLS lesson), redirect HTTP→HTTPS, and set HSTS so browsers never try HTTP again. Mixed content (an HTTPS page loading an HTTP script) is blocked by browsers and a security hole — audit for it.</p>
+
+<h2 id="other-must-knows">Other must-knows</h2>
+<ul>
+  <li><strong>Validate on the server</strong> — client validation is UX only (see Forms &amp; Validation).</li>
+  <li><strong>Parameterized queries</strong> on the backend — never string-concatenate SQL (no injection).</li>
+  <li><strong>Dependency hygiene</strong> — <code>bun/npm audit</code>, keep deps patched; a vulnerable library is your vulnerability.</li>
+  <li><strong>Don't leak secrets to the client</strong> — anything in the bundle is public (see Integration lesson).</li>
+</ul>
+<blockquote class="tip">Work through the <a href="https://owasp.org/www-project-top-ten/" target="_blank" rel="noopener">OWASP Top Ten</a> — it's the canonical list of what actually gets exploited. Most real breaches are boring: injection, broken access control, misconfiguration, and known-vulnerable dependencies, not exotic attacks.</blockquote>
+
+<h2 id="exercises">Exercises</h2>
+<ul>
+  <li>Build a comment box that safely renders user input with <code>textContent</code>; then show the XSS when switched to <code>innerHTML</code>.</li>
+  <li>Add a strict CSP (no <code>unsafe-inline</code>) to a page and fix the violations it reports.</li>
+  <li>Check a site's headers at <a href="https://securityheaders.com" target="_blank" rel="noopener">securityheaders.com</a> and add the missing ones.</li>
+</ul>
+
+<h2 id="mini-project-harden-a-web-app">Mini-project: harden a web app</h2>
+<p>Take an app with a user-content feature (comments, profiles) and harden it: sanitize/escape all rendered user input, add a strict CSP (served Report-Only first, then enforced, with no <code>unsafe-inline</code>), set the full security-header set + HSTS, make session cookies <code>HttpOnly; Secure; SameSite=Lax</code> with a CSRF token on mutations, and run a dependency audit. Verify with an A grade on securityheaders.com and a clean CSP console.</p>
+
+<section class="further"><h2 id="further-reading">Further reading</h2>
+<p>Official documentation for the tools and APIs covered on this page:</p>
+<ul class="further-list"><li><a href="https://owasp.org/www-project-top-ten/" target="_blank" rel="noopener">OWASP Top Ten ↗</a></li>
+<li><a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/CSP" target="_blank" rel="noopener">Content Security Policy (MDN) ↗</a></li>
+<li><a href="https://developer.mozilla.org/en-US/docs/Web/Security" target="_blank" rel="noopener">Web security (MDN) ↗</a></li></ul></section>
+  <nav class="pager">
+<a class="prev" href="testing-web-apps.html"><small>Previous</small>🌐 Testing Web Apps</a>
+<a class="next" href="../linux/shell-basics.html"><small>Next</small>🐧 Shell Basics</a>
+  </nav>
+</main>
+<button type="button" class="fab top" id="fab-top" aria-label="Back to top">↑ Top</button>
+<div class="banner" id="update-banner" role="status">A new version is available.<button type="button">Reload</button></div>
+<div class="banner" id="offline-banner" role="status">You're offline — showing cached lessons.</div>
+<script src="../app.js" defer></script>
+</body>
+</html>

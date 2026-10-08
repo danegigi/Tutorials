@@ -1,0 +1,71 @@
+<p class="lead">Performance is a feature users feel. Google's Core Web Vitals turn "fast" into three measurable numbers — LCP, CLS, and INP — that are also ranking signals. Learn what each measures, how to diagnose a bad score, and the concrete fixes.</p>
+
+<h2>The three Core Web Vitals</h2>
+<table>
+  <thead><tr><th>Metric</th><th>Measures</th><th>Good</th><th>Poor</th></tr></thead>
+  <tbody>
+    <tr><td><strong>LCP</strong> (Largest Contentful Paint)</td><td>Time until the biggest element renders</td><td>≤ 2.5s</td><td>&gt; 4s</td></tr>
+    <tr><td><strong>CLS</strong> (Cumulative Layout Shift)</td><td>How much the layout jumps around</td><td>≤ 0.1</td><td>&gt; 0.25</td></tr>
+    <tr><td><strong>INP</strong> (Interaction to Next Paint)</td><td>Responsiveness to taps/clicks</td><td>≤ 200ms</td><td>&gt; 500ms</td></tr>
+  </tbody>
+</table>
+<p><span class="level beginner">Beginner</span> LCP is loading, CLS is visual stability, INP is interactivity — loading, looking, and responding. Lighthouse measures them in a lab; real-user data (CrUX / the <code>web-vitals</code> library) measures them in the field.</p>
+
+<h2>Fixing LCP</h2>
+<pre><code>&lt;!-- Preload the LCP image / hero so it starts downloading immediately --&gt;
+&lt;link rel="preload" as="image" href="/hero.webp" fetchpriority="high"&gt;
+
+&lt;!-- Serve modern formats + right size (see Responsive Design) --&gt;
+&lt;img src="hero.webp" width="1200" height="630" fetchpriority="high" alt="…"&gt;</code></pre>
+<ul>
+  <li>Compress and right-size images (usually the LCP element); serve AVIF/WebP.</li>
+  <li>Eliminate render-blocking CSS/JS; inline critical CSS, defer the rest.</li>
+  <li>Use a CDN and good cache headers so bytes arrive fast.</li>
+  <li>Preconnect to critical third-party origins.</li>
+</ul>
+
+<h2>Fixing CLS</h2>
+<p><span class="level beginner">Beginner</span> Layout shift happens when content loads <em>after</em> paint and pushes things around. The fix is always "reserve the space up front":</p>
+<pre><code>&lt;!-- Always set width/height (or aspect-ratio) on images &amp; embeds --&gt;
+&lt;img src="x.jpg" width="800" height="600" alt="…"&gt;        &lt;!-- reserves the box --&gt;
+.media { aspect-ratio: 16 / 9; }                           &lt;!-- for responsive --&gt;</code></pre>
+<pre><code>/* Reserve space for content injected by JS, so it can't shift the page */
+.progress-bar { min-height: 34px; }
+/* Load fonts without a reflow: swap with a matched fallback metric */
+@font-face { font-family: Inter; src: url(inter.woff2); font-display: swap; size-adjust: 100%; }</code></pre>
+<blockquote class="warn"><strong>Common CLS causes:</strong> images without dimensions, ads/embeds injected after load, web fonts swapping to a differently-sized face, and content inserted above what the user is reading (a late banner). This tutorial itself had a 0.163 CLS from its hero heading + a JS-populated progress bar settling after paint — fixed by reserving explicit heights. Reserve space; never insert above the fold after load.</blockquote>
+
+<h2>Fixing INP</h2>
+<p><span class="level intermediate">Intermediate</span> INP is dominated by long JavaScript tasks blocking the main thread when the user interacts.</p>
+<pre><code>// Break up long work so the UI stays responsive
+async function processAll(items) {
+  for (const batch of chunk(items, 50)) {
+    doWork(batch);
+    await new Promise(r =&gt; setTimeout(r)); // yield to the main thread
+  }
+}
+// Or offload heavy compute to a Web Worker entirely:
+const worker = new Worker("/heavy.js");
+worker.postMessage(data);</code></pre>
+<ul>
+  <li>Debounce/throttle high-frequency handlers (input, scroll, resize).</li>
+  <li>Ship less JavaScript; code-split and lazy-load non-critical bundles.</li>
+  <li>Avoid synchronous layout thrashing (read then write DOM in batches).</li>
+</ul>
+
+<h2>Measuring</h2>
+<pre><code>// Field data in your own app (real users, not a lab)
+import { onLCP, onCLS, onINP } from "web-vitals";
+onLCP(console.log); onCLS(console.log); onINP(console.log);
+// Lab data: Chrome DevTools → Lighthouse, or `npx lighthouse &lt;url&gt;`</code></pre>
+<blockquote class="tip">Lab (Lighthouse) and field (CrUX / web-vitals) data differ — the lab is a clean, controlled run; the field is messy real devices and networks. Optimize with the lab for fast iteration, but trust the field for whether users are actually having a good time.</blockquote>
+
+<h2>Exercises</h2>
+<ul>
+  <li>Run Lighthouse on a page you own; identify the LCP element and whether CLS or INP is weakest.</li>
+  <li>Add <code>width</code>/<code>height</code> to every image on a page and re-measure CLS.</li>
+  <li>Add the <code>web-vitals</code> library and log real LCP/CLS/INP from your own browsing.</li>
+</ul>
+
+<h2>Mini-project: get a page to all-green vitals</h2>
+<p>Take a slow/janky page and drive all three vitals into the "good" range: preload + right-size the LCP image, reserve dimensions on every image and JS-injected block to kill CLS, and break up or defer the heaviest script to cut INP. Verify with Lighthouse before/after and capture the score jump — exactly the LCP/CLS/INP tuning that took this tutorial's dashboard from Performance 93 to 99.</p>

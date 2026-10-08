@@ -432,6 +432,46 @@ export const SECTIONS = [
           ref("GitHub Pages", "https://docs.github.com/en/pages"),
         ],
       },
+      {
+        slug: "web-performance",
+        title: "Web Performance & Core Web Vitals",
+        blurb: "LCP, CLS, INP — what they measure, how to diagnose them, and the fixes: images, fonts, JS, layout stability.",
+        further: [
+          ref("Core Web Vitals (web.dev)", "https://web.dev/articles/vitals"),
+          ref("Optimize LCP", "https://web.dev/articles/optimize-lcp"),
+          ref("Optimize CLS", "https://web.dev/articles/optimize-cls"),
+          ref("Optimize INP", "https://web.dev/articles/optimize-inp"),
+        ],
+      },
+      {
+        slug: "state-management",
+        title: "Client-Side State Management",
+        blurb: "Local vs shared vs server vs URL state, the observable store pattern, and avoiding over-engineering.",
+        further: [
+          ref("Thinking in React (state)", "https://react.dev/learn/thinking-in-react"),
+          ref("URLSearchParams (MDN)", "https://developer.mozilla.org/en-US/docs/Web/API/URLSearchParams"),
+        ],
+      },
+      {
+        slug: "testing-web-apps",
+        title: "Testing Web Apps",
+        blurb: "The testing pyramid for the frontend: unit, component, and end-to-end tests with Playwright.",
+        further: [
+          ref("Testing Library principles", "https://testing-library.com/docs/guiding-principles/"),
+          ref("Playwright", "https://playwright.dev/docs/intro"),
+          ref("Vitest", "https://vitest.dev/"),
+        ],
+      },
+      {
+        slug: "web-security",
+        title: "Web Security",
+        blurb: "XSS, CSRF, Content-Security-Policy, security headers, HTTPS/HSTS, and the OWASP Top Ten for the browser.",
+        further: [
+          ref("OWASP Top Ten", "https://owasp.org/www-project-top-ten/"),
+          ref("Content Security Policy (MDN)", "https://developer.mozilla.org/en-US/docs/Web/HTTP/CSP"),
+          ref("Web security (MDN)", "https://developer.mozilla.org/en-US/docs/Web/Security"),
+        ],
+      },
     ],
   },
 

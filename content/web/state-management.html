@@ -1,0 +1,72 @@
+<p class="lead">"State" is any data your UI remembers between renders — a form's contents, the logged-in user, the current filter. Managing it well is mostly about putting each piece of state in the <em>right place</em> and not reaching for a heavy library before you need one.</p>
+
+<h2>Four kinds of state</h2>
+<table>
+  <thead><tr><th>Kind</th><th>Example</th><th>Lives in</th></tr></thead>
+  <tbody>
+    <tr><td><strong>Local UI</strong></td><td>Is this dropdown open?</td><td>The component / a local variable</td></tr>
+    <tr><td><strong>Shared app</strong></td><td>Theme, logged-in user, cart</td><td>A shared store</td></tr>
+    <tr><td><strong>Server</strong></td><td>The list of products from the API</td><td>A cache (it's a copy of server truth)</td></tr>
+    <tr><td><strong>URL</strong></td><td>Current page, search query, filters</td><td>The address bar (query/path)</td></tr>
+  </tbody>
+</table>
+<blockquote class="tip">The most common architecture mistake is treating all four as one blob in a single global store. <strong>Server state</strong> is a cache (it can go stale, needs refetching) — not the same as client state. <strong>URL state</strong> belongs in the URL so links are shareable and the back button works. Keeping them separate simplifies everything.</blockquote>
+
+<h2>Local state: just use a variable</h2>
+<pre><code>// Vanilla: state is a variable; a render function reads it
+let open = false;
+function toggle() { open = !open; render(); }
+function render() { menu.hidden = !open; }
+// Don't reach for a library to track whether a menu is open.</code></pre>
+
+<h2>URL as state</h2>
+<p><span class="level beginner">Beginner</span> Filters, pagination, search, and the active tab should live in the URL — then the page is bookmarkable, shareable, and the back button works:</p>
+<pre><code>// Read current state from the URL
+const params = new URLSearchParams(location.search);
+const page = Number(params.get("page") || 1);
+
+// Update it WITHOUT a reload or a new history entry per keystroke
+function setParam(key, val) {
+  const p = new URLSearchParams(location.search);
+  val ? p.set(key, val) : p.delete(key);
+  history.replaceState(null, "", location.pathname + "?" + p);  // replace, not push
+}</code></pre>
+<blockquote class="warn"><strong>Common mistake:</strong> keeping the current filter/search only in a JS variable. The user filters a list, clicks a result, hits back — and lands on the unfiltered page because the state was never in the URL. Store list state in the query string (<code>replaceState</code> so you don't spam history) and re-seed the UI from it on load. (This exact bug and fix recur in real Datastar/SPA list views.)</blockquote>
+
+<h2>The observable store pattern</h2>
+<p><span class="level intermediate">Intermediate</span> For shared client state without a framework, a tiny subscribable store is often all you need:</p>
+<pre><code>function createStore(initial) {
+  let state = initial;
+  const subs = new Set();
+  return {
+    get: () =&gt; state,
+    set: (patch) =&gt; { state = { ...state, ...patch }; subs.forEach(f =&gt; f(state)); },
+    subscribe: (f) =&gt; { subs.add(f); return () =&gt; subs.delete(f); },
+  };
+}
+
+const cart = createStore({ items: [], total: 0 });
+cart.subscribe(s =&gt; renderBadge(s.items.length));   // UI reacts to changes
+cart.set({ items: [...cart.get().items, product] });</code></pre>
+<p>This is the core of every state library (Redux, Zustand, signals): a single source of truth + subscriptions. Persist it by writing to <code>localStorage</code> in <code>set</code> and seeding <code>initial</code> from it.</p>
+
+<h2>Server state is a cache</h2>
+<pre><code>// Treat fetched data as a cache with a freshness policy, not as app state.
+// Libraries (TanStack Query, SWR) formalize this; the idea:
+//   - fetch on demand, cache by key
+//   - serve stale while revalidating in the background
+//   - invalidate the key after a mutation so it refetches
+// Rolling it by hand = a Map keyed by URL + a timestamp + refetch logic.</code></pre>
+
+<h2>Avoid over-engineering</h2>
+<blockquote class="warn">Reaching for a global state library on day one is a common mistake. Start with local variables and URL state; add a small store when two distant components genuinely need the same data; add a server-cache library when you're hand-writing fetch+cache+invalidate logic repeatedly. Each step should be justified by pain you actually feel.</blockquote>
+
+<h2>Exercises</h2>
+<ul>
+  <li>Classify the state of an app you know into the four kinds; move any filter/search state into the URL.</li>
+  <li>Build the observable store above and wire two independent UI elements to the same cart state.</li>
+  <li>Persist the store to <code>localStorage</code> and confirm state survives a reload.</li>
+</ul>
+
+<h2>Mini-project: a filterable product list</h2>
+<p>Build a product list where the search term, category filter, and page all live in the URL (shareable, back-button-correct), the cart is a persisted observable store shared between the list and a header badge, and the product data is fetched and cached (stale-while-revalidate) rather than kept as app state. No framework required — the patterns are the point.</p>
