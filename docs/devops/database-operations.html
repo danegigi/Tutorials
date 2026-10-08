@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en" data-base="../">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0d1117">
+<meta name="description" content="Dev Tutorials — Golang, Bun, Web Development, Linux and DevOps, offline-ready.">
+<title>Database Operations — DevOps</title>
+<link rel="manifest" href="../manifest.webmanifest">
+<link rel="icon" href="../icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="../icon-192.png">
+<link rel="stylesheet" href="../app.css">
+<script>/* set theme before paint to avoid flash */(function(){try{var t=localStorage.getItem('tut.theme');document.documentElement.setAttribute('data-theme',t||'dark');}catch(e){document.documentElement.setAttribute('data-theme','dark');}})();</script>
+
+</head>
+<body class="lesson">
+<header class="nav">
+  <a class="brand" href="../index.html">📚 Dev Tutorials</a>
+  <span class="crumb">Database Operations — DevOps</span>
+  <span class="spacer"></span>
+  <a class="navbtn" href="../search.html">🔎 Search</a>
+  <button class="navbtn" id="install-btn" type="button">⬇️ Install</button>
+  <button class="navbtn" id="theme-btn" type="button" aria-label="Toggle theme">🌙 Dark</button>
+</header>
+<main class="wrap lesson-body">
+  <h1 class="page-title">Database Operations</h1>
+  <div class="lesson-tools" data-lesson-id="devops/database-operations">
+    <button id="done-btn" type="button" aria-pressed="false">○ Mark complete</button>
+    <button id="mark-btn" type="button" aria-pressed="false">☆ Bookmark</button>
+    <a class="navbtn" href="index.html" style="margin-left:auto">All DevOps lessons →</a>
+  </div>
+<nav class="toc" aria-label="On this page"><strong>On this page</strong><ul>
+<li class="lvl2"><a href="#schema-migrations">Schema migrations</a></li>
+<li class="lvl2"><a href="#backups-and-restores">Backups — and restores</a></li>
+<li class="lvl2"><a href="#replication-failover">Replication &amp;amp; failover</a></li>
+<li class="lvl2"><a href="#connection-pooling">Connection pooling</a></li>
+<li class="lvl2"><a href="#tuning-observing">Tuning &amp;amp; observing</a></li>
+<li class="lvl2"><a href="#exercises">Exercises</a></li>
+<li class="lvl2"><a href="#mini-project-production-ready-database-setup">Mini-project: production-ready database setup</a></li>
+</ul></nav>
+<p class="lead">The database is usually the hardest part of production to operate — it's stateful, so you can't just redeploy it. This lesson covers the operational concerns: safe schema migrations, backups you've actually tested, replication and failover, connection pooling, and the tuning that keeps it fast.</p>
+
+<h2 id="schema-migrations">Schema migrations</h2>
+<p><span class="level intermediate">Intermediate</span> Migrations are versioned, ordered changes to the schema, applied automatically and reproducibly — never by hand on a prod console.</p>
+<pre><code># A migration tool (golang-migrate, Flyway, Drizzle Kit, Prisma Migrate…) applies
+# ordered files and records which have run:
+migrate -path ./migrations -database "$DATABASE_URL" up
+# 001_create_users.up.sql, 002_add_email_index.up.sql, …</code></pre>
+<blockquote class="warn"><strong>Zero-downtime migrations use expand/contract</strong> (from the Deployment Strategies lesson): never rename/drop a column in the same release that ships the code depending on it — during a rolling deploy both old and new code run at once. Also beware migrations that lock a big table: adding an index on a large Postgres table should use <code>CREATE INDEX CONCURRENTLY</code> (outside a transaction) or it blocks writes for the duration. Test every migration on a prod-sized copy first.</blockquote>
+
+<h2 id="backups-and-restores">Backups — and restores</h2>
+<pre><code># Logical backup (portable, slower):
+pg_dump "$DATABASE_URL" | gzip &gt; backup-$(date +%F).sql.gz
+# Physical + Point-In-Time Recovery (fast, lets you restore to a timestamp):
+#   base backup + continuous WAL archiving → restore to any moment before a mistake</code></pre>
+<blockquote class="warn"><strong>A backup you have never restored is not a backup — it's a hope.</strong> The classic disaster: nightly dumps "succeed" for a year, then on the day you need them the restore fails (wrong version, corrupt file, missing extension, or it takes 9 hours you don't have). <strong>Regularly rehearse the restore</strong> into a scratch environment and time it — your Recovery Time Objective is only real if you've measured it.</blockquote>
+<table>
+  <thead><tr><th>Term</th><th>Meaning</th></tr></thead>
+  <tbody>
+    <tr><td><strong>RPO</strong> (Recovery Point Objective)</td><td>How much data you can afford to lose (→ backup frequency / WAL archiving).</td></tr>
+    <tr><td><strong>RTO</strong> (Recovery Time Objective)</td><td>How long a restore may take (→ backup method + rehearsal).</td></tr>
+  </tbody>
+</table>
+
+<h2 id="replication-failover">Replication &amp; failover</h2>
+<p><span class="level advanced">Advanced</span> A single DB node is a single point of failure. Replication keeps standby copies; failover promotes one when the primary dies.</p>
+<pre><code># Primary → one or more replicas (streaming WAL)
+#   - Read replicas: offload read traffic (but mind replication LAG — reads can be stale)
+#   - Sync vs async: sync = no data loss on failover but slower writes; async = fast but
+#     a failover may lose the last few unreplicated transactions
+# Automated failover: Patroni / cloud-managed (RDS Multi-AZ) promotes a standby + repoints.</code></pre>
+<blockquote class="tip">Managed databases (RDS, Cloud SQL, etc.) handle replication, failover, backups, and patching for you — for most teams that's the right call. Self-manage only when you have a strong reason and the expertise, because getting failover and backups right by hand is a deep specialty.</blockquote>
+
+<h2 id="connection-pooling">Connection pooling</h2>
+<pre><code># Each DB connection costs memory on the server; thousands of app instances each
+# opening their own exhausts max_connections → "too many connections" errors.
+# A pooler (PgBouncer) multiplexes many client connections onto few server ones:
+#   app → PgBouncer (transaction pooling) → Postgres
+#   10,000 clients → 50 real server connections</code></pre>
+<blockquote class="warn"><strong>Common production failure:</strong> an app (or serverless functions) opening a fresh connection per request and never pooling, then crashing the database with connection exhaustion under load — not CPU, not disk, just too many connections. Set a sane pool size in the app (the Go <code>SetMaxOpenConns</code> / Bun pool from those lessons) <em>and</em> front the DB with PgBouncer for high-fanout or serverless workloads.</blockquote>
+
+<h2 id="tuning-observing">Tuning &amp; observing</h2>
+<ul>
+  <li><strong>Indexes</strong> — the single biggest performance lever; find slow queries with the DB's slow-query log and <code>EXPLAIN ANALYZE</code>, add the missing index.</li>
+  <li><strong>Key settings</strong> — <code>shared_buffers</code>, <code>work_mem</code>, <code>max_connections</code> sized to the box, not left at tiny defaults.</li>
+  <li><strong>Maintenance</strong> — autovacuum (Postgres) must keep up, or tables bloat and slow down.</li>
+  <li><strong>Monitor</strong> — connections in use, replication lag, cache hit ratio, slow queries (ties to the Observability lesson).</li>
+</ul>
+
+<h2 id="exercises">Exercises</h2>
+<ul>
+  <li>Write a forward + rollback migration pair and apply/revert it with a migration tool.</li>
+  <li>Take a <code>pg_dump</code> backup and actually restore it into a fresh database; time the restore.</li>
+  <li>Find a slow query with <code>EXPLAIN ANALYZE</code> and fix it by adding the right index.</li>
+</ul>
+
+<h2 id="mini-project-production-ready-database-setup">Mini-project: production-ready database setup</h2>
+<p>For the app's database (from the Go/Bun database lessons), build the operational layer: a migration workflow run in CI, an automated backup with WAL archiving plus a <em>tested, timed</em> restore into a scratch env, a read replica with lag monitoring, PgBouncer in front with a sized pool, and a dashboard tracking connections/lag/slow-queries. Document your RPO/RTO and prove the restore meets the RTO.</p>
+
+<section class="further"><h2 id="further-reading">Further reading</h2>
+<p>Official documentation for the tools and APIs covered on this page:</p>
+<ul class="further-list"><li><a href="https://www.postgresql.org/docs/current/high-availability.html" target="_blank" rel="noopener">PostgreSQL high availability ↗</a></li>
+<li><a href="https://www.pgbouncer.org/" target="_blank" rel="noopener">PgBouncer ↗</a></li>
+<li><a href="https://www.postgresql.org/docs/current/continuous-archiving.html" target="_blank" rel="noopener">Backup &amp; PITR (Postgres) ↗</a></li></ul></section>
+  <nav class="pager">
+<a class="prev" href="cost-optimization.html"><small>Previous</small>🔁 Cost Optimization (FinOps)</a>
+<a class="next" href="networking-deep-dive.html"><small>Next</small>🔁 Networking Deep Dive</a>
+  </nav>
+</main>
+<button type="button" class="fab top" id="fab-top" aria-label="Back to top">↑ Top</button>
+<div class="banner" id="update-banner" role="status">A new version is available.<button type="button">Reload</button></div>
+<div class="banner" id="offline-banner" role="status">You're offline — showing cached lessons.</div>
+<script src="../app.js" defer></script>
+</body>
+</html>

@@ -1,0 +1,59 @@
+<p class="lead">Cloud bills grow quietly until someone asks "why are we spending this much?" FinOps makes cost a first-class engineering concern: make spend <em>visible</em> and <em>attributable</em>, then act on it — rightsizing, buying capacity smartly, and killing waste — in a continuous loop.</p>
+
+<h2>The FinOps loop</h2>
+<pre><code>INFORM  →  OPTIMIZE  →  OPERATE  →  (back to INFORM)
+visibility  rightsize,    make it a
+& allocation spot/reserved  habit: budgets,
+            kill waste     alerts, culture</code></pre>
+<p><span class="level beginner">Beginner</span> You can't optimize what you can't see. Step one is always <strong>visibility</strong>: whose spend is this, on what, and is it going up?</p>
+
+<h2>Visibility starts with tagging</h2>
+<pre><code># Tag every resource so cost can be split by team / service / environment
+tags = {
+  team        = "payments"
+  service     = "checkout-api"
+  environment = "production"
+  cost-center = "cc-4471"
+}
+# Then cost tools group the bill by tag → "payments spent $X on prod this month"</code></pre>
+<blockquote class="warn"><strong>Untagged resources are the root of all cost confusion.</strong> If 40% of the bill is "untagged", no one owns it and no one optimizes it. Enforce tagging in your IaC (make the required tags a module input) and in policy (deny creation of untagged resources). Retrofitting tags onto a sprawling account is miserable — bake it in from the Terraform lesson onward.</blockquote>
+
+<h2>The big levers</h2>
+<table>
+  <thead><tr><th>Lever</th><th>Idea</th><th>Typical saving</th></tr></thead>
+  <tbody>
+    <tr><td>Rightsizing</td><td>Match instance size to actual usage (most are over-provisioned)</td><td>large</td></tr>
+    <tr><td>Spot/preemptible</td><td>Use interruptible capacity for fault-tolerant workloads</td><td>up to ~70–90%</td></tr>
+    <tr><td>Reserved / Savings Plans</td><td>Commit 1–3 yrs for steady baseline load</td><td>~30–60%</td></tr>
+    <tr><td>Autoscaling</td><td>Scale to zero / down off-peak (dev envs at night)</td><td>large</td></tr>
+    <tr><td>Storage tiering</td><td>Move cold data to cheaper tiers; expire logs</td><td>moderate</td></tr>
+    <tr><td>Kill waste</td><td>Unattached disks, idle load balancers, old snapshots, zombie envs</td><td>free money</td></tr>
+  </tbody>
+</table>
+<blockquote class="tip"><strong>Rightsizing is usually the biggest, easiest win.</strong> Teams provision for peak-of-peak "to be safe" and then run at 10% utilization forever. Pull real CPU/memory metrics (the Observability lesson), size to the actual p95 plus headroom, and let autoscaling handle spikes. Pair reserved/savings-plan commitments with your <em>steady baseline</em> and spot with the burst on top.</blockquote>
+
+<h2>Spot vs reserved: match to the workload</h2>
+<pre><code># Steady 24/7 baseline (e.g. always-on API)  → Reserved / Savings Plan (commit, save)
+# Fault-tolerant / batch / stateless replicas → Spot (cheap, can be reclaimed)
+# Spiky / unpredictable                        → On-demand + autoscaling
+# A real cluster mixes all three (e.g. Karpenter picks spot where safe).</code></pre>
+<blockquote class="warn"><strong>Common mistake:</strong> putting a stateful primary (a database, a singleton) on spot capacity. Spot can be reclaimed with ~2 minutes' notice — fine for a stateless replica behind a load balancer, a disaster for your only database node. Match the capacity type to the workload's tolerance for interruption.</blockquote>
+
+<h2>Kubernetes cost</h2>
+<p><span class="level intermediate">Intermediate</span> In a shared cluster, the bill is one number but the usage is many teams. Tools like <a href="https://www.opencost.io/" target="_blank" rel="noopener">OpenCost</a>/Kubecost allocate cost per namespace/label using each pod's <em>requests</em>. This is another reason the resource requests from the Advanced K8s lesson matter: wrong requests mean wrong cost allocation and wasted reserved capacity.</p>
+
+<h2>Operate: make it a habit</h2>
+<pre><code># Budgets + alerts so a runaway cost is caught in days, not at month-end
+aws budgets ...        # alert at 80% / 100% of a monthly budget
+# Anomaly detection flags a sudden spike (a misconfigured job, a leak)
+# A monthly cost review per team, with spend shown next to the owning tag.</code></pre>
+
+<h2>Exercises</h2>
+<ul>
+  <li>Audit a cloud account (or a sample bill): what % is untagged, and what are the top 3 line items?</li>
+  <li>Pick a workload and decide the right capacity mix (on-demand / spot / reserved) with justification.</li>
+  <li>Find three "zombie" resources (unattached volume, idle LB, old snapshot) and estimate their monthly cost.</li>
+</ul>
+
+<h2>Mini-project: a cost-reduction plan</h2>
+<p>For a real or sample environment, produce a FinOps plan: enforce a tagging scheme in Terraform (required tags as module inputs), set a budget + anomaly alert, identify rightsizing candidates from utilization metrics, map each workload to the cheapest safe capacity type (spot/reserved/on-demand), schedule dev environments to scale to zero off-hours, and list waste to delete. Estimate the total monthly saving and which single change delivers the most.</p>

@@ -1,0 +1,61 @@
+<p class="lead">Platform engineering is DevOps grown up: instead of every team reinventing CI, deploys, and infra, a platform team builds an <strong>Internal Developer Platform</strong> (IDP) that offers paved "golden paths" as self-service. The product is developer experience — shipping safely without filing tickets.</p>
+
+<h2>The problem it solves</h2>
+<p><span class="level beginner">Beginner</span> "You build it, you run it" is right, but it doesn't mean every developer should hand-write Kubernetes manifests, Terraform, CI pipelines, and alerting from scratch. That's enormous cognitive load duplicated across teams, done inconsistently, and a source of outages. Platform engineering factors the common 80% into a reusable platform.</p>
+<blockquote class="warn"><strong>The anti-pattern it replaces:</strong> a central "DevOps team" that becomes a ticket queue — developers file "please deploy my service" and wait. That just rebuilds the old dev-throws-over-to-ops wall. A platform is <em>self-service</em>: developers get what they need on demand, without a human in the loop.</blockquote>
+
+<h2>Golden paths</h2>
+<p><span class="level intermediate">Intermediate</span> A golden path is the supported, paved way to do a common thing — create a service, add a database, ship to prod — with the right defaults baked in (observability, security, CI, deploy) so the easy way is also the correct way.</p>
+<pre><code># A golden path for "new service" might scaffold, in one command:
+#   - repo from a template (Dockerfile, health endpoints, structured logging)
+#   - a CI pipeline (test + scan + build + deploy)
+#   - a Helm chart with probes, resource limits, HPA, PDB (the Advanced K8s lesson)
+#   - dashboards + SLO alerts wired automatically (the Observability lesson)
+#   - secrets wired via the org's secret store (the Secrets lesson)
+backstage scaffold new-service --template go-api --name payments</code></pre>
+<blockquote class="tip">Golden paths are <em>paved, not walled</em>. A team with an unusual need can still go off-path — the platform makes the common case trivial without forbidding the exceptional case. Mandate the outcome (must have SLOs, must pass security scans), offer a path that satisfies it by default, but don't block teams that need something different.</blockquote>
+
+<h2>What an IDP provides</h2>
+<table>
+  <thead><tr><th>Capability</th><th>Self-service means…</th></tr></thead>
+  <tbody>
+    <tr><td>Service scaffolding</td><td>Create a production-ready repo in minutes, not days.</td></tr>
+    <tr><td>Environments</td><td>Spin up a preview/staging env on demand.</td></tr>
+    <tr><td>Infrastructure</td><td>Request a database/queue/bucket via a template, not a ticket.</td></tr>
+    <tr><td>CI/CD</td><td>A standard pipeline you inherit, not author.</td></tr>
+    <tr><td>Observability</td><td>Dashboards + alerts provisioned with the service.</td></tr>
+    <tr><td>Catalog</td><td>One place to find every service, its owner, docs, and health.</td></tr>
+  </tbody>
+</table>
+
+<h2>Backstage, the service catalog</h2>
+<pre><code># catalog-info.yaml — registers a service in Backstage
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: payments
+  annotations:
+    backstage.io/techdocs-ref: dir:.
+spec:
+  type: service
+  lifecycle: production
+  owner: team-payments
+  dependsOn: [resource:payments-db]</code></pre>
+<p><a href="https://backstage.io/" target="_blank" rel="noopener">Backstage</a> (from Spotify, now CNCF) is the common foundation: a software catalog, scaffolding templates, and TechDocs in one portal. It answers "what services exist, who owns them, and how do I make a new one correctly?"</p>
+
+<h2>Platform as a product</h2>
+<p><span class="level advanced">Advanced</span> The mindset shift: your platform has <em>customers</em> (the developers), and you succeed only if they choose to use it. That means user research, documentation, onboarding, measuring adoption and developer satisfaction, and iterating — treating the platform like any product, not a mandate.</p>
+<blockquote class="warn"><strong>Common mistake:</strong> building the platform the platform team <em>wants</em> rather than what developers need, then mandating it. If the golden path is slower or more painful than developers doing it themselves, they'll route around it and you've built shelfware. Measure adoption and DX (the DORA metrics from the Mindset lesson are a good proxy) and let that guide what you build.</blockquote>
+
+<h2>Team Topologies</h2>
+<p>The organizational model behind this: <strong>stream-aligned</strong> teams build product; a <strong>platform</strong> team reduces their cognitive load by providing self-service capabilities; <strong>enabling</strong> teams coach. The platform team's job is explicitly to make stream-aligned teams faster and more autonomous — not to be a gatekeeper.</p>
+
+<h2>Exercises</h2>
+<ul>
+  <li>List the 5 most-repeated setup tasks across teams you know; which would most benefit from a golden path?</li>
+  <li>Write a <code>catalog-info.yaml</code> registering a service with its owner and a dependency.</li>
+  <li>Define success metrics for an IDP (adoption %, time-to-first-deploy, DX survey) and why mandating usage is a trap.</li>
+</ul>
+
+<h2>Mini-project: design a golden path</h2>
+<p>Design (as a spec, not full code) a "new service" golden path for your org: the scaffolded repo contents, the inherited CI pipeline, the Helm chart defaults (probes/limits/HPA from Advanced K8s), auto-provisioned dashboards + SLO alerts, and secret wiring. Register the output in a Backstage <code>catalog-info.yaml</code>, and state the adoption + DX metrics you'd track to know whether developers actually prefer it to rolling their own.</p>

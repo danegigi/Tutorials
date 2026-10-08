@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en" data-base="../">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0d1117">
+<meta name="description" content="Dev Tutorials — Golang, Bun, Web Development, Linux and DevOps, offline-ready.">
+<title>Networking Deep Dive — DevOps</title>
+<link rel="manifest" href="../manifest.webmanifest">
+<link rel="icon" href="../icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="../icon-192.png">
+<link rel="stylesheet" href="../app.css">
+<script>/* set theme before paint to avoid flash */(function(){try{var t=localStorage.getItem('tut.theme');document.documentElement.setAttribute('data-theme',t||'dark');}catch(e){document.documentElement.setAttribute('data-theme','dark');}})();</script>
+
+</head>
+<body class="lesson">
+<header class="nav">
+  <a class="brand" href="../index.html">📚 Dev Tutorials</a>
+  <span class="crumb">Networking Deep Dive — DevOps</span>
+  <span class="spacer"></span>
+  <a class="navbtn" href="../search.html">🔎 Search</a>
+  <button class="navbtn" id="install-btn" type="button">⬇️ Install</button>
+  <button class="navbtn" id="theme-btn" type="button" aria-label="Toggle theme">🌙 Dark</button>
+</header>
+<main class="wrap lesson-body">
+  <h1 class="page-title">Networking Deep Dive</h1>
+  <div class="lesson-tools" data-lesson-id="devops/networking-deep-dive">
+    <button id="done-btn" type="button" aria-pressed="false">○ Mark complete</button>
+    <button id="mark-btn" type="button" aria-pressed="false">☆ Bookmark</button>
+    <a class="navbtn" href="index.html" style="margin-left:auto">All DevOps lessons →</a>
+  </div>
+<nav class="toc" aria-label="On this page"><strong>On this page</strong><ul>
+<li class="lvl2"><a href="#dns-name-address">DNS: name → address</a></li>
+<li class="lvl2"><a href="#tcp-the-reliable-connection">TCP: the reliable connection</a></li>
+<li class="lvl2"><a href="#tls-the-encrypted-layer">TLS: the encrypted layer</a></li>
+<li class="lvl2"><a href="#http11-vs-2-vs-3">HTTP/1.1 vs 2 vs 3</a></li>
+<li class="lvl2"><a href="#load-balancing-algorithms">Load-balancing algorithms</a></li>
+<li class="lvl2"><a href="#service-discovery">Service discovery</a></li>
+<li class="lvl2"><a href="#debugging-the-network">Debugging the network</a></li>
+<li class="lvl2"><a href="#exercises">Exercises</a></li>
+<li class="lvl2"><a href="#mini-project-trace-a-request-end-to-end">Mini-project: trace a request end to end</a></li>
+</ul></nav>
+<p class="lead">Half of "it works on my machine but not in prod" is networking. This lesson goes under the hood: how DNS resolves, what TCP and TLS actually do on the wire, how HTTP/1.1 vs 2 vs 3 differ, load-balancing algorithms, service discovery, and the tools to debug all of it.</p>
+
+<h2 id="dns-name-address">DNS: name → address</h2>
+<p><span class="level beginner">Beginner</span> Before any connection, the name resolves to an IP through a chain of caches and servers:</p>
+<pre><code>dig example.com            # the full resolution + answer section
+dig +short example.com     # just the IP
+dig example.com MX         # mail records; also A, AAAA, CNAME, TXT, NS
+# Record types that bite: TTL (how long it's cached — low TTL before a migration),
+# CNAME (alias → another name), A/AAAA (IPv4/IPv6).</code></pre>
+<blockquote class="warn"><strong>The #1 DNS gotcha: caching/TTL.</strong> You change a record, it works for you, but others still hit the old IP for up to the TTL (and some resolvers ignore TTL). Before a cutover, <em>lower the TTL</em> (e.g. to 60s) a day ahead so the change propagates fast. "DNS propagation" delays are really just caches expiring.</blockquote>
+
+<h2 id="tcp-the-reliable-connection">TCP: the reliable connection</h2>
+<pre><code># The 3-way handshake opens a connection:
+#   client → SYN → server
+#   client ← SYN-ACK ← server
+#   client → ACK → server   (now data flows)
+ss -tnp                     # live TCP connections + owning process
+ss -s                       # summary (established, time-wait…)</code></pre>
+<blockquote class="tip">A pile of connections stuck in <code>TIME_WAIT</code> is normal (the OS holding a closed connection briefly); a pile in <code>SYN-SENT</code> or <code>SYN-RECV</code> suggests the other end isn't answering (firewall? wrong port? service down?). Reading connection <em>states</em> with <code>ss</code> tells you <em>where</em> a connection is failing.</blockquote>
+
+<h2 id="tls-the-encrypted-layer">TLS: the encrypted layer</h2>
+<pre><code># Inspect what a server presents (cert chain, protocol, SNI):
+openssl s_client -connect example.com:443 -servername example.com &lt;/dev/null
+echo | openssl s_client -connect example.com:443 2&gt;/dev/null | openssl x509 -noout -dates</code></pre>
+<p><span class="level intermediate">Intermediate</span> TLS does a handshake (negotiate version + cipher, verify the server's certificate chain to a trusted CA, exchange keys), then encrypts the HTTP traffic. SNI (Server Name Indication) tells the server which cert to present when many sites share one IP — relevant to the reverse-proxy and TLS lessons.</p>
+
+<h2 id="http11-vs-2-vs-3">HTTP/1.1 vs 2 vs 3</h2>
+<table>
+  <thead><tr><th>Version</th><th>Key trait</th><th>Fixes</th></tr></thead>
+  <tbody>
+    <tr><td>HTTP/1.1</td><td>One request at a time per connection (head-of-line blocking)</td><td>—</td></tr>
+    <tr><td>HTTP/2</td><td>Multiplexing many streams over one TCP connection; header compression</td><td>HTTP-level HOL blocking</td></tr>
+    <tr><td>HTTP/3</td><td>Runs over QUIC (UDP), not TCP</td><td>TCP-level HOL blocking; faster handshakes/reconnects</td></tr>
+  </tbody>
+</table>
+<blockquote class="warn"><strong>Common misread:</strong> enabling HTTP/2 "for speed" but terminating it at a proxy that then speaks HTTP/1.1 to the backend, so the multiplexing benefit stops at the edge — often fine, but know where each hop downgrades. And HTTP/2 over a lossy network can still suffer TCP head-of-line blocking (one lost packet stalls all streams) — exactly what HTTP/3's QUIC fixes.</blockquote>
+
+<h2 id="load-balancing-algorithms">Load-balancing algorithms</h2>
+<pre><code># How a load balancer picks a backend:
+#   round-robin       — rotate evenly (default; fine for uniform requests)
+#   least-connections — send to the backend with fewest active conns (uneven work)
+#   ip-hash / consistent-hash — same client → same backend (sticky, cache affinity)
+#   weighted          — bigger boxes get more traffic
+# Plus HEALTH CHECKS: a backend failing its check is removed from rotation.</code></pre>
+<blockquote class="tip">The health check is what makes a load balancer safe during deploys (it stops routing to a draining/unhealthy backend) — the same readiness-probe idea from the Advanced Kubernetes lesson, one layer out. L4 (TCP) vs L7 (HTTP) LBs: L7 can route by path/host and inspect requests; L4 is faster and protocol-agnostic (ties to the Reverse Proxies lesson).</blockquote>
+
+<h2 id="service-discovery">Service discovery</h2>
+<p><span class="level advanced">Advanced</span> In dynamic environments, backends come and go, so you can't hard-code IPs. Service discovery resolves a logical name to current healthy instances: Kubernetes does it via DNS (<code>my-svc.my-ns.svc.cluster.local</code> → the Service's endpoints); Consul and cloud service meshes do it with a registry + health checks.</p>
+
+<h2 id="debugging-the-network">Debugging the network</h2>
+<pre><code>ping host                  # reachable at all? (ICMP — some hosts block it)
+traceroute host            # the path + where it stalls
+dig name                   # does the name resolve correctly?
+curl -v https://host/      # full request/response incl. TLS + redirects
+nc -zv host 443            # is the PORT open? (connection refused vs timeout matters)
+tcpdump -i any port 443    # last resort: watch the actual packets</code></pre>
+<blockquote class="warn"><strong>Connection refused vs timeout tells you the layer:</strong> "refused" = something answered and said no (service down, wrong port — the host is reachable). "Timed out" = nothing answered (firewall dropping packets, wrong IP, routing). Diagnosing in the wrong layer wastes the most time — resolve the name, confirm the port, then look at the app.</blockquote>
+
+<h2 id="exercises">Exercises</h2>
+<ul>
+  <li>Use <code>dig</code> to find a domain's A, CNAME, and TTL; explain what lowering the TTL before a migration buys you.</li>
+  <li>Inspect a site's TLS cert and expiry with <code>openssl s_client</code>.</li>
+  <li>Diagnose a deliberately-wrong endpoint: distinguish DNS failure vs connection-refused vs timeout using <code>dig</code>/<code>nc</code>/<code>curl -v</code>.</li>
+</ul>
+
+<h2 id="mini-project-trace-a-request-end-to-end">Mini-project: trace a request end to end</h2>
+<p>Pick a request to a service behind a load balancer and document every hop: DNS resolution (with TTL), the TCP handshake, TLS negotiation (version + cert chain), the HTTP version in use, which LB algorithm routes it and how the health check gates backends, and how the backend's name was discovered. Then simulate three failures (bad DNS, closed port, dead backend) and show the exact tool + signal that identifies each — a networking runbook that complements the Linux networking and DevOps TLS lessons.</p>
+
+<section class="further"><h2 id="further-reading">Further reading</h2>
+<p>Official documentation for the tools and APIs covered on this page:</p>
+<ul class="further-list"><li><a href="https://hpbn.co/" target="_blank" rel="noopener">High Performance Browser Networking ↗</a></li>
+<li><a href="https://www.cloudflare.com/learning/dns/what-is-dns/" target="_blank" rel="noopener">Cloudflare: how DNS works ↗</a></li>
+<li><a href="https://www.rfc-editor.org/rfc/rfc9113.html" target="_blank" rel="noopener">HTTP/2 (RFC 9113) ↗</a></li></ul></section>
+  <nav class="pager">
+<a class="prev" href="database-operations.html"><small>Previous</small>🔁 Database Operations</a>
+<a class="next" href="../index.html"><small>Done</small>📚 Dashboard</a>
+  </nav>
+</main>
+<button type="button" class="fab top" id="fab-top" aria-label="Back to top">↑ Top</button>
+<div class="banner" id="update-banner" role="status">A new version is available.<button type="button">Reload</button></div>
+<div class="banner" id="offline-banner" role="status">You're offline — showing cached lessons.</div>
+<script src="../app.js" defer></script>
+</body>
+</html>

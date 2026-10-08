@@ -915,6 +915,46 @@ export const SECTIONS = [
           ref("Resilience patterns (circuit breaker)", "https://martinfowler.com/bliki/CircuitBreaker.html"),
         ],
       },
+      {
+        slug: "platform-engineering",
+        title: "Platform Engineering & Developer Experience",
+        blurb: "Internal Developer Platforms, golden paths, self-service, Backstage, and treating your platform as a product.",
+        further: [
+          ref("Platform Engineering (CNCF)", "https://tag-app-delivery.cncf.io/whitepapers/platforms/"),
+          ref("Backstage", "https://backstage.io/docs/overview/what-is-backstage"),
+          ref("Team Topologies", "https://teamtopologies.com/key-concepts"),
+        ],
+      },
+      {
+        slug: "cost-optimization",
+        title: "Cost Optimization (FinOps)",
+        blurb: "Making cloud spend visible and accountable: tagging, rightsizing, spot/reserved capacity, and the FinOps loop.",
+        further: [
+          ref("FinOps Foundation", "https://www.finops.org/introduction/what-is-finops/"),
+          ref("AWS cost optimization", "https://aws.amazon.com/aws-cost-management/cost-optimization/"),
+          ref("Kubernetes cost (OpenCost)", "https://www.opencost.io/docs/"),
+        ],
+      },
+      {
+        slug: "database-operations",
+        title: "Database Operations",
+        blurb: "Running databases in production: migrations, backups & PITR, replication & failover, connection pooling, and tuning.",
+        further: [
+          ref("PostgreSQL high availability", "https://www.postgresql.org/docs/current/high-availability.html"),
+          ref("PgBouncer", "https://www.pgbouncer.org/"),
+          ref("Backup & PITR (Postgres)", "https://www.postgresql.org/docs/current/continuous-archiving.html"),
+        ],
+      },
+      {
+        slug: "networking-deep-dive",
+        title: "Networking Deep Dive",
+        blurb: "DNS, TCP, TLS and HTTP/1.1/2/3 on the wire; load-balancing algorithms; service discovery; and debugging the network.",
+        further: [
+          ref("High Performance Browser Networking", "https://hpbn.co/"),
+          ref("Cloudflare: how DNS works", "https://www.cloudflare.com/learning/dns/what-is-dns/"),
+          ref("HTTP/2 (RFC 9113)", "https://www.rfc-editor.org/rfc/rfc9113.html"),
+        ],
+      },
     ],
   },
 ];
