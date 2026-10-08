@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en" data-base="../">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0d1117">
+<meta name="description" content="Dev Tutorials — Golang, Bun, Web Development, Linux and DevOps, offline-ready.">
+<title>Chaos Engineering &amp; Resilience — DevOps</title>
+<link rel="manifest" href="../manifest.webmanifest">
+<link rel="icon" href="../icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="../icon-192.png">
+<link rel="stylesheet" href="../app.css">
+<script>/* set theme before paint to avoid flash */(function(){try{var t=localStorage.getItem('tut.theme');document.documentElement.setAttribute('data-theme',t||'dark');}catch(e){document.documentElement.setAttribute('data-theme','dark');}})();</script>
+
+</head>
+<body class="lesson">
+<header class="nav">
+  <a class="brand" href="../index.html">📚 Dev Tutorials</a>
+  <span class="crumb">Chaos Engineering &amp; Resilience — DevOps</span>
+  <span class="spacer"></span>
+  <a class="navbtn" href="../search.html">🔎 Search</a>
+  <button class="navbtn" id="install-btn" type="button">⬇️ Install</button>
+  <button class="navbtn" id="theme-btn" type="button" aria-label="Toggle theme">🌙 Dark</button>
+</header>
+<main class="wrap lesson-body">
+  <h1 class="page-title">Chaos Engineering &amp; Resilience</h1>
+  <div class="lesson-tools" data-lesson-id="devops/chaos-engineering">
+    <button id="done-btn" type="button" aria-pressed="false">○ Mark complete</button>
+    <button id="mark-btn" type="button" aria-pressed="false">☆ Bookmark</button>
+    <a class="navbtn" href="index.html" style="margin-left:auto">All DevOps lessons →</a>
+  </div>
+<nav class="toc" aria-label="On this page"><strong>On this page</strong><ul>
+<li class="lvl2"><a href="#why-inject-failure-on-purpose">Why inject failure on purpose</a></li>
+<li class="lvl2"><a href="#the-experiment-loop">The experiment loop</a></li>
+<li class="lvl2"><a href="#common-failure-injections">Common failure injections</a></li>
+<li class="lvl2"><a href="#resilience-patterns-the-experiments-validate">Resilience patterns the experiments validate</a></li>
+<li class="lvl2"><a href="#game-days">Game days</a></li>
+<li class="lvl2"><a href="#exercises">Exercises</a></li>
+<li class="lvl2"><a href="#mini-project-a-resilience-game-day">Mini-project: a resilience game day</a></li>
+</ul></nav>
+<p class="lead">Chaos engineering is the practice of deliberately injecting failure into a system to find weaknesses <em>before</em> they cause an outage. It's not "breaking things for fun" — it's a disciplined experiment with a hypothesis, a limited blast radius, and a rollback.</p>
+
+<h2 id="why-inject-failure-on-purpose">Why inject failure on purpose</h2>
+<p><span class="level intermediate">Intermediate</span> Distributed systems fail in ways no one designed: a dependency gets slow (not down), a node vanishes mid-request, a retry storm amplifies a blip. You can't unit-test these interactions. Chaos engineering surfaces them in a controlled setting so you fix them on your schedule, not at 3am.</p>
+<blockquote class="tip">The goal is <strong>confidence</strong>, not chaos. A good experiment that finds nothing is still valuable: it's evidence the system tolerates that failure mode. A good experiment that finds something is a bug caught cheaply.</blockquote>
+
+<h2 id="the-experiment-loop">The experiment loop</h2>
+<pre><code>1. STEADY STATE   Define a measurable "healthy" (e.g. p99 &lt; 300ms, error rate &lt; 1%).
+2. HYPOTHESIS     "If one API pod is killed, steady state holds (traffic reroutes)."
+3. BLAST RADIUS   Smallest scope that tests it: one pod, in staging first, 5% of traffic.
+4. INJECT         Introduce the failure.
+5. OBSERVE        Did steady state hold? Watch the RED/USE dashboards.
+6. HALT &amp; LEARN   Stop immediately if real users are harmed; record findings.</code></pre>
+<blockquote class="warn"><strong>Non-negotiable:</strong> always define the blast radius and an abort switch <em>before</em> injecting, and run in staging before production. An experiment with no bound and no stop button isn't chaos engineering — it's an outage you caused. Start small (one instance) and widen only after it holds.</blockquote>
+
+<h2 id="common-failure-injections">Common failure injections</h2>
+<table>
+  <thead><tr><th>Failure</th><th>Tests</th></tr></thead>
+  <tbody>
+    <tr><td>Kill a pod/instance</td><td>Does traffic reroute? Do replicas + PDB hold?</td></tr>
+    <tr><td>Add network latency</td><td>Timeouts set correctly? Does slowness cascade?</td></tr>
+    <tr><td>Drop a dependency (DB, cache)</td><td>Graceful degradation or total failure?</td></tr>
+    <tr><td>CPU/memory pressure</td><td>Autoscaling + limits behave? OOM handling?</td></tr>
+    <tr><td>Clock skew / disk full</td><td>The failures everyone forgets.</td></tr>
+  </tbody>
+</table>
+<pre><code># Chaos Mesh (Kubernetes) — kill one API pod, once
+apiVersion: chaos-mesh.org/v1alpha1
+kind: PodChaos
+metadata: { name: kill-one-api }
+spec:
+  action: pod-kill
+  mode: one
+  selector: { namespaces: [staging], labelSelectors: { app: api } }
+# or network latency:
+#   kind: NetworkChaos  action: delay  delay.latency: "200ms"</code></pre>
+
+<h2 id="resilience-patterns-the-experiments-validate">Resilience patterns the experiments validate</h2>
+<p><span class="level advanced">Advanced</span> Chaos tests whether these are actually in place and tuned:</p>
+<ul>
+  <li><strong>Timeouts</strong> on every network call — the default of "wait forever" is how one slow dependency hangs the whole system.</li>
+  <li><strong>Retries with backoff + jitter</strong> — but capped, or you create a retry storm that DDoSes your own backend.</li>
+  <li><strong>Circuit breaker</strong> — after N failures, stop calling a sick dependency and fail fast / serve a fallback, giving it room to recover.</li>
+  <li><strong>Bulkheads</strong> — isolate resource pools so one overloaded path can't starve the others.</li>
+  <li><strong>Graceful degradation</strong> — serve stale cache or a reduced feature set instead of a 500.</li>
+</ul>
+<blockquote class="warn"><strong>Common mistake:</strong> uncapped retries without jitter. When a dependency hiccups, every client retries in lockstep, the synchronized wave keeps it down, and a 2-second blip becomes a 20-minute outage. Always cap attempts, back off exponentially, and add jitter.</blockquote>
+
+<h2 id="game-days">Game days</h2>
+<p>A <strong>game day</strong> is a scheduled, team-wide chaos exercise: pick a scenario ("the primary database fails over"), run it in a controlled window, and watch how both the <em>system</em> and the <em>on-call process</em> respond. It validates runbooks, alerts, and people — often the weakest link — and feeds directly into the incident-response practices from that lesson.</p>
+
+<h2 id="exercises">Exercises</h2>
+<ul>
+  <li>Write a chaos hypothesis for a service with an explicit steady-state metric and blast radius.</li>
+  <li>In staging, kill one pod of a Deployment with a PDB and confirm steady state holds (no dropped requests).</li>
+  <li>Add a timeout + capped jittered retry + circuit breaker to one network call and verify behavior under injected latency.</li>
+</ul>
+
+<h2 id="mini-project-a-resilience-game-day">Mini-project: a resilience game day</h2>
+<p>Design and run a game day on your app in staging: define steady state from your RED dashboard, run three experiments (pod kill, 300ms dependency latency, dependency outage) each with a stated hypothesis, blast radius, and abort switch. For every weakness found, add the matching resilience pattern (timeout/retry/circuit breaker/degradation) and re-run to confirm the fix. Write it up as a blameless report with action items — the same format as a postmortem.</p>
+
+<section class="further"><h2 id="further-reading">Further reading</h2>
+<p>Official documentation for the tools and APIs covered on this page:</p>
+<ul class="further-list"><li><a href="https://principlesofchaos.org/" target="_blank" rel="noopener">Principles of Chaos Engineering ↗</a></li>
+<li><a href="https://chaos-mesh.org/docs/" target="_blank" rel="noopener">Chaos Mesh ↗</a></li>
+<li><a href="https://martinfowler.com/bliki/CircuitBreaker.html" target="_blank" rel="noopener">Resilience patterns (circuit breaker) ↗</a></li></ul></section>
+  <nav class="pager">
+<a class="prev" href="observability-deep-dive.html"><small>Previous</small>🔁 Observability Deep Dive</a>
+<a class="next" href="../index.html"><small>Done</small>📚 Dashboard</a>
+  </nav>
+</main>
+<button type="button" class="fab top" id="fab-top" aria-label="Back to top">↑ Top</button>
+<div class="banner" id="update-banner" role="status">A new version is available.<button type="button">Reload</button></div>
+<div class="banner" id="offline-banner" role="status">You're offline — showing cached lessons.</div>
+<script src="../app.js" defer></script>
+</body>
+</html>

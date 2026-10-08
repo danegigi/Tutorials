@@ -1,0 +1,73 @@
+<p class="lead">Monitoring &amp; Logging introduced the three pillars and the tools. This lesson goes deeper into <em>doing</em> observability well: structured logs you can query, PromQL and the RED/USE methods, OpenTelemetry instrumentation, and alerting on symptoms (SLOs) rather than noise.</p>
+
+<h2>Structured logging</h2>
+<p><span class="level intermediate">Intermediate</span> Log <em>events as data</em>, not prose. A JSON line is queryable; a formatted string is not.</p>
+<pre><code>// Bad — unparseable, no context
+log.Printf("user %s failed login from %s", email, ip)
+
+// Good — structured key/values (Go slog)
+logger.Error("login failed",
+  "user_id", id, "ip", ip, "reason", "bad_password", "attempt", n)
+// → {"level":"error","msg":"login failed","user_id":42,"ip":"1.2.3.4",...}</code></pre>
+<blockquote class="warn"><strong>Common mistakes:</strong> (1) logging secrets/PII (passwords, tokens, full card numbers) — redact at the logger. (2) logging in a hot loop with no sampling, drowning signal and your bill. (3) no correlation ID, so you can't follow one request across services — propagate a <code>trace_id</code> on every line.</blockquote>
+
+<h2>PromQL essentials</h2>
+<p>Prometheus stores time series; PromQL queries them. The handful you'll use constantly:</p>
+<pre><code># Request rate per second over 5m
+rate(http_requests_total[5m])
+
+# Error ratio (5xx as a fraction of all requests)
+sum(rate(http_requests_total{status=~"5.."}[5m]))
+  / sum(rate(http_requests_total[5m]))
+
+# p99 latency from a histogram
+histogram_quantile(0.99, sum by (le) (rate(http_request_duration_seconds_bucket[5m])))
+
+# Memory headroom
+1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)</code></pre>
+
+<h2>What to measure: RED and USE</h2>
+<table>
+  <thead><tr><th>Method</th><th>For</th><th>Measure</th></tr></thead>
+  <tbody>
+    <tr><td><strong>RED</strong></td><td>Request-driven services</td><td><strong>R</strong>ate, <strong>E</strong>rrors, <strong>D</strong>uration</td></tr>
+    <tr><td><strong>USE</strong></td><td>Resources (CPU, disk, queues)</td><td><strong>U</strong>tilization, <strong>S</strong>aturation, <strong>E</strong>rrors</td></tr>
+  </tbody>
+</table>
+<p>RED tells you how your service looks <em>to users</em>; USE tells you whether a <em>resource</em> is the bottleneck. Together they answer "is it bad?" and "why?".</p>
+
+<h2>Distributed tracing with OpenTelemetry</h2>
+<p><span class="level advanced">Advanced</span> A trace follows one request across services as a tree of timed spans — the only way to find <em>which</em> hop is slow in a microservice call chain.</p>
+<pre><code>// Instrument a handler (concept, OTel SDK)
+ctx, span := tracer.Start(ctx, "GET /checkout")
+defer span.End()
+span.SetAttributes(attribute.String("user.id", id))
+
+// Downstream calls use ctx so their spans attach to the same trace.
+// Context propagates over HTTP via the traceparent header → one trace, many services.</code></pre>
+<blockquote class="tip">OpenTelemetry is vendor-neutral: instrument once with the OTel SDK + auto-instrumentation, export via the OTel Collector to Jaeger/Tempo (traces), Prometheus (metrics), and Loki (logs). You avoid lock-in and can switch backends without touching app code.</blockquote>
+
+<h2>Alert on symptoms, not causes</h2>
+<p>The hard-won SRE lesson: page on <strong>user-facing symptoms</strong> (error rate, latency breaching the SLO), not on every internal cause (one pod restarted, CPU at 80%). Cause-based alerts are noisy and train people to ignore the pager.</p>
+<pre><code># Good: alert when the error budget burns too fast
+- alert: HighErrorRate
+  expr: |
+    sum(rate(http_requests_total{status=~"5.."}[5m]))
+      / sum(rate(http_requests_total[5m])) &gt; 0.02
+  for: 10m
+  labels: { severity: page }
+  annotations: { summary: "5xx rate &gt;2% for 10m — SLO at risk" }</code></pre>
+<blockquote class="warn"><strong>Alert fatigue is a real failure mode.</strong> Every alert that fires without needing human action erodes trust in the ones that do. If an alert isn't actionable, make it a dashboard, not a page. Tie paging alerts to error-budget burn rate (fast burn → page now; slow burn → ticket).</blockquote>
+
+<h2>Dashboards that answer questions</h2>
+<p>A good Grafana dashboard leads with RED at the top (rate/errors/latency), then drills into USE (resources) and dependencies. Build it to answer "are users affected, and where's the bottleneck?" at a glance during an incident — not to display every metric you have.</p>
+
+<h2>Exercises</h2>
+<ul>
+  <li>Convert a service's string logs to structured JSON with a propagated <code>trace_id</code>.</li>
+  <li>Write PromQL for request rate, 5xx ratio, and p99 latency; graph all three.</li>
+  <li>Instrument two services with OpenTelemetry and view a single cross-service trace in Jaeger.</li>
+</ul>
+
+<h2>Mini-project: an observability stack for your app</h2>
+<p>Wire full observability onto a service: structured JSON logs → Loki, Prometheus metrics exposing RED, and OTel traces → Tempo/Jaeger, all unified in Grafana. Build one dashboard (RED on top, USE below) and one SLO-based alert on error-budget burn. Trigger a fault and confirm you can go from "alert fired" → dashboard → trace → the exact failing span in under a minute.</p>

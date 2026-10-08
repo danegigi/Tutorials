@@ -1,4 +1,18 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <rect width="512" height="512" rx="96" fill="#0d1117"/>
-  <text x="50%" y="54%" font-size="300" text-anchor="middle" dominant-baseline="central">📚</text>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Dev Tutorials">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#080b10"/><stop offset="1" stop-color="#0d1117"/>
+    </linearGradient>
+    <linearGradient id="hdr" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#38bdf8"/><stop offset="1" stop-color="#818cf8"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#bg)"/>
+  <rect x="72" y="72" width="368" height="368" rx="52" fill="#0d1117" stroke="#2d3148" stroke-width="2"/>
+  <path d="M72 124a52 52 0 0 1 52-52h264a52 52 0 0 1 52 52v32H72z" fill="url(#hdr)" opacity="0.9"/>
+  <circle cx="116" cy="114" r="11" fill="#ef4444"/>
+  <circle cx="152" cy="114" r="11" fill="#fbbf24"/>
+  <circle cx="188" cy="114" r="11" fill="#34d399"/>
+  <path d="M168 232l56 44-56 44" fill="none" stroke="#38bdf8" stroke-width="26" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="248" y="356" width="112" height="26" rx="13" fill="#818cf8"/>
 </svg>

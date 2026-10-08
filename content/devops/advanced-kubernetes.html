@@ -1,0 +1,78 @@
+<p class="lead">Once your workloads run on Kubernetes, the next step is making them reliable and efficient: health probes that gate traffic, resource requests/limits that keep the scheduler honest, autoscaling, pod placement control, and operators that encode operational knowledge.</p>
+
+<h2>Health probes</h2>
+<p><span class="level intermediate">Intermediate</span> Three probes tell Kubernetes whether a container is alive, ready for traffic, and done starting:</p>
+<pre><code>spec:
+  containers:
+    - name: api
+      livenessProbe:        # restart the container if this fails
+        httpGet: { path: /healthz, port: 8080 }
+        initialDelaySeconds: 10
+        periodSeconds: 10
+      readinessProbe:       # remove from Service endpoints if this fails
+        httpGet: { path: /ready, port: 8080 }
+        periodSeconds: 5
+      startupProbe:         # give slow starters time before liveness kicks in
+        httpGet: { path: /healthz, port: 8080 }
+        failureThreshold: 30
+        periodSeconds: 2</code></pre>
+<blockquote class="warn"><strong>The classic mistakes:</strong> (1) pointing <code>livenessProbe</code> at a check that depends on the database — a DB blip then restarts every pod, turning a small outage into a cascading one. Liveness should test only "is this process wedged?". (2) No <code>readinessProbe</code>, so a rolling update sends traffic to pods still warming up. (3) A slow-booting app with no <code>startupProbe</code>, so liveness kills it mid-startup in a crash loop.</blockquote>
+
+<h2>Resource requests and limits</h2>
+<pre><code>      resources:
+        requests: { cpu: "100m", memory: "128Mi" }   # scheduler reserves this
+        limits:   { cpu: "500m", memory: "256Mi" }    # hard ceiling</code></pre>
+<p><strong>Requests</strong> drive scheduling (the node must have this much free) and define the pod's share under contention. <strong>Limits</strong> cap usage. Memory over the limit → the container is OOM-killed; CPU over the limit → it's throttled (not killed).</p>
+<blockquote class="warn"><strong>Common mistake:</strong> no requests at all, so the scheduler packs nodes blindly and pods fight for CPU/memory; or a memory <em>limit</em> far above the request, so a leak balloons until the pod is OOM-killed with no warning. Set requests from observed usage; keep memory limit = request to make the pod's footprint predictable (CPU limits are more debatable — many teams omit them to avoid throttling).</blockquote>
+
+<h2>Horizontal Pod Autoscaler</h2>
+<pre><code>apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata: { name: api }
+spec:
+  scaleTargetRef: { apiVersion: apps/v1, kind: Deployment, name: api }
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target: { type: Utilization, averageUtilization: 70 }
+# kubectl get hpa  →  watch replicas scale with load</code></pre>
+<p>The HPA needs the metrics-server installed and <em>requests</em> set (utilization is a % of the request). For cluster-level scaling of <em>nodes</em>, pair it with the Cluster Autoscaler or Karpenter.</p>
+
+<h2>Placement: affinity, taints, and spreading</h2>
+<p><span class="level advanced">Advanced</span></p>
+<pre><code># Keep replicas on different nodes (survive a node loss)
+topologySpreadConstraints:
+  - maxSkew: 1
+    topologyKey: kubernetes.io/hostname
+    whenUnsatisfiable: DoNotSchedule
+    labelSelector: { matchLabels: { app: api } }
+
+# Taint a GPU node; only pods that tolerate it land there
+# node:  kubectl taint nodes gpu-1 gpu=true:NoSchedule
+tolerations:
+  - { key: "gpu", operator: "Equal", value: "true", effect: "NoSchedule" }</code></pre>
+
+<h2>PodDisruptionBudget</h2>
+<pre><code>apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata: { name: api }
+spec:
+  minAvailable: 2
+  selector: { matchLabels: { app: api } }
+# Node drains / upgrades won't take you below 2 ready pods.</code></pre>
+
+<h2>Operators</h2>
+<p>An <strong>operator</strong> extends Kubernetes with a Custom Resource + a controller that reconciles it — encoding "how to run this software" (back up a database, fail over, upgrade) as code. You install operators (Postgres, Prometheus, cert-manager) far more often than you write them, but the pattern is why "the cluster runs itself".</p>
+
+<h2>Exercises</h2>
+<ul>
+  <li>Add liveness/readiness/startup probes to a Deployment and watch a rolling update keep zero-downtime.</li>
+  <li>Set requests/limits, then load-test with an HPA at 70% CPU and watch replicas scale 2→N.</li>
+  <li>Add a PodDisruptionBudget and a topology spread, then <code>kubectl drain</code> a node and observe the constraints hold.</li>
+</ul>
+
+<h2>Mini-project: production-harden a Deployment</h2>
+<p>Take the app you deployed in Kubernetes Basics and make it production-grade: correct three-probe health checks (liveness independent of the DB), resource requests/limits from measured usage, an HPA, a PDB of <code>minAvailable: 2</code>, and a topology spread across nodes. Prove resilience by draining a node and load-testing to trigger a scale-up — with zero dropped requests.</p>

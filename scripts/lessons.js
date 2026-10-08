@@ -713,6 +713,49 @@ export const SECTIONS = [
           ref("Postmortem culture", "https://sre.google/sre-book/postmortem-culture/"),
         ],
       },
+      {
+        slug: "advanced-kubernetes",
+        title: "Advanced Kubernetes",
+        blurb: "Probes, resource requests/limits, HPA autoscaling, affinity & taints, PodDisruptionBudgets, and operators.",
+        further: [
+          ref("Configure liveness/readiness probes", "https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/"),
+          ref("Horizontal Pod Autoscaler", "https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale/"),
+          ref("Resource management", "https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/"),
+          ref("Operator pattern", "https://kubernetes.io/docs/concepts/extend-kubernetes/operator/"),
+        ],
+      },
+      {
+        slug: "secrets-management",
+        title: "Secrets Management",
+        blurb: "Why env/Git are not enough: Vault, External Secrets, Sealed Secrets, OIDC federation, and rotation.",
+        further: [
+          ref("HashiCorp Vault docs", "https://developer.hashicorp.com/vault/docs"),
+          ref("External Secrets Operator", "https://external-secrets.io/latest/"),
+          ref("Sealed Secrets", "https://github.com/bitnami-labs/sealed-secrets"),
+          ref("GitHub OIDC in Actions", "https://docs.github.com/en/actions/deployment/security-hardening-your-deployments/about-security-hardening-with-openid-connect"),
+        ],
+      },
+      {
+        slug: "observability-deep-dive",
+        title: "Observability Deep Dive",
+        blurb: "Structured logging, PromQL, RED/USE methods, OpenTelemetry instrumentation, SLO-based alerting, and dashboards.",
+        further: [
+          ref("PromQL basics", "https://prometheus.io/docs/prometheus/latest/querying/basics/"),
+          ref("OpenTelemetry instrumentation", "https://opentelemetry.io/docs/concepts/instrumentation/"),
+          ref("RED method", "https://grafana.com/blog/2018/08/02/the-red-method-how-to-instrument-your-services/"),
+          ref("Alerting on SLOs (Google SRE)", "https://sre.google/workbook/alerting-on-slos/"),
+        ],
+      },
+      {
+        slug: "chaos-engineering",
+        title: "Chaos Engineering & Resilience",
+        blurb: "Deliberately injecting failure to build confidence: hypotheses, blast radius, game days, and resilience patterns.",
+        further: [
+          ref("Principles of Chaos Engineering", "https://principlesofchaos.org/"),
+          ref("Chaos Mesh", "https://chaos-mesh.org/docs/"),
+          ref("Resilience patterns (circuit breaker)", "https://martinfowler.com/bliki/CircuitBreaker.html"),
+        ],
+      },
     ],
   },
 ];

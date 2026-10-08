@@ -1,0 +1,60 @@
+<p class="lead">Chaos engineering is the practice of deliberately injecting failure into a system to find weaknesses <em>before</em> they cause an outage. It's not "breaking things for fun" — it's a disciplined experiment with a hypothesis, a limited blast radius, and a rollback.</p>
+
+<h2>Why inject failure on purpose</h2>
+<p><span class="level intermediate">Intermediate</span> Distributed systems fail in ways no one designed: a dependency gets slow (not down), a node vanishes mid-request, a retry storm amplifies a blip. You can't unit-test these interactions. Chaos engineering surfaces them in a controlled setting so you fix them on your schedule, not at 3am.</p>
+<blockquote class="tip">The goal is <strong>confidence</strong>, not chaos. A good experiment that finds nothing is still valuable: it's evidence the system tolerates that failure mode. A good experiment that finds something is a bug caught cheaply.</blockquote>
+
+<h2>The experiment loop</h2>
+<pre><code>1. STEADY STATE   Define a measurable "healthy" (e.g. p99 &lt; 300ms, error rate &lt; 1%).
+2. HYPOTHESIS     "If one API pod is killed, steady state holds (traffic reroutes)."
+3. BLAST RADIUS   Smallest scope that tests it: one pod, in staging first, 5% of traffic.
+4. INJECT         Introduce the failure.
+5. OBSERVE        Did steady state hold? Watch the RED/USE dashboards.
+6. HALT &amp; LEARN   Stop immediately if real users are harmed; record findings.</code></pre>
+<blockquote class="warn"><strong>Non-negotiable:</strong> always define the blast radius and an abort switch <em>before</em> injecting, and run in staging before production. An experiment with no bound and no stop button isn't chaos engineering — it's an outage you caused. Start small (one instance) and widen only after it holds.</blockquote>
+
+<h2>Common failure injections</h2>
+<table>
+  <thead><tr><th>Failure</th><th>Tests</th></tr></thead>
+  <tbody>
+    <tr><td>Kill a pod/instance</td><td>Does traffic reroute? Do replicas + PDB hold?</td></tr>
+    <tr><td>Add network latency</td><td>Timeouts set correctly? Does slowness cascade?</td></tr>
+    <tr><td>Drop a dependency (DB, cache)</td><td>Graceful degradation or total failure?</td></tr>
+    <tr><td>CPU/memory pressure</td><td>Autoscaling + limits behave? OOM handling?</td></tr>
+    <tr><td>Clock skew / disk full</td><td>The failures everyone forgets.</td></tr>
+  </tbody>
+</table>
+<pre><code># Chaos Mesh (Kubernetes) — kill one API pod, once
+apiVersion: chaos-mesh.org/v1alpha1
+kind: PodChaos
+metadata: { name: kill-one-api }
+spec:
+  action: pod-kill
+  mode: one
+  selector: { namespaces: [staging], labelSelectors: { app: api } }
+# or network latency:
+#   kind: NetworkChaos  action: delay  delay.latency: "200ms"</code></pre>
+
+<h2>Resilience patterns the experiments validate</h2>
+<p><span class="level advanced">Advanced</span> Chaos tests whether these are actually in place and tuned:</p>
+<ul>
+  <li><strong>Timeouts</strong> on every network call — the default of "wait forever" is how one slow dependency hangs the whole system.</li>
+  <li><strong>Retries with backoff + jitter</strong> — but capped, or you create a retry storm that DDoSes your own backend.</li>
+  <li><strong>Circuit breaker</strong> — after N failures, stop calling a sick dependency and fail fast / serve a fallback, giving it room to recover.</li>
+  <li><strong>Bulkheads</strong> — isolate resource pools so one overloaded path can't starve the others.</li>
+  <li><strong>Graceful degradation</strong> — serve stale cache or a reduced feature set instead of a 500.</li>
+</ul>
+<blockquote class="warn"><strong>Common mistake:</strong> uncapped retries without jitter. When a dependency hiccups, every client retries in lockstep, the synchronized wave keeps it down, and a 2-second blip becomes a 20-minute outage. Always cap attempts, back off exponentially, and add jitter.</blockquote>
+
+<h2>Game days</h2>
+<p>A <strong>game day</strong> is a scheduled, team-wide chaos exercise: pick a scenario ("the primary database fails over"), run it in a controlled window, and watch how both the <em>system</em> and the <em>on-call process</em> respond. It validates runbooks, alerts, and people — often the weakest link — and feeds directly into the incident-response practices from that lesson.</p>
+
+<h2>Exercises</h2>
+<ul>
+  <li>Write a chaos hypothesis for a service with an explicit steady-state metric and blast radius.</li>
+  <li>In staging, kill one pod of a Deployment with a PDB and confirm steady state holds (no dropped requests).</li>
+  <li>Add a timeout + capped jittered retry + circuit breaker to one network call and verify behavior under injected latency.</li>
+</ul>
+
+<h2>Mini-project: a resilience game day</h2>
+<p>Design and run a game day on your app in staging: define steady state from your RED dashboard, run three experiments (pod kill, 300ms dependency latency, dependency outage) each with a stated hypothesis, blast radius, and abort switch. For every weakness found, add the matching resilience pattern (timeout/retry/circuit breaker/degradation) and re-run to confirm the fix. Write it up as a blameless report with action items — the same format as a postmortem.</p>
