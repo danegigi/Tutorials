@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en" data-base="../">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0d1117">
+<meta name="description" content="Dev Tutorials — Golang, Bun, Web Development, Linux and DevOps, offline-ready.">
+<title>Context &amp; Cancellation — Golang</title>
+<link rel="manifest" href="../manifest.webmanifest">
+<link rel="icon" href="../icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="../icon-192.png">
+<link rel="stylesheet" href="../app.css">
+<script>/* set theme before paint to avoid flash */(function(){try{var t=localStorage.getItem('tut.theme');document.documentElement.setAttribute('data-theme',t||'dark');}catch(e){document.documentElement.setAttribute('data-theme','dark');}})();</script>
+
+</head>
+<body class="lesson">
+<header class="nav">
+  <a class="brand" href="../index.html">📚 Dev Tutorials</a>
+  <span class="crumb">Context &amp; Cancellation — Golang</span>
+  <span class="spacer"></span>
+  <a class="navbtn" href="../search.html">🔎 Search</a>
+  <button class="navbtn" id="install-btn" type="button">⬇️ Install</button>
+  <button class="navbtn" id="theme-btn" type="button" aria-label="Toggle theme">🌙 Dark</button>
+</header>
+<main class="wrap lesson-body">
+  <h1 class="page-title">Context &amp; Cancellation</h1>
+  <div class="lesson-tools" data-lesson-id="golang/context-and-cancellation">
+    <button id="done-btn" type="button" aria-pressed="false">○ Mark complete</button>
+    <button id="mark-btn" type="button" aria-pressed="false">☆ Bookmark</button>
+    <a class="navbtn" href="index.html" style="margin-left:auto">All Golang lessons →</a>
+  </div>
+<nav class="toc" aria-label="On this page"><strong>On this page</strong><ul>
+<li class="lvl2"><a href="#why-context-exists">Why context exists</a></li>
+<li class="lvl2"><a href="#the-four-constructors">The four constructors</a></li>
+<li class="lvl2"><a href="#honoring-cancellation">Honoring cancellation</a></li>
+<li class="lvl2"><a href="#propagation-through-the-stack">Propagation through the stack</a></li>
+<li class="lvl2"><a href="#request-scoped-values">Request-scoped values</a></li>
+<li class="lvl2"><a href="#the-rules">The rules</a></li>
+<li class="lvl2"><a href="#exercises">Exercises</a></li>
+<li class="lvl2"><a href="#mini-project-a-cancellable-fan-out">Mini-project: a cancellable fan-out</a></li>
+</ul></nav>
+<p class="lead">The Concurrency lesson introduced <code>context</code>; this is the full treatment. Context is how a Go program carries cancellation, deadlines, and request-scoped values across API boundaries — the mechanism that lets a cancelled HTTP request tear down every goroutine and database call it spawned.</p>
+
+<h2 id="why-context-exists">Why context exists</h2>
+<p><span class="level beginner">Beginner</span> When a request is cancelled (the client disconnects, a timeout fires), everything it started should stop: the DB query, the outbound API call, the background goroutine. Context propagates that "stop now" signal down the whole call tree so nothing keeps working on an answer no one wants.</p>
+
+<h2 id="the-four-constructors">The four constructors</h2>
+<pre><code>context.Background()   // the root — top of main, tests, init
+context.TODO()         // placeholder when you haven't wired it through yet
+
+ctx, cancel := context.WithCancel(parent)              // cancel manually
+ctx, cancel := context.WithTimeout(parent, 2*time.Second)  // cancel after a duration
+ctx, cancel := context.WithDeadline(parent, someTime)      // cancel at a time
+defer cancel()         // ALWAYS defer cancel — it frees resources</code></pre>
+<blockquote class="warn"><strong>The most common context bug:</strong> not calling <code>cancel</code>. <code>WithTimeout</code>/<code>WithCancel</code> start a goroutine/timer that lives until <code>cancel</code> is called — forgetting it leaks resources, and <code>go vet</code> flags it ("the cancel function is not used on all paths"). Always <code>defer cancel()</code> immediately, even when the timeout will fire on its own.</blockquote>
+
+<h2 id="honoring-cancellation">Honoring cancellation</h2>
+<pre><code>func worker(ctx context.Context) error {
+	for {
+		select {
+		case &lt;-ctx.Done():            // cancelled or timed out
+			return ctx.Err()         // context.Canceled or context.DeadlineExceeded
+		case job := &lt;-jobs:
+			process(job)
+		}
+	}
+}
+
+// ctx.Done() returns a channel closed on cancellation.
+// ctx.Err() tells you WHY: Canceled vs DeadlineExceeded.</code></pre>
+
+<h2 id="propagation-through-the-stack">Propagation through the stack</h2>
+<p><span class="level intermediate">Intermediate</span> Context flows as the <em>first argument</em> of every function that does I/O or might block. The stdlib already accepts it everywhere:</p>
+<pre><code>func handler(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()                       // cancelled when the client disconnects
+
+	// Pass it down — the DB query aborts if the request is cancelled
+	rows, err := db.QueryContext(ctx, "SELECT ...")
+
+	// And to outbound calls — the fetch aborts too
+	req, _ := http.NewRequestWithContext(ctx, "GET", url, nil)
+	resp, err := http.DefaultClient.Do(req)
+}</code></pre>
+<blockquote class="tip">A derived context can only be <em>more</em> restrictive than its parent: a child added a shorter timeout, or was cancelled directly. Cancelling a parent cancels all its children; cancelling a child never affects the parent. This forms a cancellation tree that mirrors your call tree.</blockquote>
+
+<h2 id="request-scoped-values">Request-scoped values</h2>
+<pre><code>// Store (middleware) and retrieve (handler) a request-scoped value
+type ctxKey string
+const userKey ctxKey = "user"
+
+ctx = context.WithValue(ctx, userKey, currentUser)
+u, ok := ctx.Value(userKey).(*User)</code></pre>
+<blockquote class="warn"><strong>Use context values sparingly and correctly:</strong> only for request-scoped data that crosses API boundaries (a request ID, the authenticated user, a trace span) — never for optional function parameters. Always use a <em>private, non-string key type</em> (like <code>ctxKey</code> above) so your keys can't collide with another package's. Passing config or dependencies through context instead of explicit arguments is an anti-pattern.</blockquote>
+
+<h2 id="the-rules">The rules</h2>
+<ul>
+  <li>Pass context as the <strong>first parameter</strong>, named <code>ctx</code> — never store it in a struct.</li>
+  <li>Don't pass a <strong>nil</strong> context; use <code>context.TODO()</code> if you don't have one yet.</li>
+  <li>The <strong>same context</strong> can go to multiple goroutines simultaneously — it's safe for concurrent use.</li>
+  <li><code>cancel</code> is idempotent and safe to call multiple times; always defer it.</li>
+</ul>
+
+<h2 id="exercises">Exercises</h2>
+<ul>
+  <li>Write a function that does work in a loop and returns <code>ctx.Err()</code> promptly when cancelled.</li>
+  <li>Give an HTTP handler a 500ms <code>WithTimeout</code> around a slow operation and return 504 on <code>DeadlineExceeded</code>.</li>
+  <li>Add a request-ID to the context in middleware with a private key type and read it in a downstream handler.</li>
+</ul>
+
+<h2 id="mini-project-a-cancellable-fan-out">Mini-project: a cancellable fan-out</h2>
+<p>Build a function that fetches N URLs concurrently under a single parent context with a global timeout. When the deadline fires (or the first hard error occurs), every in-flight request must abort via <code>NewRequestWithContext</code> — no goroutine keeps running. Return partial results plus <code>ctx.Err()</code>, and prove with the race detector that cancellation is clean and leak-free.</p>
+
+<section class="further"><h2 id="further-reading">Further reading</h2>
+<p>Official documentation for the tools and APIs covered on this page:</p>
+<ul class="further-list"><li><a href="https://pkg.go.dev/context" target="_blank" rel="noopener">context package ↗</a></li>
+<li><a href="https://go.dev/blog/context" target="_blank" rel="noopener">Go Concurrency Patterns: Context ↗</a></li></ul></section>
+  <nav class="pager">
+<a class="prev" href="generics-deep-dive.html"><small>Previous</small>🐹 Generics Deep Dive</a>
+<a class="next" href="profiling-and-performance.html"><small>Next</small>🐹 Profiling &amp; Performance</a>
+  </nav>
+</main>
+<button type="button" class="fab top" id="fab-top" aria-label="Back to top">↑ Top</button>
+<div class="banner" id="update-banner" role="status">A new version is available.<button type="button">Reload</button></div>
+<div class="banner" id="offline-banner" role="status">You're offline — showing cached lessons.</div>
+<script src="../app.js" defer></script>
+</body>
+</html>

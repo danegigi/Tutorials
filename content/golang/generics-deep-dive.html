@@ -1,0 +1,83 @@
+<p class="lead">The Structs lesson introduced generics; this goes deeper: writing real constraints, generic data structures, how type inference actually works, the limits of Go generics, and — most importantly — when a plain interface or function is the better choice.</p>
+
+<h2>Type parameters and constraints</h2>
+<pre><code>// A constraint is an interface describing a SET of types.
+type Ordered interface {
+	~int | ~int8 | ~int16 | ~int32 | ~int64 |
+	~uint | ~uint8 | ~uint16 | ~uint32 | ~uint64 |
+	~float32 | ~float64 | ~string
+}
+
+func Max[T Ordered](a, b T) T {
+	if a &gt; b { return a }
+	return b
+}
+Max(3, 7)        // T inferred: int → 7
+Max("a", "b")    // T inferred: string → "b"</code></pre>
+<p><span class="level intermediate">Intermediate</span> The <code>~int</code> syntax means "any type whose <em>underlying</em> type is int" — so a <code>type Celsius float64</code> satisfies <code>~float64</code>. Without the tilde, only the exact type matches. Most useful constraints already exist in <code>golang.org/x/exp/constraints</code> (<code>Ordered</code>, <code>Integer</code>, <code>Signed</code>…).</p>
+
+<h2>The two built-in constraints</h2>
+<pre><code>any          // alias for interface{} — matches every type
+comparable   // types usable with == and != (map keys, set elements)
+
+func Contains[T comparable](s []T, x T) bool {
+	for _, v := range s { if v == x { return true } }
+	return false
+}</code></pre>
+
+<h2>Generic data structures</h2>
+<pre><code>type Stack[T any] struct { items []T }
+
+func (s *Stack[T]) Push(v T) { s.items = append(s.items, v) }
+func (s *Stack[T]) Pop() (T, bool) {
+	var zero T
+	if len(s.items) == 0 { return zero, false }
+	v := s.items[len(s.items)-1]
+	s.items = s.items[:len(s.items)-1]
+	return v, true
+}
+
+var s Stack[string]
+s.Push("a"); v, ok := s.Pop()   // "a", true</code></pre>
+<blockquote class="tip">Note <code>var zero T</code> — the generic way to produce "the zero value of whatever T is" (0, "", nil, or the zero struct). You can't write a literal because you don't know the type, so <code>var zero T</code> is the idiom for a generic default/not-found return.</blockquote>
+
+<h2>Generic functional helpers</h2>
+<pre><code>func Map[T, U any](s []T, f func(T) U) []U {
+	out := make([]U, len(s))
+	for i, v := range s { out[i] = f(v) }
+	return out
+}
+func Filter[T any](s []T, keep func(T) bool) []T {
+	var out []T
+	for _, v := range s { if keep(v) { out = append(out, v) } }
+	return out
+}
+nums := []int{1, 2, 3, 4}
+evens := Filter(nums, func(n int) bool { return n%2 == 0 }) // [2 4]
+strs := Map(evens, func(n int) string { return fmt.Sprint(n) }) // ["2" "4"]</code></pre>
+
+<h2>Type inference and its limits</h2>
+<p><span class="level advanced">Advanced</span> Go infers type parameters from the <em>arguments</em>, not from the return type. When it can't, specify them explicitly:</p>
+<pre><code>// Can't infer U from args alone (it's only in the return position sometimes):
+result := Map[int, string](nums, strconv.Itoa)   // explicit when needed
+
+// Methods cannot have their OWN type parameters — only the type can.
+// func (s Stack[T]) MapTo[U any]() ...  // ← NOT allowed in Go</code></pre>
+<blockquote class="warn"><strong>Known limits:</strong> (1) methods can't introduce new type parameters (put them on package-level functions instead). (2) No generic specialization/overloading. (3) A constraint union can't mix types with different method sets freely. These catch people coming from C++/Rust/TypeScript generics.</blockquote>
+
+<h2>When NOT to use generics</h2>
+<blockquote class="warn"><strong>The official guidance:</strong> if you'd write the same code regardless of type (collections, map/filter), generics help. If the behavior <em>differs</em> per type, you want an <strong>interface</strong>, not a type parameter. And if you're writing it once for one type, just write it concretely — generics add cognitive cost. "Write code, not types"; reach for generics when you see yourself copy-pasting a function that differs only in a type.</blockquote>
+<pre><code>// Interface is RIGHT here — behavior differs per implementation
+type Shape interface { Area() float64 }
+
+// Generics would be WRONG — you'd just be hiding a type switch</code></pre>
+
+<h2>Exercises</h2>
+<ul>
+  <li>Write a generic <code>Keys[K comparable, V any](m map[K]V) []K</code> and a <code>Values</code> counterpart.</li>
+  <li>Implement a generic <code>Set[T comparable]</code> with <code>Add</code>, <code>Has</code>, and <code>Len</code> backed by a map.</li>
+  <li>Take a function you've duplicated for <code>int</code> and <code>float64</code> and unify it with an <code>Ordered</code> constraint — then argue whether it was worth it.</li>
+</ul>
+
+<h2>Mini-project: a generic collection library</h2>
+<p>Build a small <code>slices2</code> package: generic <code>Map</code>, <code>Filter</code>, <code>Reduce</code>, <code>GroupBy[K comparable, T any]</code>, and a <code>Set[T comparable]</code> type. Add table-driven tests (from the Testing lesson), and in the README justify each generic — and note one place where you deliberately used a plain interface instead because the behavior varied by type.</p>

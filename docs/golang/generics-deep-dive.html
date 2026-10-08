@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en" data-base="../">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0d1117">
+<meta name="description" content="Dev Tutorials — Golang, Bun, Web Development, Linux and DevOps, offline-ready.">
+<title>Generics Deep Dive — Golang</title>
+<link rel="manifest" href="../manifest.webmanifest">
+<link rel="icon" href="../icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="../icon-192.png">
+<link rel="stylesheet" href="../app.css">
+<script>/* set theme before paint to avoid flash */(function(){try{var t=localStorage.getItem('tut.theme');document.documentElement.setAttribute('data-theme',t||'dark');}catch(e){document.documentElement.setAttribute('data-theme','dark');}})();</script>
+
+</head>
+<body class="lesson">
+<header class="nav">
+  <a class="brand" href="../index.html">📚 Dev Tutorials</a>
+  <span class="crumb">Generics Deep Dive — Golang</span>
+  <span class="spacer"></span>
+  <a class="navbtn" href="../search.html">🔎 Search</a>
+  <button class="navbtn" id="install-btn" type="button">⬇️ Install</button>
+  <button class="navbtn" id="theme-btn" type="button" aria-label="Toggle theme">🌙 Dark</button>
+</header>
+<main class="wrap lesson-body">
+  <h1 class="page-title">Generics Deep Dive</h1>
+  <div class="lesson-tools" data-lesson-id="golang/generics-deep-dive">
+    <button id="done-btn" type="button" aria-pressed="false">○ Mark complete</button>
+    <button id="mark-btn" type="button" aria-pressed="false">☆ Bookmark</button>
+    <a class="navbtn" href="index.html" style="margin-left:auto">All Golang lessons →</a>
+  </div>
+<nav class="toc" aria-label="On this page"><strong>On this page</strong><ul>
+<li class="lvl2"><a href="#type-parameters-and-constraints">Type parameters and constraints</a></li>
+<li class="lvl2"><a href="#the-two-built-in-constraints">The two built-in constraints</a></li>
+<li class="lvl2"><a href="#generic-data-structures">Generic data structures</a></li>
+<li class="lvl2"><a href="#generic-functional-helpers">Generic functional helpers</a></li>
+<li class="lvl2"><a href="#type-inference-and-its-limits">Type inference and its limits</a></li>
+<li class="lvl2"><a href="#when-not-to-use-generics">When NOT to use generics</a></li>
+<li class="lvl2"><a href="#exercises">Exercises</a></li>
+<li class="lvl2"><a href="#mini-project-a-generic-collection-library">Mini-project: a generic collection library</a></li>
+</ul></nav>
+<p class="lead">The Structs lesson introduced generics; this goes deeper: writing real constraints, generic data structures, how type inference actually works, the limits of Go generics, and — most importantly — when a plain interface or function is the better choice.</p>
+
+<h2 id="type-parameters-and-constraints">Type parameters and constraints</h2>
+<pre><code>// A constraint is an interface describing a SET of types.
+type Ordered interface {
+	~int | ~int8 | ~int16 | ~int32 | ~int64 |
+	~uint | ~uint8 | ~uint16 | ~uint32 | ~uint64 |
+	~float32 | ~float64 | ~string
+}
+
+func Max[T Ordered](a, b T) T {
+	if a &gt; b { return a }
+	return b
+}
+Max(3, 7)        // T inferred: int → 7
+Max("a", "b")    // T inferred: string → "b"</code></pre>
+<p><span class="level intermediate">Intermediate</span> The <code>~int</code> syntax means "any type whose <em>underlying</em> type is int" — so a <code>type Celsius float64</code> satisfies <code>~float64</code>. Without the tilde, only the exact type matches. Most useful constraints already exist in <code>golang.org/x/exp/constraints</code> (<code>Ordered</code>, <code>Integer</code>, <code>Signed</code>…).</p>
+
+<h2 id="the-two-built-in-constraints">The two built-in constraints</h2>
+<pre><code>any          // alias for interface{} — matches every type
+comparable   // types usable with == and != (map keys, set elements)
+
+func Contains[T comparable](s []T, x T) bool {
+	for _, v := range s { if v == x { return true } }
+	return false
+}</code></pre>
+
+<h2 id="generic-data-structures">Generic data structures</h2>
+<pre><code>type Stack[T any] struct { items []T }
+
+func (s *Stack[T]) Push(v T) { s.items = append(s.items, v) }
+func (s *Stack[T]) Pop() (T, bool) {
+	var zero T
+	if len(s.items) == 0 { return zero, false }
+	v := s.items[len(s.items)-1]
+	s.items = s.items[:len(s.items)-1]
+	return v, true
+}
+
+var s Stack[string]
+s.Push("a"); v, ok := s.Pop()   // "a", true</code></pre>
+<blockquote class="tip">Note <code>var zero T</code> — the generic way to produce "the zero value of whatever T is" (0, "", nil, or the zero struct). You can't write a literal because you don't know the type, so <code>var zero T</code> is the idiom for a generic default/not-found return.</blockquote>
+
+<h2 id="generic-functional-helpers">Generic functional helpers</h2>
+<pre><code>func Map[T, U any](s []T, f func(T) U) []U {
+	out := make([]U, len(s))
+	for i, v := range s { out[i] = f(v) }
+	return out
+}
+func Filter[T any](s []T, keep func(T) bool) []T {
+	var out []T
+	for _, v := range s { if keep(v) { out = append(out, v) } }
+	return out
+}
+nums := []int{1, 2, 3, 4}
+evens := Filter(nums, func(n int) bool { return n%2 == 0 }) // [2 4]
+strs := Map(evens, func(n int) string { return fmt.Sprint(n) }) // ["2" "4"]</code></pre>
+
+<h2 id="type-inference-and-its-limits">Type inference and its limits</h2>
+<p><span class="level advanced">Advanced</span> Go infers type parameters from the <em>arguments</em>, not from the return type. When it can't, specify them explicitly:</p>
+<pre><code>// Can't infer U from args alone (it's only in the return position sometimes):
+result := Map[int, string](nums, strconv.Itoa)   // explicit when needed
+
+// Methods cannot have their OWN type parameters — only the type can.
+// func (s Stack[T]) MapTo[U any]() ...  // ← NOT allowed in Go</code></pre>
+<blockquote class="warn"><strong>Known limits:</strong> (1) methods can't introduce new type parameters (put them on package-level functions instead). (2) No generic specialization/overloading. (3) A constraint union can't mix types with different method sets freely. These catch people coming from C++/Rust/TypeScript generics.</blockquote>
+
+<h2 id="when-not-to-use-generics">When NOT to use generics</h2>
+<blockquote class="warn"><strong>The official guidance:</strong> if you'd write the same code regardless of type (collections, map/filter), generics help. If the behavior <em>differs</em> per type, you want an <strong>interface</strong>, not a type parameter. And if you're writing it once for one type, just write it concretely — generics add cognitive cost. "Write code, not types"; reach for generics when you see yourself copy-pasting a function that differs only in a type.</blockquote>
+<pre><code>// Interface is RIGHT here — behavior differs per implementation
+type Shape interface { Area() float64 }
+
+// Generics would be WRONG — you'd just be hiding a type switch</code></pre>
+
+<h2 id="exercises">Exercises</h2>
+<ul>
+  <li>Write a generic <code>Keys[K comparable, V any](m map[K]V) []K</code> and a <code>Values</code> counterpart.</li>
+  <li>Implement a generic <code>Set[T comparable]</code> with <code>Add</code>, <code>Has</code>, and <code>Len</code> backed by a map.</li>
+  <li>Take a function you've duplicated for <code>int</code> and <code>float64</code> and unify it with an <code>Ordered</code> constraint — then argue whether it was worth it.</li>
+</ul>
+
+<h2 id="mini-project-a-generic-collection-library">Mini-project: a generic collection library</h2>
+<p>Build a small <code>slices2</code> package: generic <code>Map</code>, <code>Filter</code>, <code>Reduce</code>, <code>GroupBy[K comparable, T any]</code>, and a <code>Set[T comparable]</code> type. Add table-driven tests (from the Testing lesson), and in the README justify each generic — and note one place where you deliberately used a plain interface instead because the behavior varied by type.</p>
+
+<section class="further"><h2 id="further-reading">Further reading</h2>
+<p>Official documentation for the tools and APIs covered on this page:</p>
+<ul class="further-list"><li><a href="https://go.dev/doc/tutorial/generics" target="_blank" rel="noopener">Tutorial: Generics ↗</a></li>
+<li><a href="https://go.dev/blog/when-generics" target="_blank" rel="noopener">When To Use Generics ↗</a></li>
+<li><a href="https://pkg.go.dev/golang.org/x/exp/constraints" target="_blank" rel="noopener">golang.org/x/exp/constraints ↗</a></li></ul></section>
+  <nav class="pager">
+<a class="prev" href="deployment-basics.html"><small>Previous</small>🐹 Deployment Basics</a>
+<a class="next" href="context-and-cancellation.html"><small>Next</small>🐹 Context &amp; Cancellation</a>
+  </nav>
+</main>
+<button type="button" class="fab top" id="fab-top" aria-label="Back to top">↑ Top</button>
+<div class="banner" id="update-banner" role="status">A new version is available.<button type="button">Reload</button></div>
+<div class="banner" id="offline-banner" role="status">You're offline — showing cached lessons.</div>
+<script src="../app.js" defer></script>
+</body>
+</html>

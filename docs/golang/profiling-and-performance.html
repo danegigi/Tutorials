@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en" data-base="../">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0d1117">
+<meta name="description" content="Dev Tutorials — Golang, Bun, Web Development, Linux and DevOps, offline-ready.">
+<title>Profiling &amp; Performance — Golang</title>
+<link rel="manifest" href="../manifest.webmanifest">
+<link rel="icon" href="../icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="../icon-192.png">
+<link rel="stylesheet" href="../app.css">
+<script>/* set theme before paint to avoid flash */(function(){try{var t=localStorage.getItem('tut.theme');document.documentElement.setAttribute('data-theme',t||'dark');}catch(e){document.documentElement.setAttribute('data-theme','dark');}})();</script>
+
+</head>
+<body class="lesson">
+<header class="nav">
+  <a class="brand" href="../index.html">📚 Dev Tutorials</a>
+  <span class="crumb">Profiling &amp; Performance — Golang</span>
+  <span class="spacer"></span>
+  <a class="navbtn" href="../search.html">🔎 Search</a>
+  <button class="navbtn" id="install-btn" type="button">⬇️ Install</button>
+  <button class="navbtn" id="theme-btn" type="button" aria-label="Toggle theme">🌙 Dark</button>
+</header>
+<main class="wrap lesson-body">
+  <h1 class="page-title">Profiling &amp; Performance</h1>
+  <div class="lesson-tools" data-lesson-id="golang/profiling-and-performance">
+    <button id="done-btn" type="button" aria-pressed="false">○ Mark complete</button>
+    <button id="mark-btn" type="button" aria-pressed="false">☆ Bookmark</button>
+    <a class="navbtn" href="index.html" style="margin-left:auto">All Golang lessons →</a>
+  </div>
+<nav class="toc" aria-label="On this page"><strong>On this page</strong><ul>
+<li class="lvl2"><a href="#benchmark-first">Benchmark first</a></li>
+<li class="lvl2"><a href="#cpu-profiling-with-pprof">CPU profiling with pprof</a></li>
+<li class="lvl2"><a href="#memory-profiling">Memory profiling</a></li>
+<li class="lvl2"><a href="#escape-analysis-allocations">Escape analysis &amp;amp; allocations</a></li>
+<li class="lvl2"><a href="#the-execution-tracer">The execution tracer</a></li>
+<li class="lvl2"><a href="#a-sane-optimization-loop">A sane optimization loop</a></li>
+<li class="lvl2"><a href="#exercises">Exercises</a></li>
+<li class="lvl2"><a href="#mini-project-profile-and-speed-up-a-real-function">Mini-project: profile and speed up a real function</a></li>
+</ul></nav>
+<p class="lead">Go ships first-class profiling in the toolchain. Before optimizing anything, <em>measure</em>: benchmark the hot path, capture a CPU or memory profile with pprof, read it, and let allocation and escape analysis tell you where the time and garbage actually go.</p>
+
+<h2 id="benchmark-first">Benchmark first</h2>
+<pre><code>func BenchmarkJoin(b *testing.B) {
+	parts := []string{"a", "b", "c", "d"}
+	b.ReportAllocs()
+	for i := 0; i &lt; b.N; i++ {
+		_ = strings.Join(parts, "-")
+	}
+}</code></pre>
+<pre><code>go test -bench=. -benchmem -count=5 ./...
+# BenchmarkJoin-8   24000000   48 ns/op   16 B/op   1 allocs/op
+#                   ^iters      ^time      ^bytes    ^allocations per op</code></pre>
+<blockquote class="tip">Run with <code>-count=5</code> and compare runs with <a href="https://pkg.go.dev/golang.org/x/perf/cmd/benchstat" target="_blank" rel="noopener">benchstat</a>, which reports the mean and whether a change is statistically significant. A single run's number is noise; benchstat tells you if your "optimization" actually did anything.</blockquote>
+
+<h2 id="cpu-profiling-with-pprof">CPU profiling with pprof</h2>
+<p><span class="level intermediate">Intermediate</span></p>
+<pre><code># From a benchmark:
+go test -bench=BenchmarkJoin -cpuprofile=cpu.out ./...
+go tool pprof cpu.out
+#   (pprof) top10        ← functions by CPU time
+#   (pprof) list Join    ← annotated source, line by line
+#   (pprof) web          ← a call graph (needs graphviz)</code></pre>
+<pre><code>// From a running server: import for the /debug/pprof endpoints
+import _ "net/http/pprof"
+// then: go tool pprof http://localhost:8080/debug/pprof/profile?seconds=30</code></pre>
+
+<h2 id="memory-profiling">Memory profiling</h2>
+<pre><code>go test -bench=. -memprofile=mem.out ./...
+go tool pprof -alloc_space mem.out      # total allocated (where garbage is made)
+go tool pprof -inuse_space mem.out      # live heap (where a leak lives)
+#   (pprof) top -cum
+#   (pprof) list YourFunc</code></pre>
+<blockquote class="warn"><strong>Common mistake:</strong> optimizing without a profile — "I think this loop is slow". You will almost always be wrong about <em>where</em> the time goes. Profile first; the bottleneck is frequently I/O, allocations, or a hot function you didn't suspect, not the code you were eyeing.</blockquote>
+
+<h2 id="escape-analysis-allocations">Escape analysis &amp; allocations</h2>
+<p><span class="level advanced">Advanced</span> A value that "escapes" to the heap costs an allocation and GC pressure. The compiler tells you what escapes and why:</p>
+<pre><code>go build -gcflags="-m" ./...
+# ./main.go:12:9: &amp;user escapes to heap
+# ./main.go:20:13: make([]int, n) does not escape</code></pre>
+<p>Common fixes once a profile points at allocation:</p>
+<pre><code>// Preallocate when the size is known — avoids repeated slice growth
+out := make([]int, 0, len(in))
+
+// strings.Builder instead of += in a loop
+var b strings.Builder
+for _, s := range parts { b.WriteString(s) }
+
+// sync.Pool to reuse expensive buffers on a hot path
+var bufPool = sync.Pool{New: func() any { return new(bytes.Buffer) }}</code></pre>
+
+<h2 id="the-execution-tracer">The execution tracer</h2>
+<pre><code>go test -trace=trace.out ./...
+go tool trace trace.out     # goroutine scheduling, GC pauses, blocking</code></pre>
+<p>Use the tracer when the problem is <em>concurrency</em>, not raw CPU — goroutines blocking on each other, GC stop-the-world pauses, or an under-utilized worker pool. pprof says "where the CPU goes"; the tracer says "why things are waiting".</p>
+
+<h2 id="a-sane-optimization-loop">A sane optimization loop</h2>
+<ol>
+  <li>Write a benchmark that reproduces the slow path.</li>
+  <li>Profile it (CPU, then memory) and find the real hotspot.</li>
+  <li>Change one thing; re-benchmark with <code>benchstat</code> to confirm it helped.</li>
+  <li>Stop when it's fast enough — don't trade readability for nanoseconds that don't matter.</li>
+</ol>
+<blockquote class="warn"><strong>Don't micro-optimize prematurely.</strong> Readable code that's fast enough beats clever code that saved 5ns on a path called twice a day. Optimize the paths a profile proves are hot, under a benchmark that proves the win — and leave the rest clear.</blockquote>
+
+<h2 id="exercises">Exercises</h2>
+<ul>
+  <li>Benchmark string concatenation with <code>+=</code> vs <code>strings.Builder</code> with <code>-benchmem</code>; explain the allocs difference.</li>
+  <li>Capture a CPU profile from a benchmark and use <code>list</code> to find the hottest line.</li>
+  <li>Run <code>-gcflags="-m"</code> on a function returning <code>&amp;struct{}</code> and confirm it escapes to the heap.</li>
+</ul>
+
+<h2 id="mini-project-profile-and-speed-up-a-real-function">Mini-project: profile and speed up a real function</h2>
+<p>Take a function that parses or transforms a large input (e.g. the JSON⇄CSV converter from the Files lesson). Write a benchmark, capture CPU + memory profiles, find the top allocator, and apply the right fix (preallocation / <code>strings.Builder</code> / <code>sync.Pool</code>). Prove the improvement with <code>benchstat</code> comparing before/after — and record one optimization you tried that <em>didn't</em> help, to internalize "measure, don't guess".</p>
+
+<section class="further"><h2 id="further-reading">Further reading</h2>
+<p>Official documentation for the tools and APIs covered on this page:</p>
+<ul class="further-list"><li><a href="https://go.dev/blog/pprof" target="_blank" rel="noopener">Profiling Go programs ↗</a></li>
+<li><a href="https://go.dev/doc/diagnostics" target="_blank" rel="noopener">Diagnostics ↗</a></li>
+<li><a href="https://pkg.go.dev/runtime/pprof" target="_blank" rel="noopener">runtime/pprof ↗</a></li></ul></section>
+  <nav class="pager">
+<a class="prev" href="context-and-cancellation.html"><small>Previous</small>🐹 Context &amp; Cancellation</a>
+<a class="next" href="project-layout-and-patterns.html"><small>Next</small>🐹 Project Layout &amp; Patterns</a>
+  </nav>
+</main>
+<button type="button" class="fab top" id="fab-top" aria-label="Back to top">↑ Top</button>
+<div class="banner" id="update-banner" role="status">A new version is available.<button type="button">Reload</button></div>
+<div class="banner" id="offline-banner" role="status">You're offline — showing cached lessons.</div>
+<script src="../app.js" defer></script>
+</body>
+</html>

@@ -154,6 +154,45 @@ export const SECTIONS = [
           ref("Deploying Go (official Docker image)", "https://hub.docker.com/_/golang"),
         ],
       },
+      {
+        slug: "generics-deep-dive",
+        title: "Generics Deep Dive",
+        blurb: "Type parameters, constraints & the constraints package, generic data structures, inference, and when NOT to use them.",
+        further: [
+          ref("Tutorial: Generics", "https://go.dev/doc/tutorial/generics"),
+          ref("When To Use Generics", "https://go.dev/blog/when-generics"),
+          ref("golang.org/x/exp/constraints", "https://pkg.go.dev/golang.org/x/exp/constraints"),
+        ],
+      },
+      {
+        slug: "context-and-cancellation",
+        title: "Context & Cancellation",
+        blurb: "context.Context in depth: timeouts, deadlines, cancellation propagation, values, and the rules for passing it.",
+        further: [
+          ref("context package", "https://pkg.go.dev/context"),
+          ref("Go Concurrency Patterns: Context", "https://go.dev/blog/context"),
+        ],
+      },
+      {
+        slug: "profiling-and-performance",
+        title: "Profiling & Performance",
+        blurb: "pprof CPU/memory profiles, benchmarks with -benchmem, the execution tracer, escape analysis, and reducing allocations.",
+        further: [
+          ref("Profiling Go programs", "https://go.dev/blog/pprof"),
+          ref("Diagnostics", "https://go.dev/doc/diagnostics"),
+          ref("runtime/pprof", "https://pkg.go.dev/runtime/pprof"),
+        ],
+      },
+      {
+        slug: "project-layout-and-patterns",
+        title: "Project Layout & Patterns",
+        blurb: "Package organization, internal/ and cmd/, dependency injection, interfaces at the boundary, and idiomatic structure.",
+        further: [
+          ref("Organizing a Go module", "https://go.dev/doc/modules/layout"),
+          ref("Effective Go", "https://go.dev/doc/effective_go"),
+          ref("Standard Go Project Layout (community)", "https://github.com/golang-standards/project-layout"),
+        ],
+      },
     ],
   },
 
@@ -269,6 +308,46 @@ export const SECTIONS = [
         further: [
           ref("Bun Docker image", "https://hub.docker.com/r/oven/bun"),
           ref("Playwright", "https://playwright.dev/docs/intro"),
+        ],
+      },
+      {
+        slug: "monorepos-and-workspaces",
+        title: "Monorepos & Workspaces",
+        blurb: "Bun workspaces, shared packages, filtered scripts (--filter), catalog versions, and a monorepo CI setup.",
+        further: [
+          ref("Workspaces", "https://bun.com/docs/install/workspaces"),
+          ref("Filter (--filter)", "https://bun.com/docs/cli/filter"),
+          ref("Catalogs", "https://bun.com/docs/install/catalogs"),
+        ],
+      },
+      {
+        slug: "env-and-config",
+        title: "Environment & Configuration",
+        blurb: ".env resolution order, Bun.env vs process.env, typed config, secrets with Bun.secrets, and per-environment config.",
+        further: [
+          ref("Environment variables", "https://bun.com/docs/runtime/env"),
+          ref("bunfig.toml", "https://bun.com/docs/runtime/bunfig"),
+          ref("Bun.secrets", "https://bun.com/reference/bun/secrets"),
+        ],
+      },
+      {
+        slug: "web-frameworks",
+        title: "Web Frameworks: Hono & Elysia",
+        blurb: "Beyond Bun.serve: routing, middleware, validation, and typed end-to-end APIs with Hono and Elysia.",
+        further: [
+          ref("Hono docs", "https://hono.dev/docs/"),
+          ref("Hono validation (zod)", "https://hono.dev/docs/guides/validation"),
+          ref("Elysia docs", "https://elysiajs.com/"),
+        ],
+      },
+      {
+        slug: "performance-and-optimization",
+        title: "Performance & Optimization",
+        blurb: "Benchmarking with bun test, where Bun is fast, hot paths, startup time, and production profiling.",
+        further: [
+          ref("bench (bun test --bench style)", "https://bun.com/docs/cli/test"),
+          ref("Bun performance", "https://bun.com/docs"),
+          ref("Node profiling (applies to Bun)", "https://nodejs.org/en/learn/getting-started/profiling"),
         ],
       },
     ],

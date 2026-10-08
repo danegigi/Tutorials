@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="en" data-base="../">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0d1117">
+<meta name="description" content="Dev Tutorials — Golang, Bun, Web Development, Linux and DevOps, offline-ready.">
+<title>Web Frameworks: Hono &amp; Elysia — Bun</title>
+<link rel="manifest" href="../manifest.webmanifest">
+<link rel="icon" href="../icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="../icon-192.png">
+<link rel="stylesheet" href="../app.css">
+<script>/* set theme before paint to avoid flash */(function(){try{var t=localStorage.getItem('tut.theme');document.documentElement.setAttribute('data-theme',t||'dark');}catch(e){document.documentElement.setAttribute('data-theme','dark');}})();</script>
+
+</head>
+<body class="lesson">
+<header class="nav">
+  <a class="brand" href="../index.html">📚 Dev Tutorials</a>
+  <span class="crumb">Web Frameworks: Hono &amp; Elysia — Bun</span>
+  <span class="spacer"></span>
+  <a class="navbtn" href="../search.html">🔎 Search</a>
+  <button class="navbtn" id="install-btn" type="button">⬇️ Install</button>
+  <button class="navbtn" id="theme-btn" type="button" aria-label="Toggle theme">🌙 Dark</button>
+</header>
+<main class="wrap lesson-body">
+  <h1 class="page-title">Web Frameworks: Hono &amp; Elysia</h1>
+  <div class="lesson-tools" data-lesson-id="bun/web-frameworks">
+    <button id="done-btn" type="button" aria-pressed="false">○ Mark complete</button>
+    <button id="mark-btn" type="button" aria-pressed="false">☆ Bookmark</button>
+    <a class="navbtn" href="index.html" style="margin-left:auto">All Bun lessons →</a>
+  </div>
+<nav class="toc" aria-label="On this page"><strong>On this page</strong><ul>
+<li class="lvl2"><a href="#hono-routing-and-the-context-object">Hono — routing and the context object</a></li>
+<li class="lvl2"><a href="#hono-middleware-and-route-groups">Hono — middleware and route groups</a></li>
+<li class="lvl2"><a href="#hono-validation-with-honozod-validator">Hono — validation with @hono/zod-validator</a></li>
+<li class="lvl2"><a href="#hono-a-full-crud-api">Hono — a full CRUD API</a></li>
+<li class="lvl2"><a href="#elysia-routing-and-typed-handlers">Elysia — routing and typed handlers</a></li>
+<li class="lvl2"><a href="#elysia-the-t-schema-plugins-and-groups">Elysia — the t schema, plugins, and groups</a></li>
+<li class="lvl2"><a href="#elysia-a-full-crud-api">Elysia — a full CRUD API</a></li>
+<li class="lvl2"><a href="#which-one-to-pick">Which one to pick</a></li>
+<li class="lvl2"><a href="#common-mistakes">Common mistakes</a></li>
+<li class="lvl2"><a href="#exercises">Exercises</a></li>
+<li class="lvl2"><a href="#mini-project-the-same-notes-api-in-both-frameworks-then-choose">Mini-project: the same notes API in both frameworks, then choose</a></li>
+</ul></nav>
+<p class="lead"><code>Bun.serve</code> is enough for simple routing, but real apps want middleware, validation, grouped routes, and typed handlers. Two frameworks lead on Bun: <strong>Hono</strong> — tiny, portable across runtimes, with a Zod validator — and <strong>Elysia</strong> — Bun-first, with an end-to-end type system driven by its own <code>t</code> schema. This lesson builds the same small CRUD API in each, shows request parsing, validation, middleware, and route groups, and ends with a straight answer to which one to pick.</p>
+
+<h2 id="hono-routing-and-the-context-object">Hono — routing and the context object</h2>
+<p><span class="level beginner">Beginner</span> Hono is a third-party router that runs on <code>Bun.serve</code> (<code>bun add hono@4.6.3</code>). Every handler receives a context <code>c</code>: <code>c.req</code> for the request, <code>c.json</code>/<code>c.text</code> to respond, <code>c.req.param</code>/<code>c.req.query</code> for inputs.</p>
+<pre><code>// server.ts
+import { Hono } from "hono";
+
+const app = new Hono();
+
+app.get("/", (c) =&gt; c.text("Hello from Hono"));
+app.get("/users/:id", (c) =&gt; c.json({ id: c.req.param("id") }));     // path param
+app.get("/search", (c) =&gt; c.json({ q: c.req.query("q") }));          // query string
+app.post("/echo", async (c) =&gt; c.json(await c.req.json()));          // JSON body
+
+export default app;      // Bun auto-serves a default export with a fetch handler</code></pre>
+<pre><code>bun --hot server.ts
+# curl localhost:3000/users/42        -&gt; {"id":"42"}
+# curl 'localhost:3000/search?q=bun'  -&gt; {"q":"bun"}</code></pre>
+
+<h2 id="hono-middleware-and-route-groups">Hono — middleware and route groups</h2>
+<p><span class="level intermediate">Intermediate</span> Middleware is any handler that calls <code>next()</code>; register it with <code>app.use</code>. A route group is a sub-<code>Hono</code> mounted under a prefix with <code>app.route</code>, so related routes (and their own middleware) stay together.</p>
+<pre><code>import { Hono } from "hono";
+import { logger } from "hono/logger";
+
+const app = new Hono();
+app.use("*", logger());                       // built-in request logger
+
+// a bearer-token guard as middleware
+async function requireAuth(c: any, next: any) {
+  const token = (c.req.header("Authorization") ?? "").replace(/^Bearer /, "");
+  if (token !== Bun.env.API_TOKEN) return c.json({ error: "unauthorized" }, 401);
+  await next();
+}
+
+// a route group mounted at /admin, protected as a unit
+const admin = new Hono();
+admin.use("*", requireAuth);
+admin.get("/stats", (c) =&gt; c.json({ users: 1234 }));
+
+app.route("/admin", admin);                   // GET /admin/stats requires the token
+
+app.onError((err, c) =&gt; { console.error(err); return c.json({ error: "internal" }, 500); });
+export default app;</code></pre>
+
+<h2 id="hono-validation-with-honozod-validator">Hono — validation with @hono/zod-validator</h2>
+<p>Never trust a request body. <code>@hono/zod-validator</code> (<code>bun add @hono/zod-validator zod</code>) runs a Zod schema over a target (<code>json</code>, <code>query</code>, <code>param</code>, <code>form</code>) and hands the handler the parsed, typed value via <code>c.req.valid()</code> — rejecting bad input with a 400 before your code runs.</p>
+<pre><code>import { Hono } from "hono";
+import { zValidator } from "@hono/zod-validator";
+import { z } from "zod";
+
+const app = new Hono();
+
+const NewTask = z.object({
+  title: z.string().min(1).max(200),
+  done: z.boolean().default(false),
+});
+
+app.post("/tasks", zValidator("json", NewTask), (c) =&gt; {
+  const task = c.req.valid("json");          // typed { title: string; done: boolean }
+  return c.json({ id: crypto.randomUUID(), ...task }, 201);
+});
+
+// validate query params too
+const ListQuery = z.object({ page: z.coerce.number().int().positive().default(1) });
+app.get("/tasks", zValidator("query", ListQuery), (c) =&gt; {
+  const { page } = c.req.valid("query");     // page is a number, defaulted to 1
+  return c.json({ page });
+});
+
+export default app;</code></pre>
+<pre><code># curl -X POST localhost:3000/tasks -d '{"title":""}' -H 'content-type: application/json'
+# -&gt; 400 {"success":false,"error":{..."title": "String must contain at least 1 character"...}}</code></pre>
+
+<h2 id="hono-a-full-crud-api">Hono — a full CRUD API</h2>
+<pre><code>import { Hono } from "hono";
+import { zValidator } from "@hono/zod-validator";
+import { z } from "zod";
+
+type Task = { id: string; title: string; done: boolean };
+const tasks = new Map&lt;string, Task&gt;();
+
+const app = new Hono();
+const TaskInput = z.object({ title: z.string().min(1), done: z.boolean().default(false) });
+
+app.get("/tasks", (c) =&gt; c.json([...tasks.values()]));
+
+app.get("/tasks/:id", (c) =&gt; {
+  const t = tasks.get(c.req.param("id"));
+  return t ? c.json(t) : c.json({ error: "not found" }, 404);
+});
+
+app.post("/tasks", zValidator("json", TaskInput), (c) =&gt; {
+  const t: Task = { id: crypto.randomUUID(), ...c.req.valid("json") };
+  tasks.set(t.id, t);
+  return c.json(t, 201);
+});
+
+app.put("/tasks/:id", zValidator("json", TaskInput), (c) =&gt; {
+  const id = c.req.param("id");
+  if (!tasks.has(id)) return c.json({ error: "not found" }, 404);
+  const t: Task = { id, ...c.req.valid("json") };
+  tasks.set(id, t);
+  return c.json(t);
+});
+
+app.delete("/tasks/:id", (c) =&gt;
+  tasks.delete(c.req.param("id")) ? c.body(null, 204) : c.json({ error: "not found" }, 404));
+
+export default app;</code></pre>
+
+<h2 id="elysia-routing-and-typed-handlers">Elysia — routing and typed handlers</h2>
+<p><span class="level intermediate">Intermediate</span> Elysia is Bun-first (<code>bun add elysia</code>). Its distinguishing feature is <strong>end-to-end type safety driven by schemas</strong>: you describe body/params/query with the built-in <code>t</code> schema builder, and Elysia both validates at runtime <em>and</em> infers the handler's types from the same declaration — one source of truth, no separate validator wiring.</p>
+<pre><code>// server.ts
+import { Elysia, t } from "elysia";
+
+const app = new Elysia()
+  .get("/", () =&gt; "Hello from Elysia")
+  .get("/users/:id", ({ params: { id } }) =&gt; ({ id }), {
+    params: t.Object({ id: t.String() }),              // validated + typed
+  })
+  .post("/echo", ({ body }) =&gt; body, {
+    body: t.Object({ message: t.String() }),           // body is typed { message: string }
+  })
+  .listen(3000);
+
+console.log(`Elysia on ${app.server?.hostname}:${app.server?.port}`);</code></pre>
+<pre><code>bun --hot server.ts
+# curl localhost:3000/users/42       -&gt; {"id":"42"}
+# curl -X POST localhost:3000/echo -d '{"message":"hi"}' -H 'content-type: application/json'
+#   -&gt; {"message":"hi"}   (a bad body is rejected 400 automatically)</code></pre>
+
+<h2 id="elysia-the-t-schema-plugins-and-groups">Elysia — the <code>t</code> schema, plugins, and groups</h2>
+<p>The <code>t</code> builder (a TypeBox wrapper) describes <code>body</code>, <code>query</code>, <code>params</code>, <code>headers</code>, and <code>response</code>. A <strong>plugin</strong> is an Elysia instance you compose in with <code>.use</code> — the equivalent of shared middleware. <code>.group</code> mounts routes under a prefix.</p>
+<pre><code>import { Elysia, t } from "elysia";
+
+// a plugin: shared state + a derived auth value, composed into any app
+const auth = new Elysia()
+  .derive(({ headers }) =&gt; ({
+    user: headers.authorization === `Bearer ${Bun.env.API_TOKEN}` ? "admin" : null,
+  }))
+  .onBeforeHandle(({ user, set }) =&gt; {
+    if (!user) { set.status = 401; return { error: "unauthorized" }; }
+  });
+
+const app = new Elysia()
+  .group("/admin", (g) =&gt;
+    g.use(auth)                                          // guard the whole group
+     .get("/stats", () =&gt; ({ users: 1234 }))
+  )
+  .get("/search", ({ query }) =&gt; ({ q: query.q }), {
+    query: t.Object({ q: t.String() }),
+  })
+  .onError(({ error, set }) =&gt; { set.status = 500; return { error: "internal" }; })
+  .listen(3000);</code></pre>
+<blockquote class="tip">Because the <code>t</code> schema drives both validation and inference, Elysia also powers <strong>Eden</strong> — a typed client that imports your server's type and gives the frontend compile-time-checked calls to each route, like tRPC but derived from the same schemas you already wrote for validation.</blockquote>
+
+<h2 id="elysia-a-full-crud-api">Elysia — a full CRUD API</h2>
+<pre><code>import { Elysia, t } from "elysia";
+
+type Task = { id: string; title: string; done: boolean };
+const tasks = new Map&lt;string, Task&gt;();
+
+const TaskBody = t.Object({ title: t.String({ minLength: 1 }), done: t.Boolean({ default: false }) });
+
+const app = new Elysia()
+  .get("/tasks", () =&gt; [...tasks.values()])
+
+  .get("/tasks/:id", ({ params: { id }, set }) =&gt; {
+    const t = tasks.get(id);
+    if (!t) { set.status = 404; return { error: "not found" }; }
+    return t;
+  }, { params: t.Object({ id: t.String() }) })
+
+  .post("/tasks", ({ body, set }) =&gt; {
+    const t: Task = { id: crypto.randomUUID(), ...body };
+    tasks.set(t.id, t);
+    set.status = 201;
+    return t;
+  }, { body: TaskBody })
+
+  .put("/tasks/:id", ({ params: { id }, body, set }) =&gt; {
+    if (!tasks.has(id)) { set.status = 404; return { error: "not found" }; }
+    const t: Task = { id, ...body };
+    tasks.set(id, t);
+    return t;
+  }, { params: t.Object({ id: t.String() }), body: TaskBody })
+
+  .delete("/tasks/:id", ({ params: { id }, set }) =&gt; {
+    if (!tasks.delete(id)) { set.status = 404; return { error: "not found" }; }
+    set.status = 204;
+  }, { params: t.Object({ id: t.String() }) })
+
+  .listen(3000);</code></pre>
+
+<h2 id="which-one-to-pick">Which one to pick</h2>
+<table>
+  <thead><tr><th>Consideration</th><th>Hono</th><th>Elysia</th></tr></thead>
+  <tbody>
+    <tr><td>Runtime target</td><td>Bun, Node, Deno, Cloudflare Workers, Lambda</td><td>Bun-first (Node via adapter)</td></tr>
+    <tr><td>Validation</td><td>opt-in: <code>@hono/zod-validator</code> + Zod</td><td>built-in: the <code>t</code> schema, always on</td></tr>
+    <tr><td>Typed client</td><td>Hono RPC (<code>hc</code>)</td><td>Eden (tight, schema-derived)</td></tr>
+    <tr><td>Philosophy</td><td>minimal, portable, bring-your-own</td><td>batteries-included, Bun-optimized</td></tr>
+  </tbody>
+</table>
+<p>Choose <strong>Hono</strong> when you want portability (the same app on Bun locally and a Cloudflare Worker or Lambda in prod), a minimal core, or you already use Zod and want one validation story across front and back. Choose <strong>Elysia</strong> when you're all-in on Bun and want the tightest schema-to-types-to-client experience with the least wiring — the <code>t</code> schema doing validation and inference from one declaration is its headline feature.</p>
+
+<h2 id="common-mistakes">Common mistakes</h2>
+<blockquote class="warn"><strong>Common mistakes:</strong> (1) <strong>Skipping validation</strong> and trusting <code>await c.req.json()</code> / <code>body</code> — an untyped cast (<code>as NewTask</code>) is a lie the runtime doesn't enforce; use <code>zValidator</code> (Hono) or a <code>t</code> schema (Elysia) so bad input is rejected before your handler. (2) In Hono, reading the body twice — <code>c.req.json()</code> consumes the stream, so a second read throws; read once. (3) Pinning neither framework version — a web framework is load-bearing; pin it (<code>hono@4.6.3</code>) so a minor bump doesn't shift behavior under you. (4) In Elysia, re-declaring the same schema inline on every route instead of defining it once (<code>const TaskBody = t.Object(...)</code>) and reusing it — drift between create and update schemas is a classic bug. (5) Mounting auth middleware too broadly or too narrowly — group protected routes so the guard applies to exactly the set you intend.</blockquote>
+
+<h2 id="exercises">Exercises</h2>
+<ul>
+  <li>Build the Hono <code>/tasks</code> CRUD above and add <code>zValidator("json", ...)</code> to POST; confirm an empty <code>title</code> returns 400 with a Zod error.</li>
+  <li>Add a <code>requireAuth</code> middleware to a Hono route group under <code>/admin</code> and confirm a missing <code>Authorization</code> header gets 401 while a valid token passes.</li>
+  <li>Build the same CRUD in Elysia using the <code>t</code> schema for <code>body</code> and <code>params</code>; confirm a non-string <code>title</code> is rejected automatically.</li>
+  <li>Write an Elysia plugin that derives a <code>user</code> from the <code>Authorization</code> header and rejects unauthenticated requests in <code>onBeforeHandle</code>; compose it into a group.</li>
+</ul>
+
+<h2 id="mini-project-the-same-notes-api-in-both-frameworks-then-choose">Mini-project: the same notes API in both frameworks, then choose</h2>
+<p>Implement a notes API — list, create (validated), delete — once in Hono and once in Elysia, run both, and write down which you'd ship and why. Building the same thing twice makes the trade-off concrete instead of abstract.</p>
+<pre><code>// hono-notes.ts
+import { Hono } from "hono";
+import { zValidator } from "@hono/zod-validator";
+import { z } from "zod";
+
+const notes = new Map&lt;string, { id: string; text: string }&gt;();
+const app = new Hono();
+
+app.get("/notes", (c) =&gt; c.json([...notes.values()]));
+app.post("/notes", zValidator("json", z.object({ text: z.string().min(1) })), (c) =&gt; {
+  const n = { id: crypto.randomUUID(), text: c.req.valid("json").text };
+  notes.set(n.id, n);
+  return c.json(n, 201);
+});
+app.delete("/notes/:id", (c) =&gt;
+  notes.delete(c.req.param("id")) ? c.body(null, 204) : c.json({ error: "not found" }, 404));
+
+export default app;</code></pre>
+<pre><code>// elysia-notes.ts
+import { Elysia, t } from "elysia";
+
+const notes = new Map&lt;string, { id: string; text: string }&gt;();
+
+new Elysia()
+  .get("/notes", () =&gt; [...notes.values()])
+  .post("/notes", ({ body, set }) =&gt; {
+    const n = { id: crypto.randomUUID(), text: body.text };
+    notes.set(n.id, n);
+    set.status = 201;
+    return n;
+  }, { body: t.Object({ text: t.String({ minLength: 1 }) }) })
+  .delete("/notes/:id", ({ params: { id }, set }) =&gt; {
+    if (!notes.delete(id)) { set.status = 404; return { error: "not found" }; }
+    set.status = 204;
+  }, { params: t.Object({ id: t.String() }) })
+  .listen(3001);</code></pre>
+<pre><code>bun --hot hono-notes.ts      # :3000
+bun --hot elysia-notes.ts    # :3001
+# POST an empty {"text":""} to each — both reject with 400 BEFORE the handler runs,
+# Hono via the explicit zValidator, Elysia via the inline t schema.</code></pre>
+<p>Compare: in Hono the validator is an explicit piece you add and the app ports unchanged to a Cloudflare Worker; in Elysia the schema <em>is</em> the route definition and the inferred types flow into an Eden client for free. If you deploy only to Bun and want the least wiring, Elysia; if you value portability and an existing Zod investment, Hono. Both are correct — the choice is about where you deploy and how much you value one source of truth over cross-runtime reach.</p>
+
+<section class="further"><h2 id="further-reading">Further reading</h2>
+<p>Official documentation for the tools and APIs covered on this page:</p>
+<ul class="further-list"><li><a href="https://hono.dev/docs/" target="_blank" rel="noopener">Hono docs ↗</a></li>
+<li><a href="https://hono.dev/docs/guides/validation" target="_blank" rel="noopener">Hono validation (zod) ↗</a></li>
+<li><a href="https://elysiajs.com/" target="_blank" rel="noopener">Elysia docs ↗</a></li></ul></section>
+  <nav class="pager">
+<a class="prev" href="env-and-config.html"><small>Previous</small>🥟 Environment &amp; Configuration</a>
+<a class="next" href="performance-and-optimization.html"><small>Next</small>🥟 Performance &amp; Optimization</a>
+  </nav>
+</main>
+<button type="button" class="fab top" id="fab-top" aria-label="Back to top">↑ Top</button>
+<div class="banner" id="update-banner" role="status">A new version is available.<button type="button">Reload</button></div>
+<div class="banner" id="offline-banner" role="status">You're offline — showing cached lessons.</div>
+<script src="../app.js" defer></script>
+</body>
+</html>

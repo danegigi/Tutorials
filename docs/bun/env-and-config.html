@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en" data-base="../">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0d1117">
+<meta name="description" content="Dev Tutorials — Golang, Bun, Web Development, Linux and DevOps, offline-ready.">
+<title>Environment &amp; Configuration — Bun</title>
+<link rel="manifest" href="../manifest.webmanifest">
+<link rel="icon" href="../icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="../icon-192.png">
+<link rel="stylesheet" href="../app.css">
+<script>/* set theme before paint to avoid flash */(function(){try{var t=localStorage.getItem('tut.theme');document.documentElement.setAttribute('data-theme',t||'dark');}catch(e){document.documentElement.setAttribute('data-theme','dark');}})();</script>
+
+</head>
+<body class="lesson">
+<header class="nav">
+  <a class="brand" href="../index.html">📚 Dev Tutorials</a>
+  <span class="crumb">Environment &amp; Configuration — Bun</span>
+  <span class="spacer"></span>
+  <a class="navbtn" href="../search.html">🔎 Search</a>
+  <button class="navbtn" id="install-btn" type="button">⬇️ Install</button>
+  <button class="navbtn" id="theme-btn" type="button" aria-label="Toggle theme">🌙 Dark</button>
+</header>
+<main class="wrap lesson-body">
+  <h1 class="page-title">Environment &amp; Configuration</h1>
+  <div class="lesson-tools" data-lesson-id="bun/env-and-config">
+    <button id="done-btn" type="button" aria-pressed="false">○ Mark complete</button>
+    <button id="mark-btn" type="button" aria-pressed="false">☆ Bookmark</button>
+    <a class="navbtn" href="index.html" style="margin-left:auto">All Bun lessons →</a>
+  </div>
+<nav class="toc" aria-label="On this page"><strong>On this page</strong><ul>
+<li class="lvl2"><a href="#env-file-resolution-order">.env file resolution order</a></li>
+<li class="lvl2"><a href="#bunenv-vs-processenv">Bun.env vs process.env</a></li>
+<li class="lvl2"><a href="#inlining-with---define">Inlining with --define</a></li>
+<li class="lvl2"><a href="#typed-config-objects">Typed config objects</a></li>
+<li class="lvl2"><a href="#loading-secrets-with-bunsecrets">Loading secrets with Bun.secrets</a></li>
+<li class="lvl2"><a href="#per-environment-config-patterns">Per-environment config patterns</a></li>
+<li class="lvl2"><a href="#common-mistakes">Common mistakes</a></li>
+<li class="lvl2"><a href="#exercises">Exercises</a></li>
+<li class="lvl2"><a href="#mini-project-a-config-module-that-fails-fast-and-a-keychain-backed-cli">Mini-project: a config module that fails fast and a keychain-backed CLI</a></li>
+</ul></nav>
+<p class="lead">Bun loads <code>.env</code> files automatically — no <code>dotenv</code> import — and exposes the values on both <code>Bun.env</code> and <code>process.env</code>. This lesson covers the file resolution order, the difference between the two accessors, inlining values at build time with <code>--define</code>, building a typed config object you validate once at startup, loading secrets from the OS keychain with <code>Bun.secrets</code>, and the per-environment patterns that keep development, staging, and production apart. The recurring warning throughout: a committed <code>.env</code> and a frontend-inlined secret are both public — treat them that way.</p>
+
+<h2 id="env-file-resolution-order">.env file resolution order</h2>
+<p><span class="level beginner">Beginner</span> On startup Bun reads a fixed set of dotenv files and merges them. Later files in this precedence list win over earlier ones, and a real environment variable (one already set in the shell) always wins over any file.</p>
+<table>
+  <thead><tr><th>Source</th><th>Loaded when</th><th>Precedence</th></tr></thead>
+  <tbody>
+    <tr><td>Real shell environment</td><td>always</td><td>highest — overrides every file</td></tr>
+    <tr><td><code>.env.&lt;NODE_ENV&gt;.local</code></td><td><code>NODE_ENV</code> is set</td><td></td></tr>
+    <tr><td><code>.env.local</code></td><td>not when <code>NODE_ENV=test</code></td><td></td></tr>
+    <tr><td><code>.env.&lt;NODE_ENV&gt;</code></td><td><code>NODE_ENV</code> is set (e.g. <code>.env.production</code>)</td><td></td></tr>
+    <tr><td><code>.env</code></td><td>always</td><td>lowest</td></tr>
+  </tbody>
+</table>
+<pre><code># .env                 — committed defaults, no secrets
+PORT=3000
+LOG_LEVEL=info
+
+# .env.local           — gitignored, your machine's overrides + secrets
+DATABASE_URL=postgres://localhost/app_dev
+STRIPE_SECRET_KEY=sk_test_...
+
+# .env.production      — committed production NON-secret config
+LOG_LEVEL=warn</code></pre>
+<pre><code>bun run src/index.ts                 # NODE_ENV unset: .env + .env.local
+NODE_ENV=production bun run src/index.ts   # adds .env.production (.local skipped in prod if absent)
+PORT=8080 bun run src/index.ts       # the real env var PORT=8080 wins over .env</code></pre>
+<blockquote class="tip">The mental model: <code>.env</code> holds committed, non-secret defaults; <code>.env.local</code> holds machine-specific overrides and local secrets and is <strong>gitignored</strong>; <code>.env.&lt;NODE_ENV&gt;</code> holds per-environment non-secret config. Note <code>.env.local</code> is deliberately skipped when <code>NODE_ENV=test</code> so your local secrets never bleed into test runs.</blockquote>
+
+<h2 id="bunenv-vs-processenv">Bun.env vs process.env</h2>
+<p>Both read the same merged environment, so for simple reads they're interchangeable. <code>Bun.env</code> is the Bun-native accessor and is what you should prefer in new Bun code; <code>process.env</code> exists for Node compatibility and for libraries that reach for it.</p>
+<pre><code>console.log(Bun.env.PORT);       // "3000"  (strings — env vars are always strings)
+console.log(process.env.PORT);   // "3000"  (same value, same backing store)
+
+// They point at the same data: a write through one is visible through the other
+process.env.FEATURE_X = "on";
+console.log(Bun.env.FEATURE_X);  // "on"</code></pre>
+<blockquote class="warn"><strong>Common mistake:</strong> expecting a type. Everything from the environment is a <strong>string</strong> — <code>Bun.env.PORT</code> is <code>"3000"</code>, not <code>3000</code>, and <code>Bun.env.DEBUG</code> for an unset var is <code>undefined</code>, while <code>Bun.env.DEBUG=""</code> (set but empty) is a truthy-ish empty string. Coerce and validate at the edge (<code>Number(Bun.env.PORT)</code>, an explicit <code>=== "true"</code> check) rather than using a raw env value deep in your logic.</blockquote>
+
+<h2 id="inlining-with---define">Inlining with --define</h2>
+<p><span class="level intermediate">Intermediate</span> For code you <em>bundle</em> (a frontend build, a compiled binary), <code>--define</code> replaces an identifier with a literal at build time. The reference is substituted into the output and dead-code-eliminated — there is no runtime env lookup.</p>
+<pre><code>// src/app.ts
+if (process.env.NODE_ENV === "production") enableTelemetry();
+console.log("build:", process.env.BUILD_ID);</code></pre>
+<pre><code>bun build src/app.ts --outdir dist \
+  --define process.env.NODE_ENV='"production"' \
+  --define process.env.BUILD_ID='"a1b2c3"'
+
+# dist/app.js — the branch is resolved and dead code removed:
+#   enableTelemetry();
+#   console.log("build:", "a1b2c3");</code></pre>
+<blockquote class="warn"><strong>Common mistake &amp; security warning:</strong> <code>--define</code>-ing a secret into a frontend bundle. Anything inlined into client-side JavaScript ships to the browser and is <strong>public</strong> — view-source reveals it. Only inline values that are safe to expose (a public API base URL, a feature flag, a build id, a publishable Stripe <em>pk_</em> key). A <code>sk_</code> secret key, a database URL, or a signing secret must never touch a frontend build. The quoting also bites: the replacement is a raw expression, so a string value needs embedded quotes — <code>--define X='"literal"'</code>, not <code>--define X=literal</code> (which substitutes a bare, undefined identifier).</blockquote>
+
+<h2 id="typed-config-objects">Typed config objects</h2>
+<p>Reading <code>Bun.env.X</code> scattered through the codebase means a missing or malformed variable blows up deep in a request handler, hours after startup. Instead, read and validate <em>everything</em> once at boot into a single typed object — the app fails fast with a clear message if config is wrong, and the rest of the code imports a fully-typed <code>config</code>.</p>
+<pre><code>// config.ts  — validated once, imported everywhere
+import { z } from "zod";
+
+const Schema = z.object({
+  NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
+  PORT: z.coerce.number().int().positive().default(3000),      // coerce "3000" -&gt; 3000
+  DATABASE_URL: z.string().url(),                              // required — no default
+  LOG_LEVEL: z.enum(["debug", "info", "warn", "error"]).default("info"),
+  ENABLE_SIGNUP: z.coerce.boolean().default(false),            // "true"/"1" -&gt; true
+});
+
+const parsed = Schema.safeParse(Bun.env);
+if (!parsed.success) {
+  console.error("Invalid environment configuration:");
+  console.error(parsed.error.flatten().fieldErrors);
+  process.exit(1);                                             // fail fast at startup
+}
+
+export const config = parsed.data;      // fully typed: config.PORT is number, config.NODE_ENV is a union</code></pre>
+<pre><code>// anywhere else — no Bun.env, no coercion, no guessing
+import { config } from "./config";
+Bun.serve({ port: config.PORT, fetch: handler });   // config.PORT is a number</code></pre>
+<blockquote class="tip">Validating against <code>Bun.env</code> at startup turns "the app silently used <code>NaN</code> for the port" into "the app refused to start and told you <code>DATABASE_URL</code> is missing." Pair it with a committed <code>.env.example</code> listing every variable by name (no values) so a new developer knows exactly what to fill in.</blockquote>
+
+<h2 id="loading-secrets-with-bunsecrets">Loading secrets with Bun.secrets</h2>
+<p><span class="level advanced">Advanced</span> For local developer tooling, <code>Bun.secrets</code> stores credentials in the OS keychain (macOS Keychain, Linux libsecret / GNOME Keyring, Windows Credential Manager) instead of a plaintext dotfile — so a stray <code>cat .env</code>, a screen share, or a backup never leaks the token.</p>
+<pre><code>import { secrets } from "bun";
+
+// get returns the stored string, or null if absent
+let token = await secrets.get({ service: "acme-cli", name: "api-token" });
+
+if (!token) {
+  token = prompt("Paste your API token:")!;          // first run only
+  await secrets.set({ service: "acme-cli", name: "api-token", value: token });
+  console.log("Saved to the OS keychain.");
+}
+
+// use it...
+await fetch("https://api.acme.dev/me", { headers: { Authorization: `Bearer ${token}` } });
+
+// rotate / sign out
+await secrets.delete({ service: "acme-cli", name: "api-token" });</code></pre>
+<p>Each call takes <code>{ service, name }</code> (<code>set</code> adds <code>value</code>). <code>service</code> groups a tool's credentials; <code>name</code> identifies one secret within it.</p>
+<blockquote class="tip"><code>Bun.secrets</code> is designed for <strong>local CLI tools and development machines</strong>, where the OS keychain is the right trust boundary. It is not the mechanism for a production server — there, inject secrets through the environment from your platform's secret manager (AWS Secrets Manager, Vault, the hosting provider's env UI) rather than reading a keychain that doesn't exist on a container.</blockquote>
+
+<h2 id="per-environment-config-patterns">Per-environment config patterns</h2>
+<p>Keep three concerns separate: committed non-secret defaults, per-environment non-secret overrides, and secrets. A clean split:</p>
+<table>
+  <thead><tr><th>File</th><th>Committed?</th><th>Holds</th></tr></thead>
+  <tbody>
+    <tr><td><code>.env</code></td><td>yes</td><td>safe defaults (PORT, LOG_LEVEL)</td></tr>
+    <tr><td><code>.env.example</code></td><td>yes</td><td>every variable name, no values — the template</td></tr>
+    <tr><td><code>.env.production</code></td><td>yes</td><td>non-secret prod config (region, feature flags)</td></tr>
+    <tr><td><code>.env.local</code></td><td><strong>no — gitignored</strong></td><td>local secrets + machine overrides</td></tr>
+  </tbody>
+</table>
+<pre><code># .gitignore
+.env.local
+.env.*.local</code></pre>
+<p>Select the environment with <code>NODE_ENV</code>, and let the config module be environment-aware where behavior genuinely differs:</p>
+<pre><code>// config.ts (continued)
+export const isProd = config.NODE_ENV === "production";
+export const isDev  = config.NODE_ENV === "development";
+
+// e.g. verbose errors only outside production
+export const errorDetail = isProd ? "generic" : "full";</code></pre>
+
+<h2 id="common-mistakes">Common mistakes</h2>
+<blockquote class="warn"><strong>Common mistakes:</strong> (1) <strong>Committing <code>.env</code> with real secrets.</strong> A committed file is in your git history forever even after you delete it — rotate any key that ever landed in a commit and move it to gitignored <code>.env.local</code>. (2) <strong>Inlining a secret into a frontend bundle</strong> via <code>--define</code> or a <code>PUBLIC_</code>/client-exposed variable — it ships to every browser. Only public values belong in client builds. (3) Treating env values as typed — they're strings; coerce and validate. (4) Relying on <code>.env.local</code> in CI/production — CI checkouts don't have it and it's skipped under <code>NODE_ENV=test</code>; inject real config through the environment instead. (5) Using <code>Bun.secrets</code> on a server — it's a local-dev keychain tool, not production secret management.</blockquote>
+
+<h2 id="exercises">Exercises</h2>
+<ul>
+  <li>Create <code>.env</code> with <code>PORT=3000</code> and <code>.env.local</code> with <code>PORT=4000</code>; run the app and confirm <code>4000</code> wins, then run with <code>PORT=5000 bun ...</code> and confirm the real env var wins over both.</li>
+  <li>Write a <code>config.ts</code> that validates <code>Bun.env</code> with zod and <code>process.exit(1)</code>s with a readable message when <code>DATABASE_URL</code> is missing.</li>
+  <li><code>bun build</code> a file that reads <code>process.env.NODE_ENV</code> with <code>--define process.env.NODE_ENV='"production"'</code> and inspect the output to see the branch resolved and dead code removed.</li>
+  <li>Store a token in the OS keychain with <code>Bun.secrets.set</code>, read it back in a second run, then delete it — confirm the second run never prompts.</li>
+</ul>
+
+<h2 id="mini-project-a-config-module-that-fails-fast-and-a-keychain-backed-cli">Mini-project: a config module that fails fast and a keychain-backed CLI</h2>
+<p>Build the two config surfaces a real app needs: a validated server config that refuses to start on bad input, and a small CLI that keeps its credential in the OS keychain instead of a dotfile.</p>
+<pre><code>// config.ts — server config, validated once at startup
+import { z } from "zod";
+
+const config = z.object({
+  NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
+  PORT: z.coerce.number().int().positive().default(3000),
+  DATABASE_URL: z.string().url(),
+  JWT_SECRET: z.string().min(32, "JWT_SECRET must be at least 32 chars"),
+}).parse(Bun.env);          // throws (and prints) on invalid config -&gt; process exits non-zero
+
+export default config;</code></pre>
+<pre><code>// server.ts
+import config from "./config";
+console.log(`starting in ${config.NODE_ENV} on :${config.PORT}`);
+Bun.serve({ port: config.PORT, fetch: () =&gt; new Response("ok") });</code></pre>
+<pre><code>// cli.ts — a tool whose token lives in the OS keychain, never on disk
+import { secrets } from "bun";
+const SERVICE = "acme-cli";
+
+async function tokenOrLogin() {
+  let t = await secrets.get({ service: SERVICE, name: "token" });
+  if (!t) {
+    t = prompt("API token:")!;
+    await secrets.set({ service: SERVICE, name: "token", value: t });
+  }
+  return t;
+}
+
+const cmd = Bun.argv[2];
+if (cmd === "logout") {
+  await secrets.delete({ service: SERVICE, name: "token" });
+  console.log("Logged out — keychain entry removed.");
+} else {
+  const token = await tokenOrLogin();
+  const me = await (await fetch("https://api.acme.dev/me", {
+    headers: { Authorization: `Bearer ${token}` },
+  })).json();
+  console.log(me);
+}</code></pre>
+<pre><code>NODE_ENV=production DATABASE_URL=postgres://db/app JWT_SECRET=$(openssl rand -hex 32) bun server.ts
+# starting in production on :3000
+
+bun cli.ts            # first run prompts, stores in keychain; later runs are silent
+bun cli.ts logout     # removes the keychain entry</code></pre>
+<p>Together these cover the whole surface: the server validates its environment and <em>refuses to boot</em> on bad or missing config instead of failing later in a handler, and the CLI never writes a secret to a file a backup or a screen-share could leak. No secret is ever committed, and nothing sensitive is inlined into a client bundle.</p>
+
+<section class="further"><h2 id="further-reading">Further reading</h2>
+<p>Official documentation for the tools and APIs covered on this page:</p>
+<ul class="further-list"><li><a href="https://bun.com/docs/runtime/env" target="_blank" rel="noopener">Environment variables ↗</a></li>
+<li><a href="https://bun.com/docs/runtime/bunfig" target="_blank" rel="noopener">bunfig.toml ↗</a></li>
+<li><a href="https://bun.com/reference/bun/secrets" target="_blank" rel="noopener">Bun.secrets ↗</a></li></ul></section>
+  <nav class="pager">
+<a class="prev" href="monorepos-and-workspaces.html"><small>Previous</small>🥟 Monorepos &amp; Workspaces</a>
+<a class="next" href="web-frameworks.html"><small>Next</small>🥟 Web Frameworks: Hono &amp; Elysia</a>
+  </nav>
+</main>
+<button type="button" class="fab top" id="fab-top" aria-label="Back to top">↑ Top</button>
+<div class="banner" id="update-banner" role="status">A new version is available.<button type="button">Reload</button></div>
+<div class="banner" id="offline-banner" role="status">You're offline — showing cached lessons.</div>
+<script src="../app.js" defer></script>
+</body>
+</html>

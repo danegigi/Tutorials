@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en" data-base="../">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0d1117">
+<meta name="description" content="Dev Tutorials — Golang, Bun, Web Development, Linux and DevOps, offline-ready.">
+<title>Performance &amp; Optimization — Bun</title>
+<link rel="manifest" href="../manifest.webmanifest">
+<link rel="icon" href="../icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="../icon-192.png">
+<link rel="stylesheet" href="../app.css">
+<script>/* set theme before paint to avoid flash */(function(){try{var t=localStorage.getItem('tut.theme');document.documentElement.setAttribute('data-theme',t||'dark');}catch(e){document.documentElement.setAttribute('data-theme','dark');}})();</script>
+
+</head>
+<body class="lesson">
+<header class="nav">
+  <a class="brand" href="../index.html">📚 Dev Tutorials</a>
+  <span class="crumb">Performance &amp; Optimization — Bun</span>
+  <span class="spacer"></span>
+  <a class="navbtn" href="../search.html">🔎 Search</a>
+  <button class="navbtn" id="install-btn" type="button">⬇️ Install</button>
+  <button class="navbtn" id="theme-btn" type="button" aria-label="Toggle theme">🌙 Dark</button>
+</header>
+<main class="wrap lesson-body">
+  <h1 class="page-title">Performance &amp; Optimization</h1>
+  <div class="lesson-tools" data-lesson-id="bun/performance-and-optimization">
+    <button id="done-btn" type="button" aria-pressed="false">○ Mark complete</button>
+    <button id="mark-btn" type="button" aria-pressed="false">☆ Bookmark</button>
+    <a class="navbtn" href="index.html" style="margin-left:auto">All Bun lessons →</a>
+  </div>
+<nav class="toc" aria-label="On this page"><strong>On this page</strong><ul>
+<li class="lvl2"><a href="#where-bun-is-fast-and-why">Where Bun is fast, and why</a></li>
+<li class="lvl2"><a href="#benchmarking-with-bun-test">Benchmarking with bun test</a></li>
+<li class="lvl2"><a href="#mitata-style-micro-benchmarks">mitata-style micro-benchmarks</a></li>
+<li class="lvl2"><a href="#benchmarking-honestly-dont-measure-the-optimizer-away">Benchmarking honestly — don't measure the optimizer away</a></li>
+<li class="lvl2"><a href="#reducing-startup-time">Reducing startup time</a></li>
+<li class="lvl2"><a href="#hot-path-tips">Hot-path tips</a></li>
+<li class="lvl2"><a href="#production-profiling">Production profiling</a></li>
+<li class="lvl2"><a href="#common-mistakes">Common mistakes</a></li>
+<li class="lvl2"><a href="#exercises">Exercises</a></li>
+<li class="lvl2"><a href="#mini-project-find-and-fix-one-real-bottleneck-with-evidence">Mini-project: find and fix one real bottleneck, with evidence</a></li>
+</ul></nav>
+<p class="lead">Bun is fast by default — JavaScriptCore for execution, native Zig-backed APIs for I/O — but "fast language" is not "fast program." This lesson is about measuring before you optimize: writing honest micro-benchmarks that the optimizer can't cheat, understanding <em>why</em> Bun's hot paths are fast so you stay on them, cutting startup time, avoiding the allocations and shims that dominate real workloads, and profiling production with CPU profiles instead of guessing.</p>
+
+<h2 id="where-bun-is-fast-and-why">Where Bun is fast, and why</h2>
+<p><span class="level beginner">Beginner</span> Two things drive Bun's speed, and knowing them tells you which code paths to prefer.</p>
+<table>
+  <thead><tr><th>Source</th><th>What it means for your code</th></tr></thead>
+  <tbody>
+    <tr><td><strong>JavaScriptCore</strong> (Safari's engine)</td><td>Fast startup and low memory vs V8; your JS/TS runs well without a warm-up for short-lived processes (CLIs, serverless).</td></tr>
+    <tr><td><strong>Native APIs</strong> (<code>Bun.file</code>, <code>Bun.serve</code>, <code>bun:sqlite</code>, <code>Bun.password</code>)</td><td>I/O and crypto are implemented in native code, not JS — using the Bun-native API is faster than an npm package doing the same thing in userland JS.</td></tr>
+    <tr><td><strong>Fast TS transpile</strong></td><td>No separate <code>tsc</code>/<code>ts-node</code> step — files run directly, so dev iteration is cheap.</td></tr>
+  </tbody>
+</table>
+<p>The practical rule: on a hot path, prefer the Bun-native primitive over an npm shim doing the same job in JavaScript. <code>Bun.file(path).text()</code> beats a userland fs wrapper; <code>bun:sqlite</code> beats a pure-JS SQLite; <code>Bun.password</code> beats a JS bcrypt.</p>
+
+<h2 id="benchmarking-with-bun-test">Benchmarking with bun test</h2>
+<p><span class="level beginner">Beginner</span> The cheapest honest measurement is wall-clock time around real work, repeated enough to dwarf noise. <code>Bun.nanoseconds()</code> is a high-resolution monotonic clock for this.</p>
+<pre><code>// bench-simple.ts
+function measure(label: string, iters: number, fn: () =&gt; void) {
+  fn();                                        // warm up (let JIT compile it)
+  const start = Bun.nanoseconds();
+  for (let i = 0; i &lt; iters; i++) fn();
+  const ms = (Bun.nanoseconds() - start) / 1e6;
+  console.log(`${label}: ${ms.toFixed(2)}ms total, ${(ms / iters * 1000).toFixed(3)}µs/op`);
+}
+
+measure("JSON.parse", 100_000, () =&gt; JSON.parse('{"a":1,"b":[2,3]}'));
+# -&gt; JSON.parse: 48.21ms total, 0.482µs/op</code></pre>
+
+<h2 id="mitata-style-micro-benchmarks">mitata-style micro-benchmarks</h2>
+<p><span class="level intermediate">Intermediate</span> A real benchmark harness (mitata is the one the Bun ecosystem reaches for: <code>bun add -d mitata</code>) handles warm-up, runs enough samples for a stable estimate, and reports a distribution rather than one number — so you compare approaches honestly.</p>
+<pre><code>// bench.ts  —  bun run bench.ts
+import { run, bench, group } from "mitata";
+
+const data = Array.from({ length: 1000 }, (_, i) =&gt; i);
+
+group("sum 1000 numbers", () =&gt; {
+  bench("for loop", () =&gt; {
+    let s = 0; for (let i = 0; i &lt; data.length; i++) s += data[i]; return s;
+  });
+  bench("reduce", () =&gt; data.reduce((a, b) =&gt; a + b, 0));
+  bench("for...of", () =&gt; { let s = 0; for (const n of data) s += n; return s; });
+});
+
+await run();
+# benchmark        avg          min … max        p75
+# for loop     1.02 µs     0.98 µs … 1.4 µs    1.03 µs
+# reduce       2.81 µs     2.70 µs … 3.9 µs    2.85 µs
+# for...of     1.44 µs     1.40 µs … 2.1 µs    1.46 µs</code></pre>
+<blockquote class="tip">Read the <strong>distribution</strong>, not just the average: a low average with a long tail (big <code>max</code>, high p99) means occasional stalls — often GC pauses from allocation in the hot loop. mitata's warm-up also matters: the first call of a JIT-compiled function is slow because it hasn't been optimized yet, so an un-warmed measurement overstates cost.</blockquote>
+
+<h2 id="benchmarking-honestly-dont-measure-the-optimizer-away">Benchmarking honestly — don't measure the optimizer away</h2>
+<p>The classic micro-benchmark lie: JavaScriptCore sees that your result is never used and <strong>deletes the whole computation</strong>, so you "measure" an empty loop and conclude your code is infinitely fast.</p>
+<pre><code>// WRONG — the result is dead, JSC may eliminate the call entirely
+bench("hash", () =&gt; { Bun.hash("some input"); });     // return discarded
+
+// RIGHT — consume the result so it can't be optimized out
+let sink = 0n;
+bench("hash", () =&gt; { sink ^= Bun.hash("some input"); });
+// (print `sink` after the run so even the accumulation isn't dead)</code></pre>
+<p>Also benchmark <strong>realistic</strong> inputs. Hashing the literal <code>"some input"</code> every iteration lets the engine cache or specialize in ways a real variable workload won't. Feed varied, representative data.</p>
+
+<h2 id="reducing-startup-time">Reducing startup time</h2>
+<p><span class="level intermediate">Intermediate</span> For CLIs and serverless, startup time <em>is</em> the latency. Two levers: import less eagerly, and compile ahead of time.</p>
+<pre><code># lazy-import a heavy module only on the code path that needs it
+async function exportPdf() {
+  const { makePdf } = await import("./pdf");   // not loaded unless export runs
+  return makePdf();
+}</code></pre>
+<pre><code># compile to a standalone binary — no module resolution at launch
+bun build --compile ./cli.ts --outfile mycli
+./mycli            # starts faster than `bun run cli.ts`: deps are baked in</code></pre>
+<p>Measure startup directly rather than guessing which import is expensive:</p>
+<pre><code>time bun run cli.ts --version
+# then bisect: comment imports, or `bun --inspect` the startup and read the flame graph</code></pre>
+<blockquote class="tip">Top-level side effects run at import time — a module that opens a DB connection or reads a large file at the top level pays that cost on every startup even when the command doesn't need it. Keep top-level code to declarations; do work inside functions called on demand.</blockquote>
+
+<h2 id="hot-path-tips">Hot-path tips</h2>
+<p><span class="level advanced">Advanced</span> Once a benchmark points at a real hot path, these are the levers that actually move it:</p>
+<ul>
+  <li><strong>Avoid unnecessary allocations in loops.</strong> Each <code>{...}</code>, <code>[...arr]</code>, <code>.map</code>, or string concatenation in a tight loop creates garbage the collector must later reclaim — the GC pause is the long tail in your benchmark. Mutate in place or preallocate.</li>
+  <li><strong>Reuse buffers.</strong> Allocate one <code>Uint8Array</code>/<code>Buffer</code> and write into it repeatedly instead of allocating per iteration; for streaming I/O, reuse a fixed-size read buffer.</li>
+  <li><strong>Prefer Bun-native APIs over npm shims.</strong> <code>Bun.file</code>, <code>bun:sqlite</code>, <code>Bun.CryptoHasher</code>, <code>Bun.serve</code> are native; a JS package doing the same thing runs in the interpreter/JIT and allocates more.</li>
+  <li><strong>Keep object shapes stable.</strong> JSC optimizes objects whose set of keys doesn't change; adding/deleting properties after creation deoptimizes the inline caches. Build objects with all their keys at once.</li>
+  <li><strong>Batch I/O.</strong> One query returning 100 rows beats 100 queries; one <code>Bun.write</code> of a joined string beats 100 appends.</li>
+</ul>
+<pre><code>// allocation-heavy: new array + object per row, every call
+const slow = (rows: Row[]) =&gt; rows.map((r) =&gt; ({ id: r.id, label: `#${r.id}` }));
+
+// hot-path: write into a reused buffer, no per-row object churn
+const out: string[] = [];
+function fast(rows: Row[]) {
+  out.length = 0;                               // reuse the array
+  for (let i = 0; i &lt; rows.length; i++) out.push(rows[i].id);
+  return out;
+}</code></pre>
+
+<h2 id="production-profiling">Production profiling</h2>
+<p><span class="level advanced">Advanced</span> When a real service is slow, profile it rather than theorize. <code>bun --inspect</code> opens a debugger/profiler endpoint; capture a CPU profile under load and read the flame graph to find where wall-clock time actually goes.</p>
+<pre><code># run with the inspector enabled
+bun --inspect server.ts
+# -&gt; prints a devtools:// URL; open it, go to the Profiler tab, record under load
+
+# or a one-off inspect that waits for a debugger to attach before running
+bun --inspect-wait server.ts</code></pre>
+<p>In the CPU profile, the widest frames are where time is spent. Look for: a function far wider than you expected (an accidental O(n²), a sync call on the request path), a tall GC band (allocation pressure — revisit the hot-path tips), or time in a userland npm package where a Bun-native API exists. Fix the widest frame first; re-profile; repeat. The flame graph turns "the server feels slow" into "68% of request time is in JSON serialization of a field we don't even use."</p>
+
+<h2 id="common-mistakes">Common mistakes</h2>
+<blockquote class="warn"><strong>Common mistakes:</strong> (1) <strong>Premature optimization</strong> — rewriting readable code into a clever micro-optimized version before any measurement shows it matters. Most code is not hot; optimizing cold code adds bugs and complexity for zero user-visible gain. Profile first, optimize the widest frame, stop when it's fast enough. (2) <strong>Benchmarking the optimizer away</strong> — discarding the result so JSC deletes the computation, or using a constant input it can specialize, then reporting an impossibly fast number. Consume the result (XOR into a sink, print it) and feed varied realistic data. (3) <strong>Measuring without warm-up</strong> — the first call of a JIT function is slow; an un-warmed benchmark overstates cost. (4) <strong>Trusting a single number</strong> — one run hides variance; use a harness that reports a distribution and watch the tail (p99), where GC pauses hide. (5) <strong>Optimizing by vibes</strong> — assuming you know the hot path instead of profiling it; the slow part is almost never where you first guess.</blockquote>
+
+<h2 id="exercises">Exercises</h2>
+<ul>
+  <li>Write a <code>measure</code> harness with <code>Bun.nanoseconds()</code> and compare <code>JSON.parse</code> vs a hand-rolled parse on 100k iterations; add a warm-up call and watch the number change.</li>
+  <li>Install mitata and benchmark <code>for</code> vs <code>reduce</code> vs <code>for...of</code> summing an array; identify which has the worst tail and reason about why.</li>
+  <li>Take a benchmark whose result is discarded, confirm the suspiciously-fast number, then XOR the result into a sink and re-measure — note the honest number.</li>
+  <li>Compare startup time of <code>bun run cli.ts</code> vs a <code>bun build --compile</code> binary with <code>time</code>; then move a heavy import behind a dynamic <code>import()</code> and measure again.</li>
+  <li>Run a <code>Bun.serve</code> app under <code>bun --inspect</code>, hit it with a load tool, record a CPU profile, and name the single widest frame.</li>
+</ul>
+
+<h2 id="mini-project-find-and-fix-one-real-bottleneck-with-evidence">Mini-project: find and fix one real bottleneck, with evidence</h2>
+<p>Take a slow endpoint, profile it, fix the widest frame, and prove the fix with a before/after benchmark. The point is the discipline — measure, change one thing, measure again — not any specific trick.</p>
+<pre><code>// slow.ts — an endpoint that re-parses config and allocates per request
+import { Hono } from "hono";
+const app = new Hono();
+
+app.get("/report", (c) =&gt; {
+  const config = JSON.parse(require("fs").readFileSync("config.json", "utf8")); // re-read EVERY request
+  const rows = loadRows();                                   // 10k rows
+  const out = rows
+    .map((r) =&gt; ({ ...r, label: `#${r.id}` }))                // allocate a new object per row
+    .filter((r) =&gt; r.active)
+    .map((r) =&gt; JSON.stringify(r));                           // stringify twice (here + c.json)
+  return c.json({ config, count: out.length });
+});
+export default app;</code></pre>
+<pre><code>// fixed.ts — config read once at startup; single pass; no double stringify
+import { Hono } from "hono";
+const config = JSON.parse(await Bun.file("config.json").text());   // ONCE, at boot
+
+const app = new Hono();
+app.get("/report", (c) =&gt; {
+  const rows = loadRows();
+  let count = 0;
+  for (let i = 0; i &lt; rows.length; i++) if (rows[i].active) count++;  // one pass, no allocation
+  return c.json({ config, count });                                   // c.json serializes once
+});
+export default app;</code></pre>
+<pre><code># before/after, same harness
+import { bench, run } from "mitata";
+bench("slow /report",  async () =&gt; { await slowApp.request("/report"); });
+bench("fixed /report", async () =&gt; { await fixedApp.request("/report"); });
+await run();
+# slow /report    1.82 ms
+# fixed /report   0.11 ms   -&gt; ~16x, from: config read once, single pass, no double serialize</code></pre>
+<p>Every change was justified by a measurement: the profile showed <code>readFileSync</code> and the double map/stringify as the widest frames, moving the config read to startup and collapsing to a single pass removed them, and the benchmark proves the result instead of asserting it. That loop — profile, fix the widest frame, re-benchmark — is the whole method.</p>
+
+<section class="further"><h2 id="further-reading">Further reading</h2>
+<p>Official documentation for the tools and APIs covered on this page:</p>
+<ul class="further-list"><li><a href="https://bun.com/docs/cli/test" target="_blank" rel="noopener">bench (bun test --bench style) ↗</a></li>
+<li><a href="https://bun.com/docs" target="_blank" rel="noopener">Bun performance ↗</a></li>
+<li><a href="https://nodejs.org/en/learn/getting-started/profiling" target="_blank" rel="noopener">Node profiling (applies to Bun) ↗</a></li></ul></section>
+  <nav class="pager">
+<a class="prev" href="web-frameworks.html"><small>Previous</small>🥟 Web Frameworks: Hono &amp; Elysia</a>
+<a class="next" href="../web/html-fundamentals.html"><small>Next</small>🌐 HTML Fundamentals</a>
+  </nav>
+</main>
+<button type="button" class="fab top" id="fab-top" aria-label="Back to top">↑ Top</button>
+<div class="banner" id="update-banner" role="status">A new version is available.<button type="button">Reload</button></div>
+<div class="banner" id="offline-banner" role="status">You're offline — showing cached lessons.</div>
+<script src="../app.js" defer></script>
+</body>
+</html>

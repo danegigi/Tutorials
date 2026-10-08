@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en" data-base="../">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0d1117">
+<meta name="description" content="Dev Tutorials — Golang, Bun, Web Development, Linux and DevOps, offline-ready.">
+<title>Monorepos &amp; Workspaces — Bun</title>
+<link rel="manifest" href="../manifest.webmanifest">
+<link rel="icon" href="../icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="../icon-192.png">
+<link rel="stylesheet" href="../app.css">
+<script>/* set theme before paint to avoid flash */(function(){try{var t=localStorage.getItem('tut.theme');document.documentElement.setAttribute('data-theme',t||'dark');}catch(e){document.documentElement.setAttribute('data-theme','dark');}})();</script>
+
+</head>
+<body class="lesson">
+<header class="nav">
+  <a class="brand" href="../index.html">📚 Dev Tutorials</a>
+  <span class="crumb">Monorepos &amp; Workspaces — Bun</span>
+  <span class="spacer"></span>
+  <a class="navbtn" href="../search.html">🔎 Search</a>
+  <button class="navbtn" id="install-btn" type="button">⬇️ Install</button>
+  <button class="navbtn" id="theme-btn" type="button" aria-label="Toggle theme">🌙 Dark</button>
+</header>
+<main class="wrap lesson-body">
+  <h1 class="page-title">Monorepos &amp; Workspaces</h1>
+  <div class="lesson-tools" data-lesson-id="bun/monorepos-and-workspaces">
+    <button id="done-btn" type="button" aria-pressed="false">○ Mark complete</button>
+    <button id="mark-btn" type="button" aria-pressed="false">☆ Bookmark</button>
+    <a class="navbtn" href="index.html" style="margin-left:auto">All Bun lessons →</a>
+  </div>
+<nav class="toc" aria-label="On this page"><strong>On this page</strong><ul>
+<li class="lvl2"><a href="#declaring-workspaces">Declaring workspaces</a></li>
+<li class="lvl2"><a href="#a-realistic-structure">A realistic structure</a></li>
+<li class="lvl2"><a href="#linking-internal-packages">Linking internal packages</a></li>
+<li class="lvl2"><a href="#running-scripts-across-packages---filter">Running scripts across packages: --filter</a></li>
+<li class="lvl2"><a href="#catalogs-one-version-for-a-shared-dependency">Catalogs — one version for a shared dependency</a></li>
+<li class="lvl2"><a href="#circular-dependencies">Circular dependencies</a></li>
+<li class="lvl2"><a href="#monorepo-ci">Monorepo CI</a></li>
+<li class="lvl2"><a href="#exercises">Exercises</a></li>
+<li class="lvl2"><a href="#mini-project-a-two-app-monorepo-with-a-shared-core-and-a-catalog">Mini-project: a two-app monorepo with a shared core and a catalog</a></li>
+</ul></nav>
+<p class="lead">A Bun monorepo keeps many packages — apps and the libraries they share — in one repository, installed and linked together by a single <code>bun install</code>. Internal packages are symlinked (never copied), scripts run across every package with <code>bun run --filter</code>, and a <strong>catalog</strong> pins one version of a shared dependency for the whole workspace. This lesson covers the layout, the linking, cross-package scripts, catalogs, and the mistakes — version drift and circular dependencies — that make monorepos painful when they're done wrong.</p>
+
+<h2 id="declaring-workspaces">Declaring workspaces</h2>
+<p><span class="level beginner">Beginner</span> Workspaces live in the root <code>package.json</code>. The root is private (it is never published), and the <code>workspaces</code> globs tell Bun which directories hold packages.</p>
+<pre><code>// package.json  (repo root)
+{
+  "name": "acme",
+  "private": true,
+  "workspaces": ["apps/*", "packages/*"],
+  "engines": { "bun": "&gt;=1.0.0" }
+}</code></pre>
+<pre><code>bun install
+# bun install v1.4.2
+# + @acme/ui@workspace:packages/ui
+# + @acme/config@workspace:packages/config
+# + @acme/web@workspace:apps/web
+# + @acme/api@workspace:apps/api
+# 4 workspaces, 86 packages installed [412.00ms]</code></pre>
+<blockquote class="warn"><strong>Common mistake:</strong> forgetting <code>"private": true</code> on the root. Without it, Bun ignores <code>workspaces</code> entirely and <code>bun publish</code> at the root tries to publish the whole repo as one package. The root is scaffolding — it must stay private.</blockquote>
+
+<h2 id="a-realistic-structure">A realistic structure</h2>
+<p>The convention that scales: <code>apps/*</code> are deployable units (a web server, an API, a worker) and <code>packages/*</code> are the libraries they share. Apps depend on packages; packages depend on each other sparingly and never on apps.</p>
+<pre><code>acme/
+├─ package.json          # root: private, workspaces, catalog
+├─ bun.lockb             # one lockfile for the whole repo — commit it
+├─ bunfig.toml
+├─ tsconfig.base.json    # shared compiler options, extended by each package
+├─ apps/
+│  ├─ web/               # @acme/web   — the frontend
+│  │  ├─ package.json
+│  │  └─ src/
+│  └─ api/               # @acme/api   — the HTTP server
+│     ├─ package.json
+│     └─ src/
+└─ packages/
+   ├─ ui/                # @acme/ui    — shared components
+   ├─ config/            # @acme/config — shared eslint/tsconfig/env schema
+   └─ core/              # @acme/core  — domain types + logic used by web AND api</code></pre>
+
+<h2 id="linking-internal-packages">Linking internal packages</h2>
+<p><span class="level beginner">Beginner</span> A package depends on a sibling by its <strong>name</strong>, using the <code>workspace:</code> protocol. Bun symlinks the real directory into <code>node_modules</code>, so edits in <code>packages/core</code> are seen by <code>apps/api</code> immediately — no build-and-republish loop.</p>
+<pre><code>// apps/api/package.json
+{
+  "name": "@acme/api",
+  "private": true,
+  "dependencies": {
+    "@acme/core": "workspace:*",     // always the local version
+    "hono": "catalog:"               // version comes from the catalog (below)
+  },
+  "scripts": { "dev": "bun --hot src/index.ts" }
+}</code></pre>
+<pre><code>// packages/core/package.json
+{
+  "name": "@acme/core",
+  "version": "0.0.0",
+  "module": "src/index.ts",          // Bun resolves TS source directly — no build step to consume it
+  "types": "src/index.ts"
+}</code></pre>
+<p>Now the import just works:</p>
+<pre><code>// apps/api/src/index.ts
+import { Order, priceOf } from "@acme/core";   // resolves to packages/core/src/index.ts
+
+console.log(priceOf({ qty: 3, unit: 1200 } as Order));</code></pre>
+<blockquote class="tip">Because Bun runs TypeScript natively, an internal package can expose its <code>.ts</code> source as <code>module</code>/<code>types</code> and skip a build step entirely for in-repo consumers. You only need to <em>build</em> a package when something <em>outside</em> the monorepo (a published artifact, a Docker image's runtime) consumes it.</blockquote>
+
+<h2 id="running-scripts-across-packages---filter">Running scripts across packages: --filter</h2>
+<p><span class="level intermediate">Intermediate</span> <code>bun run --filter &lt;pattern&gt; &lt;script&gt;</code> runs a script in every matching workspace. The pattern matches package <em>names</em> (or paths), and Bun runs them respecting the dependency graph — a package builds after the packages it depends on.</p>
+<pre><code>bun run --filter='*' build              # build every workspace, in dependency order
+bun run --filter='@acme/*' test         # every package in the @acme scope
+bun run --filter='@acme/api' dev        # exactly one package
+bun run --filter='./apps/*' lint        # match by path instead of name
+bun add zod --filter @acme/core         # add a dep to one specific workspace</code></pre>
+<pre><code>bun run --filter='*' build
+# @acme/core    build  $ bun build src/index.ts --outdir dist   ✓
+# @acme/config  build  $ bun build src/index.ts --outdir dist   ✓
+# @acme/ui      build  $ bun build src/index.ts --outdir dist   ✓   (after @acme/core)
+# @acme/api     build  $ bun build src/index.ts --outdir dist   ✓   (after @acme/core)
+# @acme/web     build  $ bun build src/index.ts --outdir dist   ✓   (after @acme/ui)</code></pre>
+<p>The ordering matters: if <code>@acme/ui</code> imports <code>@acme/core</code>, Bun builds <code>core</code> first so <code>ui</code> sees the fresh output. You do not script this yourself — it falls out of the <code>workspace:</code> dependency edges.</p>
+
+<h2 id="catalogs-one-version-for-a-shared-dependency">Catalogs — one version for a shared dependency</h2>
+<p><span class="level intermediate">Intermediate</span> The hardest monorepo problem is <strong>version drift</strong>: <code>apps/web</code> pins <code>zod@3.23.8</code> while <code>packages/core</code> pins <code>zod@3.24.1</code>, two copies load, and a <code>z.instanceof</code> check across the boundary mysteriously fails. A <strong>catalog</strong> declares the version once at the root and every package references it by name.</p>
+<pre><code>// package.json (root)
+{
+  "name": "acme",
+  "private": true,
+  "workspaces": ["apps/*", "packages/*"],
+  "catalog": {
+    "zod": "3.23.8",
+    "hono": "4.6.3"
+  },
+  "catalogs": {
+    // named catalogs for groups that must move together
+    "testing": { "@faker-js/faker": "9.0.3" }
+  }
+}</code></pre>
+<p>Packages opt in with <code>catalog:</code> (the default catalog) or <code>catalog:&lt;name&gt;</code>:</p>
+<pre><code>// packages/core/package.json
+{
+  "dependencies": { "zod": "catalog:" },
+  "devDependencies": { "@faker-js/faker": "catalog:testing" }
+}
+
+// apps/web/package.json
+{
+  "dependencies": { "zod": "catalog:", "hono": "catalog:" }
+}</code></pre>
+<p>Now a version bump happens in <strong>one place</strong> — edit the root catalog, run <code>bun install</code>, and every package moves together. There is no way for two packages to disagree on <code>zod</code>, because neither names a version itself.</p>
+<blockquote class="tip">Reach for a <strong>catalog</strong> for a dependency shared by multiple packages (validation libs, your HTTP framework, test helpers). Reach for <code>overrides</code> (root <code>package.json</code>) when you need to force a <em>transitive</em> dependency — one you don't depend on directly — to a specific version across the whole tree, e.g. patching a CVE before the direct dep bumps it.</blockquote>
+
+<h2 id="circular-dependencies">Circular dependencies</h2>
+<p><span class="level advanced">Advanced</span> A cycle — <code>@acme/core</code> imports <code>@acme/ui</code> which imports <code>@acme/core</code> — breaks dependency-ordered builds (there is no "first") and produces fragile load-order bugs where one module sees the other half-initialized. Bun will install a cycle, so the tooling won't always stop you; the discipline has to.</p>
+<pre><code># spot cycles in the install graph
+bun pm ls --all
+
+# a cycle shows up as a build that can't be ordered:
+# bun run --filter='*' build
+# error: cyclic workspace dependency: @acme/core &lt;-&gt; @acme/ui</code></pre>
+<p>The fix is structural, not a flag: extract the shared pieces both packages need into a third, lower package (often <code>@acme/types</code> or <code>@acme/core</code>) that neither of the two imports back. Dependencies should flow one direction only — apps depend on packages, packages depend on more foundational packages, and nothing depends upward.</p>
+
+<h2 id="monorepo-ci">Monorepo CI</h2>
+<p>CI for a monorepo is a single deterministic install plus graph-ordered build and test. <code>--frozen-lockfile</code> fails the build if the committed <code>bun.lockb</code> would change — catching an un-committed dependency bump before it merges.</p>
+<pre><code># .github/workflows/ci.yml
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with: { bun-version: 1.4.2 }
+
+      # one install for the whole repo; fail on any lockfile drift
+      - run: bun install --frozen-lockfile
+
+      # graph-ordered: dependencies build/test before their consumers
+      - run: bun run --filter='*' typecheck
+      - run: bun run --filter='*' build
+      - run: bun test</code></pre>
+<blockquote class="warn"><strong>Common mistakes:</strong> (1) <strong>Version drift</strong> — two packages pinning different versions of the same lib, loading two copies, and failing cross-package <code>instanceof</code>/identity checks. Use a catalog so a version is declared once. (2) <strong>Circular dependencies</strong> — a mutual import between two packages, which has no valid build order and produces half-initialized-module bugs; extract the shared code into a lower package instead. (3) Running a second package manager (<code>npm install</code>) in a Bun workspace, producing a competing lockfile and divergent trees — commit <code>bun.lockb</code> only. (4) Forgetting <code>"private": true</code> on the root, which silently disables <code>workspaces</code>.</blockquote>
+
+<h2 id="exercises">Exercises</h2>
+<ul>
+  <li>Create a workspace with <code>apps/web</code> and <code>packages/core</code>; have <code>web</code> import a function from <code>core</code> via <code>workspace:*</code> and run it with <code>bun run --filter='@acme/web' dev</code>.</li>
+  <li>Add a <code>catalog</code> entry for <code>zod</code> at the root and switch both packages to <code>"zod": "catalog:"</code>; bump the catalog version once and confirm both move after <code>bun install</code>.</li>
+  <li>Give <code>packages/ui</code> a dependency on <code>packages/core</code>, then run <code>bun run --filter='*' build</code> and observe that <code>core</code> builds before <code>ui</code>.</li>
+  <li>Deliberately introduce a cycle (<code>core</code> imports <code>ui</code>) and watch the ordered build fail; then break the cycle by extracting shared types into a third package.</li>
+</ul>
+
+<h2 id="mini-project-a-two-app-monorepo-with-a-shared-core-and-a-catalog">Mini-project: a two-app monorepo with a shared core and a catalog</h2>
+<p>Build a monorepo where an API and a web app both consume one domain package, pinned dependencies come from a catalog, and CI installs deterministically. This is the shape a real product repo takes.</p>
+<pre><code>// package.json (root)
+{
+  "name": "shop",
+  "private": true,
+  "workspaces": ["apps/*", "packages/*"],
+  "engines": { "bun": "&gt;=1.0.0" },
+  "catalog": { "zod": "3.23.8", "hono": "4.6.3" },
+  "scripts": {
+    "build": "bun run --filter='*' build",
+    "test": "bun test",
+    "typecheck": "bunx tsc --noEmit"
+  }
+}</code></pre>
+<pre><code>// packages/core/package.json
+{ "name": "@shop/core", "version": "0.0.0", "module": "src/index.ts", "types": "src/index.ts",
+  "dependencies": { "zod": "catalog:" } }
+
+// packages/core/src/index.ts
+import { z } from "zod";
+export const Order = z.object({ id: z.string(), total: z.number().int().nonnegative() });
+export type Order = z.infer&lt;typeof Order&gt;;
+export const describe = (o: Order) =&gt; `order ${o.id}: $${(o.total / 100).toFixed(2)}`;</code></pre>
+<pre><code>// apps/api/package.json
+{ "name": "@shop/api", "private": true,
+  "dependencies": { "@shop/core": "workspace:*", "hono": "catalog:" },
+  "scripts": { "dev": "bun --hot src/index.ts", "build": "bun build src/index.ts --outdir dist" } }
+
+// apps/api/src/index.ts
+import { Hono } from "hono";
+import { Order, describe } from "@shop/core";
+
+const app = new Hono();
+app.post("/orders", async (c) =&gt; {
+  const parsed = Order.safeParse(await c.req.json());        // validate with the SHARED schema
+  if (!parsed.success) return c.json({ error: parsed.error.flatten() }, 400);
+  return c.json({ message: describe(parsed.data) }, 201);    // SHARED logic
+});
+export default app;</code></pre>
+<pre><code># one install, graph-ordered build + test
+bun install
+bun run --filter='*' build
+bun test
+
+# the API validates with @shop/core's schema; the web app would import the SAME
+# Order type, so a change to the shape is a single edit in packages/core.</code></pre>
+<p>The payoff: the <code>Order</code> schema and its formatting live in <code>@shop/core</code> and are the single source of truth for both the API and the web app. Change the shape once and both consumers get it; the catalog guarantees they resolve the same <code>zod</code>; <code>--frozen-lockfile</code> in CI guarantees the install is the one you committed.</p>
+
+<section class="further"><h2 id="further-reading">Further reading</h2>
+<p>Official documentation for the tools and APIs covered on this page:</p>
+<ul class="further-list"><li><a href="https://bun.com/docs/install/workspaces" target="_blank" rel="noopener">Workspaces ↗</a></li>
+<li><a href="https://bun.com/docs/cli/filter" target="_blank" rel="noopener">Filter (--filter) ↗</a></li>
+<li><a href="https://bun.com/docs/install/catalogs" target="_blank" rel="noopener">Catalogs ↗</a></li></ul></section>
+  <nav class="pager">
+<a class="prev" href="deployment.html"><small>Previous</small>🥟 Deployment Workflows</a>
+<a class="next" href="env-and-config.html"><small>Next</small>🥟 Environment &amp; Configuration</a>
+  </nav>
+</main>
+<button type="button" class="fab top" id="fab-top" aria-label="Back to top">↑ Top</button>
+<div class="banner" id="update-banner" role="status">A new version is available.<button type="button">Reload</button></div>
+<div class="banner" id="offline-banner" role="status">You're offline — showing cached lessons.</div>
+<script src="../app.js" defer></script>
+</body>
+</html>

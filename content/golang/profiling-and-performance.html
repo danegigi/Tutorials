@@ -1,0 +1,74 @@
+<p class="lead">Go ships first-class profiling in the toolchain. Before optimizing anything, <em>measure</em>: benchmark the hot path, capture a CPU or memory profile with pprof, read it, and let allocation and escape analysis tell you where the time and garbage actually go.</p>
+
+<h2>Benchmark first</h2>
+<pre><code>func BenchmarkJoin(b *testing.B) {
+	parts := []string{"a", "b", "c", "d"}
+	b.ReportAllocs()
+	for i := 0; i &lt; b.N; i++ {
+		_ = strings.Join(parts, "-")
+	}
+}</code></pre>
+<pre><code>go test -bench=. -benchmem -count=5 ./...
+# BenchmarkJoin-8   24000000   48 ns/op   16 B/op   1 allocs/op
+#                   ^iters      ^time      ^bytes    ^allocations per op</code></pre>
+<blockquote class="tip">Run with <code>-count=5</code> and compare runs with <a href="https://pkg.go.dev/golang.org/x/perf/cmd/benchstat" target="_blank" rel="noopener">benchstat</a>, which reports the mean and whether a change is statistically significant. A single run's number is noise; benchstat tells you if your "optimization" actually did anything.</blockquote>
+
+<h2>CPU profiling with pprof</h2>
+<p><span class="level intermediate">Intermediate</span></p>
+<pre><code># From a benchmark:
+go test -bench=BenchmarkJoin -cpuprofile=cpu.out ./...
+go tool pprof cpu.out
+#   (pprof) top10        ← functions by CPU time
+#   (pprof) list Join    ← annotated source, line by line
+#   (pprof) web          ← a call graph (needs graphviz)</code></pre>
+<pre><code>// From a running server: import for the /debug/pprof endpoints
+import _ "net/http/pprof"
+// then: go tool pprof http://localhost:8080/debug/pprof/profile?seconds=30</code></pre>
+
+<h2>Memory profiling</h2>
+<pre><code>go test -bench=. -memprofile=mem.out ./...
+go tool pprof -alloc_space mem.out      # total allocated (where garbage is made)
+go tool pprof -inuse_space mem.out      # live heap (where a leak lives)
+#   (pprof) top -cum
+#   (pprof) list YourFunc</code></pre>
+<blockquote class="warn"><strong>Common mistake:</strong> optimizing without a profile — "I think this loop is slow". You will almost always be wrong about <em>where</em> the time goes. Profile first; the bottleneck is frequently I/O, allocations, or a hot function you didn't suspect, not the code you were eyeing.</blockquote>
+
+<h2>Escape analysis &amp; allocations</h2>
+<p><span class="level advanced">Advanced</span> A value that "escapes" to the heap costs an allocation and GC pressure. The compiler tells you what escapes and why:</p>
+<pre><code>go build -gcflags="-m" ./...
+# ./main.go:12:9: &amp;user escapes to heap
+# ./main.go:20:13: make([]int, n) does not escape</code></pre>
+<p>Common fixes once a profile points at allocation:</p>
+<pre><code>// Preallocate when the size is known — avoids repeated slice growth
+out := make([]int, 0, len(in))
+
+// strings.Builder instead of += in a loop
+var b strings.Builder
+for _, s := range parts { b.WriteString(s) }
+
+// sync.Pool to reuse expensive buffers on a hot path
+var bufPool = sync.Pool{New: func() any { return new(bytes.Buffer) }}</code></pre>
+
+<h2>The execution tracer</h2>
+<pre><code>go test -trace=trace.out ./...
+go tool trace trace.out     # goroutine scheduling, GC pauses, blocking</code></pre>
+<p>Use the tracer when the problem is <em>concurrency</em>, not raw CPU — goroutines blocking on each other, GC stop-the-world pauses, or an under-utilized worker pool. pprof says "where the CPU goes"; the tracer says "why things are waiting".</p>
+
+<h2>A sane optimization loop</h2>
+<ol>
+  <li>Write a benchmark that reproduces the slow path.</li>
+  <li>Profile it (CPU, then memory) and find the real hotspot.</li>
+  <li>Change one thing; re-benchmark with <code>benchstat</code> to confirm it helped.</li>
+  <li>Stop when it's fast enough — don't trade readability for nanoseconds that don't matter.</li>
+</ol>
+<blockquote class="warn"><strong>Don't micro-optimize prematurely.</strong> Readable code that's fast enough beats clever code that saved 5ns on a path called twice a day. Optimize the paths a profile proves are hot, under a benchmark that proves the win — and leave the rest clear.</blockquote>
+
+<h2>Exercises</h2>
+<ul>
+  <li>Benchmark string concatenation with <code>+=</code> vs <code>strings.Builder</code> with <code>-benchmem</code>; explain the allocs difference.</li>
+  <li>Capture a CPU profile from a benchmark and use <code>list</code> to find the hottest line.</li>
+  <li>Run <code>-gcflags="-m"</code> on a function returning <code>&amp;struct{}</code> and confirm it escapes to the heap.</li>
+</ul>
+
+<h2>Mini-project: profile and speed up a real function</h2>
+<p>Take a function that parses or transforms a large input (e.g. the JSON⇄CSV converter from the Files lesson). Write a benchmark, capture CPU + memory profiles, find the top allocator, and apply the right fix (preallocation / <code>strings.Builder</code> / <code>sync.Pool</code>). Prove the improvement with <code>benchstat</code> comparing before/after — and record one optimization you tried that <em>didn't</em> help, to internalize "measure, don't guess".</p>

@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en" data-base="../">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0d1117">
+<meta name="description" content="Dev Tutorials — Golang, Bun, Web Development, Linux and DevOps, offline-ready.">
+<title>Project Layout &amp; Patterns — Golang</title>
+<link rel="manifest" href="../manifest.webmanifest">
+<link rel="icon" href="../icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="../icon-192.png">
+<link rel="stylesheet" href="../app.css">
+<script>/* set theme before paint to avoid flash */(function(){try{var t=localStorage.getItem('tut.theme');document.documentElement.setAttribute('data-theme',t||'dark');}catch(e){document.documentElement.setAttribute('data-theme','dark');}})();</script>
+
+</head>
+<body class="lesson">
+<header class="nav">
+  <a class="brand" href="../index.html">📚 Dev Tutorials</a>
+  <span class="crumb">Project Layout &amp; Patterns — Golang</span>
+  <span class="spacer"></span>
+  <a class="navbtn" href="../search.html">🔎 Search</a>
+  <button class="navbtn" id="install-btn" type="button">⬇️ Install</button>
+  <button class="navbtn" id="theme-btn" type="button" aria-label="Toggle theme">🌙 Dark</button>
+</header>
+<main class="wrap lesson-body">
+  <h1 class="page-title">Project Layout &amp; Patterns</h1>
+  <div class="lesson-tools" data-lesson-id="golang/project-layout-and-patterns">
+    <button id="done-btn" type="button" aria-pressed="false">○ Mark complete</button>
+    <button id="mark-btn" type="button" aria-pressed="false">☆ Bookmark</button>
+    <a class="navbtn" href="index.html" style="margin-left:auto">All Golang lessons →</a>
+  </div>
+<nav class="toc" aria-label="On this page"><strong>On this page</strong><ul>
+<li class="lvl2"><a href="#packages-are-about-capability-not-category">Packages are about capability, not category</a></li>
+<li class="lvl2"><a href="#a-typical-layout">A typical layout</a></li>
+<li class="lvl2"><a href="#dependency-injection-by-hand">Dependency injection by hand</a></li>
+<li class="lvl2"><a href="#accept-interfaces-return-structs">Accept interfaces, return structs</a></li>
+<li class="lvl2"><a href="#testing-benefits-from-the-structure">Testing benefits from the structure</a></li>
+<li class="lvl2"><a href="#config-and-wiring">Config and wiring</a></li>
+<li class="lvl2"><a href="#exercises">Exercises</a></li>
+<li class="lvl2"><a href="#mini-project-restructure-the-todo-service">Mini-project: restructure the TODO service</a></li>
+</ul></nav>
+<p class="lead">How you organize a Go codebase shapes how easy it is to change. Go's conventions are light but opinionated: packages by capability, <code>internal/</code> to enforce boundaries, <code>cmd/</code> for entrypoints, interfaces at the edges, and dependencies passed in — not reached for.</p>
+
+<h2 id="packages-are-about-capability-not-category">Packages are about capability, not category</h2>
+<p><span class="level beginner">Beginner</span> Name packages for what they <em>do</em>, not for a layer. <code>package store</code>, <code>package auth</code>, <code>package billing</code> — not <code>package models</code>, <code>package utils</code>, <code>package helpers</code>.</p>
+<blockquote class="warn"><strong>Common mistakes:</strong> (1) a grab-bag <code>util</code> package — it becomes a dumping ground everything imports, creating a dependency hairball. (2) Naming a package after a design pattern (<code>interfaces</code>, <code>abstractions</code>). (3) Stuttering: <code>http.HTTPServer</code> — the package name is already the prefix, so it's <code>http.Server</code>. Name the package so its exported identifiers read well at the call site.</blockquote>
+
+<h2 id="a-typical-layout">A typical layout</h2>
+<pre><code>myapp/
+├── go.mod
+├── cmd/
+│   └── server/
+│       └── main.go          # thin entrypoint: wire deps, start
+├── internal/                # private to this module — can't be imported outside
+│   ├── store/               # database access
+│   │   ├── store.go
+│   │   └── store_test.go
+│   ├── user/                # user domain logic
+│   └── http/                # handlers + routing
+├── pkg/                     # (optional) code meant for OTHER modules to import
+└── README.md</code></pre>
+<ul>
+  <li><strong><code>cmd/&lt;name&gt;/main.go</code></strong> — one per binary; keep it thin (parse config, construct dependencies, run).</li>
+  <li><strong><code>internal/</code></strong> — the compiler <em>forbids</em> import from outside the module, so it's your enforced private API.</li>
+  <li><strong><code>pkg/</code></strong> — only if you publish reusable libraries; many apps skip it (it's a convention, not a rule).</li>
+</ul>
+<blockquote class="tip">Start flat. A small program is fine as a single <code>main</code> package in the root — don't scaffold a 10-directory tree for 300 lines. Introduce <code>internal/</code> packages when the file count or the need for boundaries actually appears. Premature structure is as bad as none.</blockquote>
+
+<h2 id="dependency-injection-by-hand">Dependency injection by hand</h2>
+<p><span class="level intermediate">Intermediate</span> Go doesn't need a DI framework. Pass dependencies in as struct fields or constructor arguments — explicit, testable, no magic:</p>
+<pre><code>type Service struct {
+	store  Store          // an interface (below)
+	mailer Mailer
+	logger *slog.Logger
+}
+
+func NewService(s Store, m Mailer, l *slog.Logger) *Service {
+	return &amp;Service{store: s, mailer: m, logger: l}
+}
+
+// main.go wires the concrete implementations together:
+func main() {
+	db := store.NewPostgres(dsn)
+	svc := user.NewService(db, mail.NewSES(), slog.Default())
+	srv := httpapi.New(svc)
+	srv.Run(":8080")
+}</code></pre>
+
+<h2 id="accept-interfaces-return-structs">Accept interfaces, return structs</h2>
+<pre><code>// Define the interface where it's CONSUMED, listing only what you use
+package user
+type Store interface {           // user's needs, not store's full surface
+	GetUser(ctx context.Context, id string) (*User, error)
+	SaveUser(ctx context.Context, u *User) error
+}
+
+// The concrete type returns itself; callers depend on the small interface.</code></pre>
+<blockquote class="tip">Two Go idioms do a lot of work here: <em>"accept interfaces, return structs"</em> (functions take the minimal interface they need and return concrete types), and <em>define the interface in the consuming package</em> (so the dependency arrow points inward and tests can supply a fake). This keeps packages decoupled without a framework.</blockquote>
+
+<h2 id="testing-benefits-from-the-structure">Testing benefits from the structure</h2>
+<pre><code>// Because Service depends on the Store INTERFACE, tests inject a fake:
+type fakeStore struct{ users map[string]*user.User }
+func (f *fakeStore) GetUser(_ context.Context, id string) (*user.User, error) {
+	return f.users[id], nil
+}
+svc := user.NewService(&amp;fakeStore{...}, nil, slog.Default())
+// No database needed — fast, deterministic unit tests.</code></pre>
+
+<h2 id="config-and-wiring">Config and wiring</h2>
+<p>Load config once in <code>main</code> (env vars / flags, per the Deployment lesson), construct everything, and pass it down. Avoid global variables and <code>init()</code> side effects — they make the dependency graph invisible and tests order-dependent.</p>
+
+<h2 id="exercises">Exercises</h2>
+<ul>
+  <li>Refactor a single-file program into <code>cmd/</code> + <code>internal/</code> packages named by capability.</li>
+  <li>Define a consumer-side <code>Store</code> interface and inject a fake in a unit test.</li>
+  <li>Find a <code>util</code> package (or write one) and split it into capability-named packages.</li>
+</ul>
+
+<h2 id="mini-project-restructure-the-todo-service">Mini-project: restructure the TODO service</h2>
+<p>Take the TODO API you built across the Go section and give it a real layout: <code>cmd/todo/main.go</code> (wiring only), <code>internal/todo</code> (domain + a consumer-defined <code>Store</code> interface), <code>internal/store</code> (SQLite implementation), and <code>internal/httpapi</code> (handlers). Inject dependencies through constructors, write a unit test using a fake store, and keep <code>main</code> under ~30 lines. The behavior is unchanged — but it's now testable and changeable.</p>
+
+<section class="further"><h2 id="further-reading">Further reading</h2>
+<p>Official documentation for the tools and APIs covered on this page:</p>
+<ul class="further-list"><li><a href="https://go.dev/doc/modules/layout" target="_blank" rel="noopener">Organizing a Go module ↗</a></li>
+<li><a href="https://go.dev/doc/effective_go" target="_blank" rel="noopener">Effective Go ↗</a></li>
+<li><a href="https://github.com/golang-standards/project-layout" target="_blank" rel="noopener">Standard Go Project Layout (community) ↗</a></li></ul></section>
+  <nav class="pager">
+<a class="prev" href="profiling-and-performance.html"><small>Previous</small>🐹 Profiling &amp; Performance</a>
+<a class="next" href="../bun/what-is-bun.html"><small>Next</small>🥟 What Bun Is &amp; When to Use It</a>
+  </nav>
+</main>
+<button type="button" class="fab top" id="fab-top" aria-label="Back to top">↑ Top</button>
+<div class="banner" id="update-banner" role="status">A new version is available.<button type="button">Reload</button></div>
+<div class="banner" id="offline-banner" role="status">You're offline — showing cached lessons.</div>
+<script src="../app.js" defer></script>
+</body>
+</html>
