@@ -77,6 +77,19 @@ bun run scripts/gen-icons.js   # (re)generate PNG icons — only if you change t
 > A full Lighthouse PWA audit needs a browser: DevTools → Lighthouse →
 > *Progressive Web App*, or `npx lighthouse http://127.0.0.1:8792 --only-categories=pwa`.
 
+## Continuous integration
+
+`.github/workflows/ci.yml` runs on every push to `main` and every pull request:
+it installs Bun, runs `bun run build`, runs `bun run check.js` (all pages present,
+valid manifest, full search-index coverage, no broken TOC anchors, SW offline
+wiring), and finally verifies the committed `docs/` matches a fresh build.
+
+That last check works because the build is **deterministic** — the service
+worker's cache version is a SHA-256 content hash of the precached output, not a
+timestamp, so an unchanged site produces a byte-identical `docs/`. After editing
+content, always run `bun run build` and commit the regenerated `docs/`, or CI
+will fail with "docs/ is out of date".
+
 ## Deploy to GitHub Pages
 
 The build output in `docs/` (including `.nojekyll`) is the Pages source.

@@ -676,6 +676,46 @@ export const SECTIONS = [
           ref("USE Method (Brendan Gregg)", "https://www.brendangregg.com/usemethod.html"),
         ],
       },
+      {
+        slug: "text-processing",
+        title: "Text Processing: grep, sed & awk",
+        blurb: "The Unix text toolkit: grep patterns, sed stream editing, awk field processing, and sort/uniq/cut/tr pipelines.",
+        further: [
+          ref("grep (man)", "https://man7.org/linux/man-pages/man1/grep.1.html"),
+          ref("sed (man)", "https://man7.org/linux/man-pages/man1/sed.1.html"),
+          ref("GNU awk manual", "https://www.gnu.org/software/gawk/manual/gawk.html"),
+        ],
+      },
+      {
+        slug: "disk-and-storage",
+        title: "Disk & Storage",
+        blurb: "df/du, lsblk & partitions, filesystems & mount, /etc/fstab, swap, and an intro to LVM.",
+        further: [
+          ref("df (man)", "https://man7.org/linux/man-pages/man1/df.1.html"),
+          ref("fstab (man)", "https://man7.org/linux/man-pages/man5/fstab.5.html"),
+          ref("LVM (Arch wiki)", "https://wiki.archlinux.org/title/LVM"),
+        ],
+      },
+      {
+        slug: "performance-monitoring",
+        title: "Performance Monitoring",
+        blurb: "CPU, memory, disk, and network under load: top/vmstat/iostat/free/sar and the USE method in practice.",
+        further: [
+          ref("vmstat (man)", "https://man7.org/linux/man-pages/man8/vmstat.8.html"),
+          ref("iostat (man)", "https://man7.org/linux/man-pages/man1/iostat.1.html"),
+          ref("Linux performance (Brendan Gregg)", "https://www.brendangregg.com/linuxperf.html"),
+        ],
+      },
+      {
+        slug: "containers-and-namespaces",
+        title: "Containers & Namespaces",
+        blurb: "What a container actually is: namespaces, cgroups, and chroot — the Linux kernel features Docker builds on.",
+        further: [
+          ref("namespaces (man)", "https://man7.org/linux/man-pages/man7/namespaces.7.html"),
+          ref("cgroups (man)", "https://man7.org/linux/man-pages/man7/cgroups.7.html"),
+          ref("unshare (man)", "https://man7.org/linux/man-pages/man1/unshare.1.html"),
+        ],
+      },
     ],
   },
 

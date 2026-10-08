@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en" data-base="../">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0d1117">
+<meta name="description" content="Dev Tutorials — Golang, Bun, Web Development, Linux and DevOps, offline-ready.">
+<title>Text Processing: grep, sed &amp; awk — Linux</title>
+<link rel="manifest" href="../manifest.webmanifest">
+<link rel="icon" href="../icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="../icon-192.png">
+<link rel="stylesheet" href="../app.css">
+<script>/* set theme before paint to avoid flash */(function(){try{var t=localStorage.getItem('tut.theme');document.documentElement.setAttribute('data-theme',t||'dark');}catch(e){document.documentElement.setAttribute('data-theme','dark');}})();</script>
+
+</head>
+<body class="lesson">
+<header class="nav">
+  <a class="brand" href="../index.html">📚 Dev Tutorials</a>
+  <span class="crumb">Text Processing: grep, sed &amp; awk — Linux</span>
+  <span class="spacer"></span>
+  <a class="navbtn" href="../search.html">🔎 Search</a>
+  <button class="navbtn" id="install-btn" type="button">⬇️ Install</button>
+  <button class="navbtn" id="theme-btn" type="button" aria-label="Toggle theme">🌙 Dark</button>
+</header>
+<main class="wrap lesson-body">
+  <h1 class="page-title">Text Processing: grep, sed &amp; awk</h1>
+  <div class="lesson-tools" data-lesson-id="linux/text-processing">
+    <button id="done-btn" type="button" aria-pressed="false">○ Mark complete</button>
+    <button id="mark-btn" type="button" aria-pressed="false">☆ Bookmark</button>
+    <a class="navbtn" href="index.html" style="margin-left:auto">All Linux lessons →</a>
+  </div>
+<nav class="toc" aria-label="On this page"><strong>On this page</strong><ul>
+<li class="lvl2"><a href="#grep-find-lines">grep — find lines</a></li>
+<li class="lvl2"><a href="#sed-stream-editing">sed — stream editing</a></li>
+<li class="lvl2"><a href="#awk-field-processing">awk — field processing</a></li>
+<li class="lvl2"><a href="#sort-uniq-cut-tr">sort, uniq, cut, tr</a></li>
+<li class="lvl2"><a href="#putting-it-together">Putting it together</a></li>
+<li class="lvl2"><a href="#exercises">Exercises</a></li>
+<li class="lvl2"><a href="#mini-project-a-log-analysis-one-liner-toolkit">Mini-project: a log-analysis one-liner toolkit</a></li>
+</ul></nav>
+<p class="lead">The Unix philosophy is small tools piped together. <code>grep</code> finds lines, <code>sed</code> edits streams, <code>awk</code> processes fields, and <code>sort</code>/<code>uniq</code>/<code>cut</code>/<code>tr</code> reshape data. Chain them and you can slice any log or data file without writing a program.</p>
+
+<h2 id="grep-find-lines">grep — find lines</h2>
+<pre><code>grep "ERROR" app.log                 # lines containing ERROR
+grep -i "error" app.log              # case-insensitive
+grep -r "TODO" ./src                 # recursive through a tree
+grep -n "func main" main.go          # show line numbers
+grep -c "GET" access.log             # count matching lines
+grep -v "healthcheck" access.log     # INVERT: lines NOT matching
+grep -E "4[0-9]{2}|5[0-9]{2}" access.log   # extended regex: 4xx/5xx
+grep -A2 -B2 "panic" app.log         # 2 lines of context After/Before</code></pre>
+<blockquote class="tip"><code>grep -o</code> prints only the matching part (not the whole line) — great for extracting fields: <code>grep -oE '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' access.log</code> pulls every IP.</blockquote>
+
+<h2 id="sed-stream-editing">sed — stream editing</h2>
+<p><span class="level intermediate">Intermediate</span> <code>sed</code> transforms text as it flows past — substitutions, deletions, insertions:</p>
+<pre><code>sed 's/foo/bar/' file          # replace FIRST foo per line
+sed 's/foo/bar/g' file         # replace ALL (global)
+sed 's/foo/bar/gi' file        # all, case-insensitive
+sed -n '10,20p' file           # print only lines 10–20 (-n = quiet)
+sed '/^#/d' config             # delete comment lines
+sed '/^$/d' file               # delete blank lines
+sed -i 's/8080/9090/g' app.conf  # edit the file IN PLACE</code></pre>
+<blockquote class="warn"><strong>Common mistake:</strong> <code>sed -i</code> with no backup on a file you can't easily regenerate — it overwrites irreversibly. Test the substitution <em>without</em> <code>-i</code> first (watch stdout), then use <code>sed -i.bak</code> to keep a <code>.bak</code> copy. Also mind the delimiter: substituting paths with <code>/</code> is cleaner as <code>sed 's#/old/path#/new/path#'</code>.</blockquote>
+
+<h2 id="awk-field-processing">awk — field processing</h2>
+<p><span class="level intermediate">Intermediate</span> <code>awk</code> splits each line into fields (<code>$1</code>, <code>$2</code>, … <code>$NF</code> = last) and runs a little program per line. It's a calculator for columns.</p>
+<pre><code># Print the 1st and 3rd whitespace-separated columns
+awk '{print $1, $3}' data.txt
+
+# Sum column 2
+awk '{sum += $2} END {print sum}' sales.txt
+
+# Average response time from an access log (field 10)
+awk '{t += $10; n++} END {printf "avg %.1fms\n", t/n}' access.log
+
+# Filter: rows where column 3 > 100
+awk '$3 > 100' data.txt
+
+# Custom field separator (CSV) + a header
+awk -F, 'NR>1 {print $2}' data.csv       # skip header (NR = row number)
+
+# Count occurrences of each status code (field 9)
+awk '{count[$9]++} END {for (c in count) print c, count[c]}' access.log</code></pre>
+
+<h2 id="sort-uniq-cut-tr">sort, uniq, cut, tr</h2>
+<pre><code>sort file                      # alphabetical
+sort -n file                   # numeric
+sort -rn -k2 file              # reverse-numeric by column 2
+sort file | uniq               # dedupe (uniq needs sorted input!)
+sort file | uniq -c | sort -rn # count + rank by frequency
+cut -d, -f1,3 data.csv         # columns 1 and 3 of a CSV
+cut -c1-10 file                # first 10 characters
+tr 'a-z' 'A-Z' &lt; file          # uppercase
+tr -d ' ' &lt; file               # delete spaces</code></pre>
+<blockquote class="warn"><strong>Classic gotcha:</strong> <code>uniq</code> only collapses <em>adjacent</em> duplicates, so <code>uniq</code> on unsorted input misses most of them. The idiom is always <code>sort | uniq</code> (or <code>sort -u</code>). The "top-N" one-liner <code>sort | uniq -c | sort -rn | head</code> is worth memorizing.</blockquote>
+
+<h2 id="putting-it-together">Putting it together</h2>
+<pre><code># Top 10 IPs hitting your server with 5xx errors
+grep -E ' 5[0-9]{2} ' access.log \
+  | awk '{print $1}' \
+  | sort | uniq -c | sort -rn \
+  | head -10</code></pre>
+
+<h2 id="exercises">Exercises</h2>
+<ul>
+  <li>From an access log, extract the top 10 most-requested URLs with a <code>grep|awk|sort|uniq</code> pipeline.</li>
+  <li>Use <code>sed</code> to change a port number across a config file (test without <code>-i</code> first).</li>
+  <li>With <code>awk</code>, compute the average of a numeric column and the count per category.</li>
+</ul>
+
+<h2 id="mini-project-a-log-analysis-one-liner-toolkit">Mini-project: a log-analysis one-liner toolkit</h2>
+<p>Given a web access log, build a small set of pipelines: requests-per-hour histogram (<code>awk</code> on the timestamp + <code>uniq -c</code>), top error-producing endpoints, slowest average endpoints, and unique visitor count. Save them as shell functions (tying into the Bash Scripting lesson) so you have a reusable log-triage kit — the kind of thing you reach for during an incident.</p>
+
+<section class="further"><h2 id="further-reading">Further reading</h2>
+<p>Official documentation for the tools and APIs covered on this page:</p>
+<ul class="further-list"><li><a href="https://man7.org/linux/man-pages/man1/grep.1.html" target="_blank" rel="noopener">grep (man) ↗</a></li>
+<li><a href="https://man7.org/linux/man-pages/man1/sed.1.html" target="_blank" rel="noopener">sed (man) ↗</a></li>
+<li><a href="https://www.gnu.org/software/gawk/manual/gawk.html" target="_blank" rel="noopener">GNU awk manual ↗</a></li></ul></section>
+  <nav class="pager">
+<a class="prev" href="troubleshooting.html"><small>Previous</small>🐧 Troubleshooting Workflow</a>
+<a class="next" href="disk-and-storage.html"><small>Next</small>🐧 Disk &amp; Storage</a>
+  </nav>
+</main>
+<button type="button" class="fab top" id="fab-top" aria-label="Back to top">↑ Top</button>
+<div class="banner" id="update-banner" role="status">A new version is available.<button type="button">Reload</button></div>
+<div class="banner" id="offline-banner" role="status">You're offline — showing cached lessons.</div>
+<script src="../app.js" defer></script>
+</body>
+</html>

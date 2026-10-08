@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en" data-base="../">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0d1117">
+<meta name="description" content="Dev Tutorials — Golang, Bun, Web Development, Linux and DevOps, offline-ready.">
+<title>Disk &amp; Storage — Linux</title>
+<link rel="manifest" href="../manifest.webmanifest">
+<link rel="icon" href="../icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="../icon-192.png">
+<link rel="stylesheet" href="../app.css">
+<script>/* set theme before paint to avoid flash */(function(){try{var t=localStorage.getItem('tut.theme');document.documentElement.setAttribute('data-theme',t||'dark');}catch(e){document.documentElement.setAttribute('data-theme','dark');}})();</script>
+
+</head>
+<body class="lesson">
+<header class="nav">
+  <a class="brand" href="../index.html">📚 Dev Tutorials</a>
+  <span class="crumb">Disk &amp; Storage — Linux</span>
+  <span class="spacer"></span>
+  <a class="navbtn" href="../search.html">🔎 Search</a>
+  <button class="navbtn" id="install-btn" type="button">⬇️ Install</button>
+  <button class="navbtn" id="theme-btn" type="button" aria-label="Toggle theme">🌙 Dark</button>
+</header>
+<main class="wrap lesson-body">
+  <h1 class="page-title">Disk &amp; Storage</h1>
+  <div class="lesson-tools" data-lesson-id="linux/disk-and-storage">
+    <button id="done-btn" type="button" aria-pressed="false">○ Mark complete</button>
+    <button id="mark-btn" type="button" aria-pressed="false">☆ Bookmark</button>
+    <a class="navbtn" href="index.html" style="margin-left:auto">All Linux lessons →</a>
+  </div>
+<nav class="toc" aria-label="On this page"><strong>On this page</strong><ul>
+<li class="lvl2"><a href="#how-full-is-it-df-and-du">How full is it? df and du</a></li>
+<li class="lvl2"><a href="#block-devices-and-partitions">Block devices and partitions</a></li>
+<li class="lvl2"><a href="#filesystems-and-mounting">Filesystems and mounting</a></li>
+<li class="lvl2"><a href="#persistent-mounts-etcfstab">Persistent mounts: /etc/fstab</a></li>
+<li class="lvl2"><a href="#swap">Swap</a></li>
+<li class="lvl2"><a href="#lvm-flexible-volumes">LVM: flexible volumes</a></li>
+<li class="lvl2"><a href="#exercises">Exercises</a></li>
+<li class="lvl2"><a href="#mini-project-diagnose-and-fix-a-full-disk">Mini-project: diagnose and fix a full disk</a></li>
+</ul></nav>
+<p class="lead">Disks fill up, mounts drop, and "no space left on device" takes down services. Learn to see what's using space, how block devices and filesystems fit together, how to mount things persistently via <code>/etc/fstab</code>, and the basics of LVM for flexible storage.</p>
+
+<h2 id="how-full-is-it-df-and-du">How full is it? df and du</h2>
+<pre><code>df -h                      # free space per MOUNTED filesystem (human-readable)
+# Filesystem   Size  Used Avail Use% Mounted on
+# /dev/sda1     40G   32G  6.0G  85% /
+
+du -sh /var/log            # total size of a directory
+du -h --max-depth=1 /var | sort -rh | head   # biggest subdirectories
+df -i                      # INODES — you can be "full" with free space (too many files)</code></pre>
+<blockquote class="warn"><strong>Two "disk full" surprises:</strong> (1) <code>df</code> shows space free but writes still fail — you're out of <em>inodes</em> (<code>df -i</code>); millions of tiny files did it. (2) You delete a huge log but space doesn't come back — a process still holds the file open. Find it with <code>lsof +L1</code> (or <code>lsof | grep deleted</code>) and restart/signal that process; the space frees when the last handle closes.</blockquote>
+
+<h2 id="block-devices-and-partitions">Block devices and partitions</h2>
+<pre><code>lsblk                      # tree of disks → partitions → mountpoints
+# NAME   SIZE TYPE MOUNTPOINT
+# sda    50G  disk
+# ├─sda1 40G  part /
+# └─sda2 10G  part /home
+sudo fdisk -l              # detailed partition tables
+blkid                      # UUIDs + filesystem types (use UUIDs in fstab)</code></pre>
+
+<h2 id="filesystems-and-mounting">Filesystems and mounting</h2>
+<p><span class="level intermediate">Intermediate</span></p>
+<pre><code>sudo mkfs.ext4 /dev/sdb1            # create an ext4 filesystem (ERASES the partition)
+sudo mkdir /mnt/data
+sudo mount /dev/sdb1 /mnt/data     # mount it (temporary — gone on reboot)
+mount | grep sdb1                  # confirm
+sudo umount /mnt/data              # unmount</code></pre>
+<blockquote class="warn"><code>mkfs</code> <strong>destroys all data</strong> on the target — triple-check the device name (<code>lsblk</code>) before running it; formatting the wrong disk is unrecoverable. A manual <code>mount</code> does not survive a reboot — for that you need <code>/etc/fstab</code>.</blockquote>
+
+<h2 id="persistent-mounts-etcfstab">Persistent mounts: /etc/fstab</h2>
+<pre><code># /etc/fstab — mounted automatically at boot
+# &lt;device&gt;                              &lt;mount&gt;     &lt;fs&gt;  &lt;options&gt;        &lt;dump&gt; &lt;pass&gt;
+UUID=1a2b-3c4d                           /mnt/data   ext4  defaults          0      2
+
+sudo mount -a      # test fstab WITHOUT rebooting — mounts everything listed</code></pre>
+<blockquote class="warn"><strong>Always use <code>UUID=</code>, not <code>/dev/sdb1</code>, in fstab</strong> — device names (<code>sdb</code> vs <code>sdc</code>) can change between boots, and a bad fstab entry can make the system fail to boot. After editing, run <code>sudo mount -a</code> to catch typos while you can still fix them.</blockquote>
+
+<h2 id="swap">Swap</h2>
+<pre><code>free -h                    # see RAM and swap usage
+swapon --show
+# Add a swap file:
+sudo fallocate -l 2G /swapfile &amp;&amp; sudo chmod 600 /swapfile
+sudo mkswap /swapfile &amp;&amp; sudo swapon /swapfile
+# Persist it in /etc/fstab:  /swapfile none swap sw 0 0</code></pre>
+
+<h2 id="lvm-flexible-volumes">LVM: flexible volumes</h2>
+<p><span class="level advanced">Advanced</span> LVM sits between disks and filesystems so you can resize and span volumes without repartitioning: physical volumes → volume groups → logical volumes.</p>
+<pre><code>sudo pvcreate /dev/sdb /dev/sdc           # mark disks as PVs
+sudo vgcreate data-vg /dev/sdb /dev/sdc   # pool them into a VG
+sudo lvcreate -L 20G -n app data-vg       # carve a 20G logical volume
+sudo mkfs.ext4 /dev/data-vg/app
+# Grow it later with no downtime:
+sudo lvextend -L +10G /dev/data-vg/app &amp;&amp; sudo resize2fs /dev/data-vg/app</code></pre>
+
+<h2 id="exercises">Exercises</h2>
+<ul>
+  <li>Find the three largest directories under <code>/var</code> with <code>du --max-depth=1 | sort -rh</code>.</li>
+  <li>Simulate "disk full with free space" reasoning: run <code>df -i</code> and explain what inodes are.</li>
+  <li>Add a persistent mount to <code>/etc/fstab</code> by UUID and verify it with <code>sudo mount -a</code>.</li>
+</ul>
+
+<h2 id="mini-project-diagnose-and-fix-a-full-disk">Mini-project: diagnose and fix a full disk</h2>
+<p>On a test VM, fill a disk (write a big file or many tiny ones), then play incident responder: use <code>df -h</code>/<code>df -i</code> to classify space-vs-inode exhaustion, <code>du</code> to find the culprit, and <code>lsof | grep deleted</code> to catch a held-open deleted file. Then add a second disk, format it, mount it persistently by UUID, and (bonus) put it under LVM so it can grow later. Write up the diagnosis as a runbook (ties to the DevOps incident lesson).</p>
+
+<section class="further"><h2 id="further-reading">Further reading</h2>
+<p>Official documentation for the tools and APIs covered on this page:</p>
+<ul class="further-list"><li><a href="https://man7.org/linux/man-pages/man1/df.1.html" target="_blank" rel="noopener">df (man) ↗</a></li>
+<li><a href="https://man7.org/linux/man-pages/man5/fstab.5.html" target="_blank" rel="noopener">fstab (man) ↗</a></li>
+<li><a href="https://wiki.archlinux.org/title/LVM" target="_blank" rel="noopener">LVM (Arch wiki) ↗</a></li></ul></section>
+  <nav class="pager">
+<a class="prev" href="text-processing.html"><small>Previous</small>🐧 Text Processing: grep, sed &amp; awk</a>
+<a class="next" href="performance-monitoring.html"><small>Next</small>🐧 Performance Monitoring</a>
+  </nav>
+</main>
+<button type="button" class="fab top" id="fab-top" aria-label="Back to top">↑ Top</button>
+<div class="banner" id="update-banner" role="status">A new version is available.<button type="button">Reload</button></div>
+<div class="banner" id="offline-banner" role="status">You're offline — showing cached lessons.</div>
+<script src="../app.js" defer></script>
+</body>
+</html>

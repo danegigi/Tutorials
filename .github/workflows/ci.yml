@@ -1,0 +1,40 @@
+name: CI
+
+# Build the static site and run the post-build checks on every push and PR,
+# so a broken build, a missing lesson fragment, a bad manifest, or a broken
+# in-page TOC anchor can never land on main unnoticed.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Build the site
+        run: bun run scripts/build-site.js
+
+      - name: Run post-build checks
+        run: bun run scripts/check.js
+
+      # Fail the build if the committed docs/ is out of sync with the sources,
+      # so the published GitHub Pages output is always the real build.
+      - name: Verify committed docs/ matches a fresh build
+        run: |
+          if [ -n "$(git status --porcelain docs/)" ]; then
+            echo "::error::docs/ is out of date — run 'bun run build' and commit the result."
+            git --no-pager diff --stat docs/
+            exit 1
+          fi
+          echo "docs/ is in sync with the sources. ✓"

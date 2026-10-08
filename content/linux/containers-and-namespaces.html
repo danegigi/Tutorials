@@ -1,0 +1,62 @@
+<p class="lead">A container isn't a lightweight VM — it's just a normal Linux process with a restricted view of the system. That view is built from three kernel features: <strong>namespaces</strong> (what it can see), <strong>cgroups</strong> (what it can use), and <strong>chroot/pivot_root</strong> (what filesystem it has). Understanding them demystifies Docker entirely.</p>
+
+<h2>A container is a process</h2>
+<p><span class="level beginner">Beginner</span> Run a container, then look from the host — it's a plain process in the host's process list:</p>
+<pre><code>docker run -d --name web nginx
+ps aux | grep nginx          # the nginx process is RIGHT THERE on the host
+# There's no VM, no guest kernel — the container shares the host kernel.
+# "Isolation" is the kernel showing that process a limited view of itself.</code></pre>
+
+<h2>Namespaces: what a process can see</h2>
+<p><span class="level intermediate">Intermediate</span> Each namespace type isolates one kind of resource. A container gets its own set, so it sees its own PIDs, network, mounts, and hostname — unaware of the host or its neighbors.</p>
+<table>
+  <thead><tr><th>Namespace</th><th>Isolates</th></tr></thead>
+  <tbody>
+    <tr><td><code>pid</code></td><td>Process IDs — the container's first process is PID 1.</td></tr>
+    <tr><td><code>net</code></td><td>Network interfaces, IPs, ports, routing.</td></tr>
+    <tr><td><code>mnt</code></td><td>Mount points / filesystem view.</td></tr>
+    <tr><td><code>uts</code></td><td>Hostname &amp; domain.</td></tr>
+    <tr><td><code>ipc</code></td><td>Shared memory, semaphores.</td></tr>
+    <tr><td><code>user</code></td><td>UID/GID mapping — root in the container ≠ root on the host.</td></tr>
+  </tbody>
+</table>
+<pre><code># Create a new UTS + PID + mount namespace by hand — a mini "container":
+sudo unshare --fork --pid --mount-proc --uts bash
+# inside:
+hostname container-demo      # changing it does NOT affect the host
+ps aux                       # you only see processes in THIS pid namespace
+echo $$                      # your shell is PID 1 here</code></pre>
+<blockquote class="tip">This <code>unshare</code> demo <em>is</em> the core of what Docker does — Docker just automates creating all the namespaces, setting up networking, and layering a root filesystem. "Container" is a packaging word for "a process in its own namespaces with resource limits."</blockquote>
+
+<h2>cgroups: what a process can use</h2>
+<p>Control groups cap and account resources — CPU, memory, I/O — so one container can't starve the host or its neighbors:</p>
+<pre><code>docker run --memory=256m --cpus=0.5 nginx     # hard limits via cgroups
+# Under the hood (cgroup v2):
+cat /sys/fs/cgroup/.../memory.max             # the byte limit
+cat /sys/fs/cgroup/.../cpu.max                # the CPU quota</code></pre>
+<blockquote class="warn"><strong>This is why a container OOM-kills:</strong> when a process exceeds its cgroup <code>memory.max</code>, the kernel kills it (exit code 137) — the host is fine, just that container's limit was hit. Set container memory limits deliberately (echoing the Kubernetes resource lesson); no limit means one container can consume all host RAM.</blockquote>
+
+<h2>The root filesystem: images &amp; layers</h2>
+<pre><code># A container's filesystem is a chroot-like isolated root, built from image layers.
+# chroot is the ancestor of this idea:
+sudo chroot /path/to/rootfs /bin/sh    # that process now sees rootfs as /
+# Docker uses overlayfs to stack read-only image layers + a writable top layer,
+# and pivot_root (not plain chroot) for stronger isolation.</code></pre>
+
+<h2>Why this matters</h2>
+<ul>
+  <li><strong>Security:</strong> containers share the host kernel — a kernel exploit can escape. That's why you drop capabilities, run non-root (user namespaces), and don't treat containers as a hard security boundary like a VM.</li>
+  <li><strong>Debugging:</strong> <code>nsenter</code> lets you enter a running container's namespaces from the host to inspect it; a "container" process shows up in host tools like any other.</li>
+  <li><strong>Resource bugs:</strong> "it works locally but OOMs in prod" is almost always a cgroup memory limit — now you know where to look.</li>
+</ul>
+<blockquote class="warn"><strong>Common misconception:</strong> "containers are mini-VMs." They are not — there's no guest kernel and no hardware virtualization. That's why they start in milliseconds and are lightweight, but also why isolation is weaker than a VM's. Know the trade-off when you choose containers vs VMs for untrusted workloads.</blockquote>
+
+<h2>Exercises</h2>
+<ul>
+  <li>Use <code>unshare --fork --pid --mount-proc</code> to get a shell that's PID 1 and can't see host processes.</li>
+  <li>Run a container with <code>--memory=100m</code>, stress it past the limit, and observe the OOM kill (exit 137).</li>
+  <li>Find a running container's main process in the <em>host</em> <code>ps</code> output and enter its namespaces with <code>nsenter</code>.</li>
+</ul>
+
+<h2>Mini-project: build a container by hand</h2>
+<p>Without Docker, assemble a minimal "container": download a small rootfs (e.g. Alpine's mini root fs tarball), <code>unshare</code> new PID/mount/UTS/net namespaces, <code>chroot</code> into the rootfs, mount <code>/proc</code>, set a hostname, and run a shell — then apply a cgroup memory limit to it. You'll have reproduced, by hand, what <code>docker run</code> does for you, which makes the DevOps Docker lesson click.</p>

@@ -1,0 +1,60 @@
+<p class="lead">When a server is slow, you need to know <em>which</em> resource is the bottleneck — CPU, memory, disk, or network — before you can fix it. Linux ships a toolbox for exactly that, and the USE method gives you a system for pointing it at the right place.</p>
+
+<h2>The USE method</h2>
+<p><span class="level intermediate">Intermediate</span> For every resource, check three things: <strong>U</strong>tilization (how busy?), <strong>S</strong>aturation (is work queuing?), and <strong>E</strong>rrors. Walk the resources — CPU, memory, disk, network — and the bottleneck reveals itself.</p>
+<table>
+  <thead><tr><th>Resource</th><th>Utilization</th><th>Saturation</th></tr></thead>
+  <tbody>
+    <tr><td>CPU</td><td><code>top</code> %us+%sy</td><td>load average, run queue (<code>vmstat</code> r)</td></tr>
+    <tr><td>Memory</td><td><code>free</code> used</td><td>swap in/out (<code>vmstat</code> si/so)</td></tr>
+    <tr><td>Disk</td><td><code>iostat</code> %util</td><td>await, queue depth</td></tr>
+    <tr><td>Network</td><td><code>sar -n DEV</code></td><td>drops, retransmits</td></tr>
+  </tbody>
+</table>
+
+<h2>CPU: top, load average, vmstat</h2>
+<pre><code>top                        # live; press 1 for per-core, P sort by CPU, M by memory
+uptime
+# load average: 2.15, 1.80, 1.50   (1 / 5 / 15 min)</code></pre>
+<blockquote class="tip"><strong>Reading load average:</strong> compare it to your core count. On a 4-core box, a load of 4.0 means fully busy; 8.0 means twice as much work queued as the CPU can run (saturation). Load above the core count sustained = CPU-bound. (Note: on Linux, load also counts tasks blocked on disk I/O, so a high load with low CPU% often means disk, not CPU.)</blockquote>
+<pre><code>vmstat 1 5                 # 5 samples, 1s apart
+#  r  b   swpd   free   si  so    bi    bo   in   cs us sy id wa
+#  r = runnable queue (CPU saturation)   wa = % waiting on I/O (disk pressure)
+#  si/so = swapping (memory pressure — bad if nonzero sustained)</code></pre>
+
+<h2>Memory: free and the cache trick</h2>
+<pre><code>free -h
+#               total   used   free   shared  buff/cache   available
+# Mem:           16Gi  4.0Gi  1.0Gi    200Mi       11Gi        11Gi</code></pre>
+<blockquote class="warn"><strong>The #1 memory misread:</strong> panicking that "free" is low. Linux deliberately uses spare RAM for disk cache (<code>buff/cache</code>) and reclaims it instantly when apps need it. The number that matters is <strong>available</strong>, not <strong>free</strong>. Real memory pressure shows up as swap activity (<code>vmstat</code> si/so &gt; 0) and the OOM killer in <code>dmesg</code>, not a low "free".</blockquote>
+
+<h2>Disk: iostat</h2>
+<pre><code>iostat -xz 1               # extended, 1s (from the sysstat package)
+# Device  r/s  w/s  rkB/s  wkB/s  await  %util
+#   %util near 100% + high await = the disk is the bottleneck
+#   await = avg ms per I/O; rising await under load = saturation</code></pre>
+
+<h2>Network: ss and sar</h2>
+<pre><code>ss -s                      # socket summary (established, time-wait…)
+ss -tnp                    # per-connection, with the owning process
+sar -n DEV 1               # per-interface throughput + errors/drops
+sar -n TCP,ETCP 1          # TCP retransmits (retrans/s = trouble)</code></pre>
+
+<h2>Per-process: what's eating it?</h2>
+<pre><code>top -o %CPU                # or press P in top
+ps aux --sort=-%mem | head # top memory consumers
+pidstat 1                  # per-process CPU/IO over time
+iotop                      # per-process disk I/O (needs root)</code></pre>
+
+<h2>Historical data: sar</h2>
+<p>Live tools show <em>now</em>; <code>sar</code> (sysstat) records metrics on a schedule, so after an incident you can look back: <code>sar -u -f /var/log/sysstat/sa15</code> shows CPU for the 15th. Install sysstat on servers so you're not blind to "what happened at 3am".</p>
+
+<h2>Exercises</h2>
+<ul>
+  <li>Run <code>vmstat 1</code> while compiling something; identify when the run queue (r) and I/O wait (wa) spike.</li>
+  <li>Explain to a colleague why <code>free</code> showing little "free" memory is usually fine (point at "available").</li>
+  <li>Use <code>iostat -xz 1</code> under a disk-heavy task and read <code>%util</code> + <code>await</code>.</li>
+</ul>
+
+<h2>Mini-project: diagnose a slow server</h2>
+<p>On a test box, generate three different pressures — a CPU hog (<code>yes &gt;/dev/null &amp;</code>), a memory hog, and a disk hog (<code>dd</code>) — and for each, use the USE method to correctly identify the bottleneck resource from <code>top</code>/<code>vmstat</code>/<code>free</code>/<code>iostat</code> before you know which hog is running. Write the decision tree as a troubleshooting runbook; it's the hands-on complement to the DevOps Observability lesson.</p>
