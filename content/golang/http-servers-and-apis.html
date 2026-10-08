@@ -1,0 +1,109 @@
+<p class="lead">The standard library's <code>net/http</code> is a production-grade web server — no framework required. Build routed JSON APIs with middleware, then see where a framework like Gin saves boilerplate.</p>
+
+<h2>A server in ten lines</h2>
+<pre><code>package main
+
+import (
+	"fmt"
+	"net/http"
+)
+
+func main() {
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintf(w, "Hello from %s\n", r.URL.Path)
+	})
+	http.ListenAndServe(":8080", nil)
+}
+// go run .  →  curl localhost:8080/world  →  Hello from /world</code></pre>
+<p>A handler is anything satisfying <code>http.Handler</code> (<code>ServeHTTP(w, r)</code>); <code>HandleFunc</code> adapts a plain function to it. <code>w</code> writes the response; <code>r</code> holds the request.</p>
+
+<h2>Routing with ServeMux (Go 1.22+)</h2>
+<p><span class="level beginner">Beginner</span> The built-in router now supports methods and path wildcards, covering most needs without a third-party router:</p>
+<pre><code>mux := http.NewServeMux()
+mux.HandleFunc("GET /users", listUsers)
+mux.HandleFunc("POST /users", createUser)
+mux.HandleFunc("GET /users/{id}", func(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")        // path parameter
+	fmt.Fprintln(w, "user", id)
+})
+http.ListenAndServe(":8080", mux)</code></pre>
+
+<h2>JSON APIs</h2>
+<pre><code>type User struct {
+	ID    int    `json:"id"`
+	Name  string `json:"name"`
+	Email string `json:"email,omitempty"`
+}
+
+func createUser(w http.ResponseWriter, r *http.Request) {
+	var u User
+	if err := json.NewDecoder(r.Body).Decode(&amp;u); err != nil {
+		http.Error(w, "bad json", http.StatusBadRequest)
+		return
+	}
+	// ... persist u ...
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(u)
+}</code></pre>
+<blockquote class="warn"><strong>Common mistake:</strong> calling <code>w.WriteHeader(201)</code> <em>after</em> writing the body, or calling it twice. The first write (or <code>Encode</code>) implicitly sends <code>200</code>, and a later <code>WriteHeader</code> is ignored with a warning. Set headers and status <em>before</em> writing the body.</blockquote>
+
+<h2>Middleware</h2>
+<p><span class="level intermediate">Intermediate</span> Middleware is a function that wraps a handler, returning a new handler — the standard way to add logging, auth, and recovery:</p>
+<pre><code>func logging(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		next.ServeHTTP(w, r)
+		log.Printf("%s %s %s", r.Method, r.URL.Path, time.Since(start))
+	})
+}
+
+func auth(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") == "" {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+// Compose: logging(auth(mux))
+http.ListenAndServe(":8080", logging(auth(mux)))</code></pre>
+
+<h2>Production server settings</h2>
+<pre><code>srv := &amp;http.Server{
+	Addr:         ":8080",
+	Handler:      mux,
+	ReadTimeout:  5 * time.Second,
+	WriteTimeout: 10 * time.Second,
+	IdleTimeout:  120 * time.Second,
+}
+log.Fatal(srv.ListenAndServe())</code></pre>
+<blockquote class="tip">Always set timeouts on a public server. The zero-value <code>http.Server</code> has <em>no</em> timeouts, so a slow or malicious client can hold a connection open indefinitely (a classic Slowloris DoS).</blockquote>
+
+<h2>When to use a framework (Gin)</h2>
+<p><span class="level intermediate">Intermediate</span> Gin adds ergonomic routing groups, binding+validation, and middleware chaining. The trade is a dependency and a slightly different mental model.</p>
+<pre><code>r := gin.Default()                 // includes logger + recovery middleware
+api := r.Group("/api")
+api.GET("/users/:id", func(c *gin.Context) {
+	c.JSON(200, gin.H{"id": c.Param("id")})
+})
+api.POST("/users", func(c *gin.Context) {
+	var u User
+	if err := c.ShouldBindJSON(&amp;u); err != nil {   // validation via struct tags
+		c.JSON(400, gin.H{"error": err.Error()}); return
+	}
+	c.JSON(201, u)
+})
+r.Run(":8080")</code></pre>
+
+<h2>Exercises</h2>
+<ul>
+  <li>Build <code>GET /health</code> returning <code>{"status":"ok"}</code> and test it with <code>curl -i</code>.</li>
+  <li>Add a logging + recovery middleware chain and confirm panics return 500 instead of crashing.</li>
+  <li>Add struct-tag validation (<code>binding:"required,email"</code> in Gin) and return friendly 400 errors.</li>
+</ul>
+
+<h2>Mini-project: an in-memory TODO API</h2>
+<p>Implement <code>GET/POST /todos</code> and <code>GET/PUT/DELETE /todos/{id}</code> over a mutex-guarded <code>map[int]Todo</code>. Add logging + recovery middleware, timeouts on the server, and JSON everywhere. This is the exact shape of a real REST service — you'll swap the map for a database in the next-but-one lesson.</p>

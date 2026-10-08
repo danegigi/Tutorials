@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en" data-base="../">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0d1117">
+<meta name="description" content="Dev Tutorials — Golang, Bun, Web Development, Linux and DevOps, offline-ready.">
+<title>Cron &amp; systemd Timers — Linux</title>
+<link rel="manifest" href="../manifest.webmanifest">
+<link rel="icon" href="../icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="../icon-192.png">
+<link rel="stylesheet" href="../app.css">
+<script>/* set theme before paint to avoid flash */(function(){try{var t=localStorage.getItem('tut.theme');document.documentElement.setAttribute('data-theme',t||'dark');}catch(e){document.documentElement.setAttribute('data-theme','dark');}})();</script>
+
+</head>
+<body class="lesson">
+<header class="nav">
+  <a class="brand" href="../index.html">📚 Dev Tutorials</a>
+  <span class="crumb">Cron &amp; systemd Timers — Linux</span>
+  <span class="spacer"></span>
+  <a class="navbtn" href="../search.html">🔎 Search</a>
+  <button class="navbtn" id="install-btn" type="button">⬇️ Install</button>
+  <button class="navbtn" id="theme-btn" type="button" aria-label="Toggle theme">🌙 Dark</button>
+</header>
+<main class="wrap lesson-body">
+  <h1 class="page-title">Cron &amp; systemd Timers</h1>
+  <div class="lesson-tools" data-lesson-id="linux/cron-and-systemd-timers">
+    <button id="done-btn" type="button" aria-pressed="false">○ Mark complete</button>
+    <button id="mark-btn" type="button" aria-pressed="false">☆ Bookmark</button>
+    <a class="navbtn" href="index.html" style="margin-left:auto">All Linux lessons →</a>
+  </div>
+<nav class="toc" aria-label="On this page"><strong>On this page</strong><ul>
+<li class="lvl2"><a href="#cron-the-classic-scheduler">cron: the classic scheduler</a></li>
+<li class="lvl2"><a href="#systemd-timers-the-modern-alternative">systemd timers: the modern alternative</a></li>
+<li class="lvl3"><a href="#oncalendar-syntax">OnCalendar syntax</a></li>
+<li class="lvl2"><a href="#cron-vs-timer-which-to-use">cron vs timer — which to use</a></li>
+<li class="lvl2"><a href="#exercises">Exercises</a></li>
+<li class="lvl2"><a href="#mini-project-a-nightly-backup-done-both-ways">Mini-project: a nightly backup, done both ways</a></li>
+</ul></nav>
+<p class="lead">Scheduled work — nightly backups, hourly cleanups, a report every Monday — is handled two ways on Linux. The classic tool is <strong>cron</strong>, dead simple and everywhere. The modern alternative is a <strong>systemd timer</strong>, which pairs a <code>.service</code> with a <code>.timer</code> and gives you logging, dependencies, and catch-up for missed runs. This lesson teaches both and when to reach for each.</p>
+
+<h2 id="cron-the-classic-scheduler">cron: the classic scheduler</h2>
+<p><span class="level beginner">Beginner</span> Each user has a <em>crontab</em> — a table of jobs. You edit it with <code>crontab -e</code>, list it with <code>crontab -l</code>. Every line is five time fields followed by the command.</p>
+<pre><code>crontab -e        # edit your crontab (opens $EDITOR)
+crontab -l        # list current jobs
+crontab -r        # remove ALL your jobs (careful — no confirmation)</code></pre>
+<p>The five fields, left to right:</p>
+<pre><code># ┌───────── minute        (0-59)
+# │ ┌─────── hour          (0-23)
+# │ │ ┌───── day of month  (1-31)
+# │ │ │ ┌─── month         (1-12)
+# │ │ │ │ ┌─ day of week   (0-7, 0 and 7 both = Sunday)
+# │ │ │ │ │
+# * * * * *  command to run</code></pre>
+<table>
+  <thead><tr><th>Schedule</th><th>Meaning</th></tr></thead>
+  <tbody>
+    <tr><td><code>0 2 * * *</code></td><td>Every day at 02:00.</td></tr>
+    <tr><td><code>*/15 * * * *</code></td><td>Every 15 minutes.</td></tr>
+    <tr><td><code>0 9 * * 1-5</code></td><td>09:00 on weekdays (Mon&ndash;Fri).</td></tr>
+    <tr><td><code>30 3 1 * *</code></td><td>03:30 on the 1st of every month.</td></tr>
+    <tr><td><code>0 */6 * * *</code></td><td>Every 6 hours (00:00, 06:00, 12:00, 18:00).</td></tr>
+    <tr><td><code>@reboot</code></td><td>Once, when the machine boots.</td></tr>
+    <tr><td><code>@daily</code> / <code>@hourly</code></td><td>Shorthand for <code>0 0 * * *</code> / <code>0 * * * *</code>.</td></tr>
+  </tbody>
+</table>
+<pre><code># An example crontab
+# Nightly backup at 02:15, log output
+15 2 * * * /opt/scripts/backup.sh &gt;&gt; /var/log/backup.log 2&gt;&amp;1
+
+# Clear the temp cache every 6 hours
+0 */6 * * * find /var/cache/myapp -type f -mtime +1 -delete
+
+# Warm the cache at boot
+@reboot /opt/scripts/warm-cache.sh</code></pre>
+<blockquote class="warn"><strong>Common mistakes with cron:</strong> (1) cron runs with a <em>minimal</em> environment — no <code>~/.bashrc</code>, a bare <code>PATH</code> of usually just <code>/usr/bin:/bin</code>. A script that works at your prompt fails under cron because it cannot find a command. Fix: use absolute paths (<code>/usr/local/bin/node</code>) or set <code>PATH=</code> at the top of the crontab. (2) Jobs run silently — if you do not redirect output to a file, a failing job disappears. Always append <code>&gt;&gt; /var/log/job.log 2&gt;&amp;1</code>. (3) A <code>%</code> in a cron command is special (it means newline) and must be escaped as <code>\%</code>.</blockquote>
+
+<h2 id="systemd-timers-the-modern-alternative">systemd timers: the modern alternative</h2>
+<p><span class="level intermediate">Intermediate</span> A systemd timer is two unit files that share a name: a <code>.service</code> describing <em>what</em> to run, and a <code>.timer</code> describing <em>when</em>. Compared to cron you gain: output captured in the journal automatically, the ability to depend on other units, a <code>Persistent=</code> catch-up for runs missed while the machine was off, and randomised start delays to avoid thundering herds.</p>
+<pre><code># /etc/systemd/system/backup.service  — WHAT to run
+[Unit]
+Description=Nightly backup
+
+[Service]
+Type=oneshot
+ExecStart=/opt/scripts/backup.sh
+User=backup</code></pre>
+<pre><code># /etc/systemd/system/backup.timer  — WHEN to run it
+[Unit]
+Description=Run backup nightly
+
+[Timer]
+OnCalendar=*-*-* 02:15:00     # every day at 02:15
+Persistent=true               # if the machine was off at 02:15, run on next boot
+RandomizedDelaySec=300        # spread the start over a 5-minute window
+
+[Install]
+WantedBy=timers.target</code></pre>
+<p>Enable and inspect it:</p>
+<pre><code>sudo systemctl daemon-reload
+sudo systemctl enable --now backup.timer     # start the timer (not the service)
+systemctl list-timers backup.timer
+# -> NEXT                        LEFT     UNIT          ACTIVATES
+# -> Fri 2026-10-09 02:15:00 UTC 15h left backup.timer  backup.service
+
+systemctl status backup.timer                # is the timer armed?
+sudo systemctl start backup.service          # run the job NOW, on demand
+journalctl -u backup.service --since today   # its output is in the journal</code></pre>
+
+<h3 id="oncalendar-syntax">OnCalendar syntax</h3>
+<p>The <code>OnCalendar=</code> value is more readable than cron's five fields. Test any expression with <code>systemd-analyze calendar</code>:</p>
+<table>
+  <thead><tr><th>OnCalendar</th><th>Meaning</th></tr></thead>
+  <tbody>
+    <tr><td><code>daily</code></td><td>Every day at 00:00.</td></tr>
+    <tr><td><code>hourly</code></td><td>Top of every hour.</td></tr>
+    <tr><td><code>Mon *-*-* 09:00:00</code></td><td>09:00 every Monday.</td></tr>
+    <tr><td><code>*-*-* 02:15:00</code></td><td>02:15 every day.</td></tr>
+    <tr><td><code>*-*-01 03:00:00</code></td><td>03:00 on the 1st of each month.</td></tr>
+    <tr><td><code>*:0/15</code></td><td>Every 15 minutes.</td></tr>
+  </tbody>
+</table>
+<pre><code>systemd-analyze calendar "Mon *-*-* 09:00:00"
+# -> Normalized form: Mon *-*-* 09:00:00
+# -> Next elapse: Mon 2026-10-12 09:00:00 UTC</code></pre>
+
+<h2 id="cron-vs-timer-which-to-use">cron vs timer — which to use</h2>
+<table>
+  <thead><tr><th>Consideration</th><th>cron</th><th>systemd timer</th></tr></thead>
+  <tbody>
+    <tr><td>Setup effort</td><td>One line.</td><td>Two unit files + enable.</td></tr>
+    <tr><td>Output / logging</td><td>You must redirect to a file.</td><td>Captured in the journal automatically.</td></tr>
+    <tr><td>Missed runs (machine off)</td><td>Skipped.</td><td><code>Persistent=true</code> catches up.</td></tr>
+    <tr><td>Dependencies / ordering</td><td>None.</td><td>Full <code>After=</code>/<code>Requires=</code>.</td></tr>
+    <tr><td>Run on demand</td><td>Awkward.</td><td><code>systemctl start x.service</code>.</td></tr>
+  </tbody>
+</table>
+<blockquote class="tip">Rule of thumb: for a quick personal job on your own machine, cron is fine and faster to write. For anything on a managed server — especially if you want logging, catch-up, or to run it manually too — a systemd timer is worth the extra file.</blockquote>
+
+<h2 id="exercises">Exercises</h2>
+<ul>
+  <li>Write cron lines for: every 5 minutes; 06:30 every weekday; the 1st of each quarter (Jan/Apr/Jul/Oct) at midnight.</li>
+  <li>Add a crontab entry that appends the date to a log file every minute, watch it with <code>tail -f</code>, then remove it.</li>
+  <li>Convert that same &ldquo;append the date&rdquo; job into a <code>.service</code> + <code>.timer</code> pair and confirm it with <code>systemctl list-timers</code>.</li>
+  <li>Use <code>systemd-analyze calendar</code> to find the next run time of <code>*-*-* 00/4:00:00</code> and say in words what it means.</li>
+</ul>
+
+<h2 id="mini-project-a-nightly-backup-done-both-ways">Mini-project: a nightly backup, done both ways</h2>
+<p>Schedule the same backup job with cron and with a systemd timer, so you can compare them directly.</p>
+<pre><code># The job itself: /opt/scripts/backup.sh
+#!/usr/bin/env bash
+set -euo pipefail
+dest=/var/backups
+mkdir -p "$dest"
+tar czf "$dest/site-$(date +%F).tar.gz" -C /var/www site
+find "$dest" -name 'site-*.tar.gz' -mtime +7 -delete   # keep a week
+echo "backup complete $(date -Iseconds)"</code></pre>
+<pre><code># Option A — cron (one line, remember to redirect output)
+( crontab -l 2&gt;/dev/null; echo "15 2 * * * /opt/scripts/backup.sh &gt;&gt; /var/log/backup.log 2&gt;&amp;1" ) | crontab -
+crontab -l | tail -1
+# -> 15 2 * * * /opt/scripts/backup.sh &gt;&gt; /var/log/backup.log 2&gt;&amp;1
+
+# Option B — systemd timer (the .service + .timer from above)
+sudo systemctl daemon-reload
+sudo systemctl enable --now backup.timer
+systemctl list-timers backup.timer
+# -> NEXT ... backup.timer backup.service
+
+# Prove the systemd version runs on demand and logs itself
+sudo systemctl start backup.service
+journalctl -u backup.service -n 2
+# -> backup complete 2026-10-08T10:30:00+00:00</code></pre>
+<p>The cron version is one line but silent unless you wired up the redirect; the systemd version took two files but gives you on-demand runs, journald logging, and catch-up for free. That trade-off is the whole decision.</p>
+
+<section class="further"><h2 id="further-reading">Further reading</h2>
+<p>Official documentation for the tools and APIs covered on this page:</p>
+<ul class="further-list"><li><a href="https://man7.org/linux/man-pages/man5/crontab.5.html" target="_blank" rel="noopener">crontab (man) ↗</a></li>
+<li><a href="https://man7.org/linux/man-pages/man5/systemd.timer.5.html" target="_blank" rel="noopener">systemd.timer (man) ↗</a></li></ul></section>
+  <nav class="pager">
+<a class="prev" href="logs.html"><small>Previous</small>🐧 Logs</a>
+<a class="next" href="bash-scripting.html"><small>Next</small>🐧 Bash Scripting Basics</a>
+  </nav>
+</main>
+<button type="button" class="fab top" id="fab-top" aria-label="Back to top">↑ Top</button>
+<div class="banner" id="update-banner" role="status">A new version is available.<button type="button">Reload</button></div>
+<div class="banner" id="offline-banner" role="status">You're offline — showing cached lessons.</div>
+<script src="../app.js" defer></script>
+</body>
+</html>

@@ -1,0 +1,109 @@
+<p class="lead">JavaScript is the behavior layer of the web and the only language browsers run natively. Learn values and functions, the single-threaded event loop, promises and <code>async/await</code>, ES modules, and manipulating the DOM.</p>
+
+<h2>Values, variables, and types</h2>
+<pre><code>let count = 0;          // reassignable, block-scoped
+const name = "Ada";     // not reassignable (use by default)
+// avoid var — it's function-scoped and hoists confusingly
+
+// 7 primitives + objects
+typeof 42;        // "number"
+typeof "hi";      // "string"
+typeof true;      // "boolean"
+typeof undefined; // "undefined"
+typeof null;      // "object"  ← famous historical bug
+typeof {};        // "object"
+typeof [];        // "object"  — use Array.isArray([]) instead</code></pre>
+<blockquote class="warn"><strong>Equality:</strong> use <code>===</code> (strict), never <code>==</code> (coercing). <code>0 == ""</code> and <code>null == undefined</code> are <code>true</code> under <code>==</code>, which causes subtle bugs. <code>===</code> compares type and value with no surprises.</blockquote>
+
+<h2>Functions and closures</h2>
+<pre><code>function add(a, b) { return a + b; }
+const addArrow = (a, b) =&gt; a + b;      // arrow: concise, inherits `this`
+
+// Closures capture their surrounding scope
+function counter() {
+  let n = 0;
+  return () =&gt; ++n;
+}
+const next = counter();
+next(); next();   // 1, 2
+
+// Destructuring + defaults + rest
+const greet = ({ name = "friend", ...rest }) =&gt; `Hi ${name}`;</code></pre>
+
+<h2>Arrays and objects</h2>
+<pre><code>const nums = [1, 2, 3, 4];
+nums.map(n =&gt; n * 2);              // [2,4,6,8]
+nums.filter(n =&gt; n % 2 === 0);    // [2,4]
+nums.reduce((a, n) =&gt; a + n, 0);  // 10
+nums.find(n =&gt; n &gt; 2);            // 3
+
+const user = { id: 1, name: "Ada" };
+const { name } = user;             // destructure
+const copy = { ...user, name: "Bo" };  // spread + override
+Object.entries(user).forEach(([k, v]) =&gt; console.log(k, v));</code></pre>
+
+<h2>The event loop</h2>
+<p><span class="level intermediate">Intermediate</span> JavaScript runs on a single thread. Long synchronous work freezes the UI. Asynchronous work (timers, network, events) is queued and processed when the call stack is empty:</p>
+<pre><code>console.log("1");
+setTimeout(() =&gt; console.log("3 (macrotask)"), 0);
+Promise.resolve().then(() =&gt; console.log("2 (microtask)"));
+console.log("sync");
+// Order: 1, sync, 2, 3  — microtasks (promises) drain before the next macrotask</code></pre>
+
+<h2>Promises and async/await</h2>
+<pre><code>// A promise represents a future value
+async function loadUser(id) {
+  const res = await fetch(`/api/users/${id}`);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+try {
+  const user = await loadUser(1);
+  console.log(user.name);
+} catch (err) {
+  console.error("failed:", err.message);
+}
+
+// Run independent requests concurrently
+const [a, b] = await Promise.all([loadUser(1), loadUser(2)]);</code></pre>
+<blockquote class="warn"><strong>Common mistakes:</strong> (1) forgetting <code>await</code>, so you work with a pending Promise instead of its value. (2) awaiting in a loop when the calls are independent — use <code>Promise.all</code> to parallelize. (3) not checking <code>res.ok</code> — <code>fetch</code> only rejects on network failure, not on a 404/500.</blockquote>
+
+<h2>ES modules</h2>
+<pre><code>// math.js
+export function add(a, b) { return a + b; }
+export const PI = 3.14159;
+export default function main() {}
+
+// app.js
+import main, { add, PI } from "./math.js";
+&lt;script type="module" src="app.js"&gt;&lt;/script&gt;   &lt;!-- in HTML --&gt;</code></pre>
+
+<h2>The DOM</h2>
+<pre><code>const btn = document.querySelector("#save");
+btn.addEventListener("click", (e) =&gt; {
+  e.preventDefault();
+  document.querySelector("#status").textContent = "Saved!";
+});
+
+// Create + insert
+const li = document.createElement("li");
+li.textContent = "New item";
+document.querySelector("ul").append(li);
+
+// Event delegation — one listener for many children
+list.addEventListener("click", (e) =&gt; {
+  const row = e.target.closest("li");
+  if (row) remove(row.dataset.id);
+});</code></pre>
+<blockquote class="tip">Prefer <code>textContent</code> over <code>innerHTML</code> when inserting user data — <code>innerHTML</code> with untrusted strings is an XSS hole. Use event delegation for dynamic lists instead of attaching a listener per item.</blockquote>
+
+<h2>Exercises</h2>
+<ul>
+  <li>Predict the output of the event-loop snippet above, then run it to confirm.</li>
+  <li>Fetch two endpoints concurrently with <code>Promise.all</code> and render the combined result.</li>
+  <li>Build a list where clicking any item removes it, using a single delegated listener.</li>
+</ul>
+
+<h2>Mini-project: a live search box</h2>
+<p>Build an input that fetches <code>/api/search?q=…</code> as the user types, debounced to 150ms, aborts the previous request with <code>AbortController</code>, handles the no-results and error cases, and renders results with <code>textContent</code> (no XSS). This touches events, async, the event loop, and the DOM at once.</p>

@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en" data-base="../">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0d1117">
+<meta name="description" content="Dev Tutorials — Golang, Bun, Web Development, Linux and DevOps, offline-ready.">
+<title>DevOps</title>
+<link rel="manifest" href="../manifest.webmanifest">
+<link rel="icon" href="../icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="../icon-192.png">
+<link rel="stylesheet" href="../app.css">
+<script>/* set theme before paint to avoid flash */(function(){try{var t=localStorage.getItem('tut.theme');document.documentElement.setAttribute('data-theme',t||'dark');}catch(e){document.documentElement.setAttribute('data-theme','dark');}})();</script>
+
+</head>
+<body>
+<header class="nav">
+  <a class="brand" href="../index.html">📚 Dev Tutorials</a>
+  <span class="crumb">DevOps</span>
+  <span class="spacer"></span>
+  <a class="navbtn" href="../search.html">🔎 Search</a>
+  <button class="navbtn" id="install-btn" type="button">⬇️ Install</button>
+  <button class="navbtn" id="theme-btn" type="button" aria-label="Toggle theme">🌙 Dark</button>
+</header>
+<main class="wrap">
+  <h1 class="page-title">🔁 DevOps</h1>
+  <p class="section-tagline">Ship software reliably: Git, CI/CD, containers, Kubernetes, IaC, cloud, and observability.</p>
+  <div class="progress-overall" data-progress-ids="devops/devops-mindset,devops/git-workflows,devops/cicd-concepts,devops/github-actions,devops/docker,devops/docker-compose,devops/kubernetes-basics,devops/reverse-proxies,devops/tls-and-domains,devops/cloud-basics,devops/infrastructure-as-code,devops/monitoring-and-logging,devops/gitops,devops/security-basics,devops/deployment-strategies,devops/incident-response" style="margin:0 0 10px">
+    <div class="bar"><span></span></div>
+    <div class="label">0 / 16 done</div>
+  </div>
+  <ul class="lesson-list">
+    <li><a href="devops-mindset.html" data-id="devops/devops-mindset">
+      <span class="num">01</span>
+      <span class="body"><span class="ttl">The DevOps Mindset</span><br><span class="desc">Culture over tools: feedback loops, shared ownership, automation, and the CALMS/DORA lenses.</span></span>
+      <span class="state"></span>
+    </a></li>
+    <li><a href="git-workflows.html" data-id="devops/git-workflows">
+      <span class="num">02</span>
+      <span class="body"><span class="ttl">Git Workflows</span><br><span class="desc">Branches, commits &amp; PRs, trunk-based vs GitFlow, rebasing, and safe rollbacks.</span></span>
+      <span class="state"></span>
+    </a></li>
+    <li><a href="cicd-concepts.html" data-id="devops/cicd-concepts">
+      <span class="num">03</span>
+      <span class="body"><span class="ttl">CI/CD Concepts</span><br><span class="desc">Continuous integration vs delivery vs deployment, pipelines, artifacts, and environments.</span></span>
+      <span class="state"></span>
+    </a></li>
+    <li><a href="github-actions.html" data-id="devops/github-actions">
+      <span class="num">04</span>
+      <span class="body"><span class="ttl">GitHub Actions</span><br><span class="desc">Workflows, jobs &amp; steps, triggers, matrix builds, secrets, caching, and reusable actions.</span></span>
+      <span class="state"></span>
+    </a></li>
+    <li><a href="docker.html" data-id="devops/docker">
+      <span class="num">05</span>
+      <span class="body"><span class="ttl">Docker</span><br><span class="desc">Images vs containers, Dockerfiles, multi-stage builds &amp; BuildKit, volumes, networks, registries.</span></span>
+      <span class="state"></span>
+    </a></li>
+    <li><a href="docker-compose.html" data-id="devops/docker-compose">
+      <span class="num">06</span>
+      <span class="body"><span class="ttl">Docker Compose</span><br><span class="desc">The compose file, services, networks &amp; volumes, env &amp; profiles, and Compose v2 commands.</span></span>
+      <span class="state"></span>
+    </a></li>
+    <li><a href="kubernetes-basics.html" data-id="devops/kubernetes-basics">
+      <span class="num">07</span>
+      <span class="body"><span class="ttl">Kubernetes Basics</span><br><span class="desc">Cluster anatomy, Pods, Deployments, Services, Ingress, ConfigMaps/Secrets, Helm, autoscaling.</span></span>
+      <span class="state"></span>
+    </a></li>
+    <li><a href="reverse-proxies.html" data-id="devops/reverse-proxies">
+      <span class="num">08</span>
+      <span class="body"><span class="ttl">Reverse Proxies</span><br><span class="desc">Why a reverse proxy, Nginx &amp; HAProxy &amp; Traefik, load balancing, and L4 vs L7.</span></span>
+      <span class="state"></span>
+    </a></li>
+    <li><a href="tls-and-domains.html" data-id="devops/tls-and-domains">
+      <span class="num">09</span>
+      <span class="body"><span class="ttl">TLS &amp; Domains</span><br><span class="desc">DNS records, how TLS works, Let's Encrypt &amp; ACME, certificates, and wiring a domain to a server.</span></span>
+      <span class="state"></span>
+    </a></li>
+    <li><a href="cloud-basics.html" data-id="devops/cloud-basics">
+      <span class="num">10</span>
+      <span class="body"><span class="ttl">Cloud Basics (AWS)</span><br><span class="desc">Regions &amp; AZs, VPC networking, load balancers (ALB/NLB), DNS, and core managed services.</span></span>
+      <span class="state"></span>
+    </a></li>
+    <li><a href="infrastructure-as-code.html" data-id="devops/infrastructure-as-code">
+      <span class="num">11</span>
+      <span class="body"><span class="ttl">Infrastructure as Code</span><br><span class="desc">Terraform providers, the init/plan/apply loop, state &amp; locking, modules, and workspaces.</span></span>
+      <span class="state"></span>
+    </a></li>
+    <li><a href="monitoring-and-logging.html" data-id="devops/monitoring-and-logging">
+      <span class="num">12</span>
+      <span class="body"><span class="ttl">Monitoring &amp; Logging</span><br><span class="desc">The three pillars — metrics, logs, traces — with Prometheus, Grafana, Loki, and OpenTelemetry.</span></span>
+      <span class="state"></span>
+    </a></li>
+    <li><a href="gitops.html" data-id="devops/gitops">
+      <span class="num">13</span>
+      <span class="body"><span class="ttl">GitOps</span><br><span class="desc">Git as the source of truth, pull-based delivery with Flux, and reconciliation loops.</span></span>
+      <span class="state"></span>
+    </a></li>
+    <li><a href="security-basics.html" data-id="devops/security-basics">
+      <span class="num">14</span>
+      <span class="body"><span class="ttl">Security Basics</span><br><span class="desc">Least privilege, secrets management, image scanning, supply-chain, and hardening checklists.</span></span>
+      <span class="state"></span>
+    </a></li>
+    <li><a href="deployment-strategies.html" data-id="devops/deployment-strategies">
+      <span class="num">15</span>
+      <span class="body"><span class="ttl">Deployment Strategies</span><br><span class="desc">Rolling, blue/green, canary, and feature flags — plus how to roll back safely.</span></span>
+      <span class="state"></span>
+    </a></li>
+    <li><a href="incident-response.html" data-id="devops/incident-response">
+      <span class="num">16</span>
+      <span class="body"><span class="ttl">Incident Response</span><br><span class="desc">On-call, severity levels, runbooks, blameless postmortems, and SLOs/error budgets.</span></span>
+      <span class="state"></span>
+    </a></li>
+  </ul>
+</main>
+<button type="button" class="fab top" id="fab-top" aria-label="Back to top">↑ Top</button>
+<div class="banner" id="update-banner" role="status">A new version is available.<button type="button">Reload</button></div>
+<div class="banner" id="offline-banner" role="status">You're offline — showing cached lessons.</div>
+<script src="../app.js" defer></script>
+</body>
+</html>

@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en" data-base="../">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0d1117">
+<meta name="description" content="Dev Tutorials — Golang, Bun, Web Development, Linux and DevOps, offline-ready.">
+<title>Control Flow — Golang</title>
+<link rel="manifest" href="../manifest.webmanifest">
+<link rel="icon" href="../icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="../icon-192.png">
+<link rel="stylesheet" href="../app.css">
+<script>/* set theme before paint to avoid flash */(function(){try{var t=localStorage.getItem('tut.theme');document.documentElement.setAttribute('data-theme',t||'dark');}catch(e){document.documentElement.setAttribute('data-theme','dark');}})();</script>
+
+</head>
+<body class="lesson">
+<header class="nav">
+  <a class="brand" href="../index.html">📚 Dev Tutorials</a>
+  <span class="crumb">Control Flow — Golang</span>
+  <span class="spacer"></span>
+  <a class="navbtn" href="../search.html">🔎 Search</a>
+  <button class="navbtn" id="install-btn" type="button">⬇️ Install</button>
+  <button class="navbtn" id="theme-btn" type="button" aria-label="Toggle theme">🌙 Dark</button>
+</header>
+<main class="wrap lesson-body">
+  <h1 class="page-title">Control Flow</h1>
+  <div class="lesson-tools" data-lesson-id="golang/control-flow">
+    <button id="done-btn" type="button" aria-pressed="false">○ Mark complete</button>
+    <button id="mark-btn" type="button" aria-pressed="false">☆ Bookmark</button>
+    <a class="navbtn" href="index.html" style="margin-left:auto">All Golang lessons →</a>
+  </div>
+<nav class="toc" aria-label="On this page"><strong>On this page</strong><ul>
+<li class="lvl2"><a href="#if-else">if / else</a></li>
+<li class="lvl2"><a href="#for-the-only-loop">for — the only loop</a></li>
+<li class="lvl2"><a href="#switch">switch</a></li>
+<li class="lvl2"><a href="#defer-panic-recover">defer, panic, recover</a></li>
+<li class="lvl2"><a href="#exercises">Exercises</a></li>
+<li class="lvl2"><a href="#mini-project-a-tiny-calculator-repl">Mini-project: a tiny calculator REPL</a></li>
+</ul></nav>
+<p class="lead">Go deliberately has very few control structures: one loop keyword, an <code>if</code> with an init statement, a <code>switch</code> with no fallthrough by default, and <code>defer</code> for cleanup. Fewer forms, fewer surprises.</p>
+
+<h2 id="if-else">if / else</h2>
+<pre><code>if x &gt; 0 {
+	fmt.Println("positive")
+} else if x &lt; 0 {
+	fmt.Println("negative")
+} else {
+	fmt.Println("zero")
+}
+
+// if with an init statement — scopes the variable to the if/else
+if v, ok := m["key"]; ok {
+	fmt.Println("found", v)
+}  // v and ok are out of scope here</code></pre>
+<blockquote class="tip">The <code>if err := doThing(); err != nil { return err }</code> pattern is everywhere in Go. The init statement keeps <code>err</code> scoped to the check, so it can't leak into the rest of the function.</blockquote>
+
+<h2 id="for-the-only-loop">for — the only loop</h2>
+<pre><code>// Classic three-clause
+for i := 0; i &lt; 5; i++ { }
+
+// While-style
+for n &lt; 100 { n *= 2 }
+
+// Infinite (break to exit)
+for { if done() { break } }
+
+// Range over slice, map, string, channel
+for i, v := range []string{"a", "b"} { fmt.Println(i, v) }
+for key, val := range myMap { }
+for _, r := range "héllo" { }   // r is a rune (code point), not a byte
+
+// Range over an integer (Go 1.22+)
+for i := range 3 { fmt.Println(i) }  // 0 1 2</code></pre>
+<blockquote class="warn"><strong>Common mistake:</strong> ranging a string with index arithmetic expecting characters. A <code>string</code> is UTF-8 <em>bytes</em>; <code>len(s)</code> is byte length and <code>s[i]</code> is a byte. Use <code>range</code> (which yields runes) or <code>[]rune(s)</code> when you need code points.</blockquote>
+
+<h2 id="switch">switch</h2>
+<pre><code>// No automatic fallthrough — each case breaks implicitly
+switch day {
+case "Sat", "Sun":
+	fmt.Println("weekend")
+default:
+	fmt.Println("weekday")
+}
+
+// Expression-less switch = clean if/else chain
+switch {
+case score &gt;= 90:
+	grade = "A"
+case score &gt;= 80:
+	grade = "B"
+default:
+	grade = "F"
+}
+
+// Type switch (with interfaces)
+switch v := any.(type) {
+case int:
+	fmt.Println("int", v)
+case string:
+	fmt.Println("string", v)
+}</code></pre>
+<p>Use the explicit <code>fallthrough</code> keyword only when you really want the next case to run too — it's rare.</p>
+
+<h2 id="defer-panic-recover">defer, panic, recover</h2>
+<p><span class="level intermediate">Intermediate</span> <code>defer</code> schedules a call to run when the surrounding function returns, in LIFO order. It's the idiomatic way to guarantee cleanup:</p>
+<pre><code>f, err := os.Open("data.txt")
+if err != nil { return err }
+defer f.Close()   // runs no matter how the function exits
+// ... use f ...</code></pre>
+<pre><code>// defer sees the final named return value — useful for wrapping errors
+func process() (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("recovered: %v", r)
+		}
+	}()
+	mightPanic()
+	return nil
+}</code></pre>
+<blockquote class="warn"><strong>Common mistake:</strong> <code>defer</code> inside a loop. Deferred calls stack up until the <em>function</em> returns, not the loop iteration — opening 10,000 files in a loop with <code>defer f.Close()</code> keeps all 10,000 open. Close explicitly inside the loop, or wrap each iteration in its own function.</blockquote>
+<p>Reserve <code>panic</code>/<code>recover</code> for truly unrecoverable situations and for stopping a goroutine from crashing a server — not for ordinary error handling, which uses returned <code>error</code> values (next lesson).</p>
+
+<h2 id="exercises">Exercises</h2>
+<ul>
+  <li>Rewrite an if/else-if ladder grading scores into an expression-less <code>switch</code>.</li>
+  <li>Count bytes vs runes in <code>"café"</code> and explain the difference.</li>
+  <li>Write a function that opens three files and closes each one correctly inside a loop (not with a leaking <code>defer</code>).</li>
+</ul>
+
+<h2 id="mini-project-a-tiny-calculator-repl">Mini-project: a tiny calculator REPL</h2>
+<p>Loop forever reading <code>"&lt;num&gt; &lt;op&gt; &lt;num&gt;"</code> lines; use a <code>switch</code> on the operator; handle divide-by-zero without crashing; <code>break</code> on the input <code>quit</code>. Wrap the parse in <code>recover</code> so malformed input prints an error instead of killing the loop.</p>
+
+<section class="further"><h2 id="further-reading">Further reading</h2>
+<p>Official documentation for the tools and APIs covered on this page:</p>
+<ul class="further-list"><li><a href="https://go.dev/tour/flowcontrol/1" target="_blank" rel="noopener">Tour of Go: Flow control ↗</a></li>
+<li><a href="https://go.dev/blog/defer-panic-and-recover" target="_blank" rel="noopener">Defer, Panic, Recover ↗</a></li></ul></section>
+  <nav class="pager">
+<a class="prev" href="variables-types-functions.html"><small>Previous</small>🐹 Variables, Types &amp; Functions</a>
+<a class="next" href="structs-interfaces-methods.html"><small>Next</small>🐹 Structs, Interfaces &amp; Methods</a>
+  </nav>
+</main>
+<button type="button" class="fab top" id="fab-top" aria-label="Back to top">↑ Top</button>
+<div class="banner" id="update-banner" role="status">A new version is available.<button type="button">Reload</button></div>
+<div class="banner" id="offline-banner" role="status">You're offline — showing cached lessons.</div>
+<script src="../app.js" defer></script>
+</body>
+</html>

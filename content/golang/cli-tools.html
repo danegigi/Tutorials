@@ -1,0 +1,84 @@
+<p class="lead">Go compiles to a single static binary, which makes it a superb language for command-line tools. Parse flags with the stdlib <code>flag</code> package, structure subcommands, set exit codes, and read stdin — then ship one file that runs anywhere.</p>
+
+<h2>Flags with the standard library</h2>
+<pre><code>package main
+
+import (
+	"flag"
+	"fmt"
+)
+
+func main() {
+	name := flag.String("name", "world", "who to greet")
+	count := flag.Int("n", 1, "number of greetings")
+	upper := flag.Bool("upper", false, "uppercase output")
+	flag.Parse()
+
+	msg := fmt.Sprintf("Hello, %s!", *name)
+	if *upper { msg = strings.ToUpper(msg) }
+	for i := 0; i &lt; *count; i++ { fmt.Println(msg) }
+}</code></pre>
+<pre><code>go run . -name Ada -n 2 -upper
+# → HELLO, ADA!
+# → HELLO, ADA!
+
+go run . -h          # flag auto-generates usage from the descriptions</code></pre>
+<p>Positional arguments after the flags are available via <code>flag.Args()</code> (and <code>flag.Arg(0)</code>).</p>
+
+<h2>Exit codes</h2>
+<p><span class="level beginner">Beginner</span> A CLI signals success/failure through its exit code — <code>0</code> success, non-zero failure. Shell scripts and CI depend on it.</p>
+<pre><code>func main() {
+	if err := run(); err != nil {
+		fmt.Fprintln(os.Stderr, "error:", err)   // errors go to STDERR
+		os.Exit(1)
+	}
+}
+func run() error { /* real work; return error */ return nil }</code></pre>
+<blockquote class="warn"><strong>Common mistakes:</strong> (1) printing errors to stdout instead of stderr — it corrupts piped output. (2) calling <code>os.Exit</code> deep in the code, which skips every <code>defer</code>. Keep <code>os.Exit</code> in <code>main</code> only, and return errors up to it.</blockquote>
+
+<h2>Reading stdin (pipe-friendly tools)</h2>
+<pre><code>// Behave like a Unix filter: read stdin, transform, write stdout
+scanner := bufio.NewScanner(os.Stdin)
+for scanner.Scan() {
+	fmt.Println(strings.ToUpper(scanner.Text()))
+}
+// echo "hi" | go run .   → HI
+// cat file.txt | go run .  works too</code></pre>
+
+<h2>Subcommands</h2>
+<p><span class="level intermediate">Intermediate</span> For a tool with multiple verbs (<code>git</code>-style), give each its own <code>FlagSet</code>:</p>
+<pre><code>func main() {
+	if len(os.Args) &lt; 2 {
+		fmt.Fprintln(os.Stderr, "usage: tool &lt;add|list&gt; ...")
+		os.Exit(2)
+	}
+	switch os.Args[1] {
+	case "add":
+		fs := flag.NewFlagSet("add", flag.ExitOnError)
+		prio := fs.Int("p", 1, "priority")
+		fs.Parse(os.Args[2:])
+		add(fs.Arg(0), *prio)
+	case "list":
+		list()
+	default:
+		fmt.Fprintf(os.Stderr, "unknown command %q\n", os.Args[1])
+		os.Exit(2)
+	}
+}</code></pre>
+<blockquote class="tip">For large CLIs with nested commands, completion, and help, the community standard is <a href="https://github.com/spf13/cobra" target="_blank" rel="noopener">Cobra</a> (used by kubectl, Hugo, GitHub CLI). Reach for it when the stdlib <code>flag</code> plumbing starts to hurt — not before.</blockquote>
+
+<h2>Shipping the binary</h2>
+<pre><code>go build -o tool .                 # build for your platform
+GOOS=linux GOARCH=amd64 go build -o tool-linux .   # cross-compile
+go install .                       # install into $GOBIN for use anywhere</code></pre>
+<p>The result is one self-contained executable with no runtime to install — copy it to a server and run it.</p>
+
+<h2>Exercises</h2>
+<ul>
+  <li>Write a <code>wc</code>-style tool: count lines/words/bytes of stdin, with <code>-l</code>/<code>-w</code>/<code>-c</code> flags.</li>
+  <li>Make it exit <code>1</code> and print to stderr when given a path that doesn't exist.</li>
+  <li>Add a <code>version</code> subcommand that prints a build-time version string.</li>
+</ul>
+
+<h2>Mini-project: a note-taking CLI</h2>
+<p>Build <code>notes</code> with subcommands <code>add "text"</code>, <code>list</code>, <code>done &lt;id&gt;</code>, and <code>rm &lt;id&gt;</code>, persisting to a JSON file in <code>$HOME</code>. Use per-subcommand <code>FlagSet</code>s, correct exit codes, errors to stderr, and cross-compile it for Linux and macOS. You now have a real tool you'd actually use.</p>

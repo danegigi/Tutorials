@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en" data-base="../">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0d1117">
+<meta name="description" content="Dev Tutorials — Golang, Bun, Web Development, Linux and DevOps, offline-ready.">
+<title>Deployment Basics — Golang</title>
+<link rel="manifest" href="../manifest.webmanifest">
+<link rel="icon" href="../icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="../icon-192.png">
+<link rel="stylesheet" href="../app.css">
+<script>/* set theme before paint to avoid flash */(function(){try{var t=localStorage.getItem('tut.theme');document.documentElement.setAttribute('data-theme',t||'dark');}catch(e){document.documentElement.setAttribute('data-theme','dark');}})();</script>
+
+</head>
+<body class="lesson">
+<header class="nav">
+  <a class="brand" href="../index.html">📚 Dev Tutorials</a>
+  <span class="crumb">Deployment Basics — Golang</span>
+  <span class="spacer"></span>
+  <a class="navbtn" href="../search.html">🔎 Search</a>
+  <button class="navbtn" id="install-btn" type="button">⬇️ Install</button>
+  <button class="navbtn" id="theme-btn" type="button" aria-label="Toggle theme">🌙 Dark</button>
+</header>
+<main class="wrap lesson-body">
+  <h1 class="page-title">Deployment Basics</h1>
+  <div class="lesson-tools" data-lesson-id="golang/deployment-basics">
+    <button id="done-btn" type="button" aria-pressed="false">○ Mark complete</button>
+    <button id="mark-btn" type="button" aria-pressed="false">☆ Bookmark</button>
+    <a class="navbtn" href="index.html" style="margin-left:auto">All Golang lessons →</a>
+  </div>
+<nav class="toc" aria-label="On this page"><strong>On this page</strong><ul>
+<li class="lvl2"><a href="#building-for-release">Building for release</a></li>
+<li class="lvl2"><a href="#cross-compilation">Cross-compilation</a></li>
+<li class="lvl2"><a href="#a-minimal-docker-image">A minimal Docker image</a></li>
+<li class="lvl2"><a href="#configuration-via-environment">Configuration via environment</a></li>
+<li class="lvl2"><a href="#running-as-a-systemd-service">Running as a systemd service</a></li>
+<li class="lvl2"><a href="#graceful-shutdown">Graceful shutdown</a></li>
+<li class="lvl2"><a href="#exercises">Exercises</a></li>
+<li class="lvl2"><a href="#mini-project-ship-the-todo-api">Mini-project: ship the TODO API</a></li>
+</ul></nav>
+<p class="lead">A Go program compiles to one static binary with no runtime dependencies — which makes deployment unusually simple. Learn optimized builds, cross-compilation, tiny Docker images, and running as a managed service.</p>
+
+<h2 id="building-for-release">Building for release</h2>
+<pre><code># Strip debug info for a smaller binary
+go build -ldflags="-s -w" -o app .
+
+# Embed a version at build time
+go build -ldflags="-X main.version=$(git describe --tags)" -o app .</code></pre>
+<pre><code>// main.go
+var version = "dev"   // overwritten by -ldflags -X
+func main() { fmt.Println("version:", version) }</code></pre>
+
+<h2 id="cross-compilation">Cross-compilation</h2>
+<p><span class="level beginner">Beginner</span> Set <code>GOOS</code> and <code>GOARCH</code> to build for any target from any machine — no cross-toolchain to install:</p>
+<pre><code>GOOS=linux   GOARCH=amd64 go build -o app-linux-amd64 .
+GOOS=linux   GOARCH=arm64 go build -o app-linux-arm64 .
+GOOS=darwin  GOARCH=arm64 go build -o app-macos .
+GOOS=windows GOARCH=amd64 go build -o app.exe .
+
+go tool dist list    # every supported GOOS/GOARCH pair</code></pre>
+<blockquote class="warn"><strong>Common gotcha:</strong> cross-compiling fails or produces a dynamically-linked binary when your code uses cgo (C bindings — e.g. the <code>mattn/go-sqlite3</code> driver). Set <code>CGO_ENABLED=0</code> for a pure-Go static build, or use a pure-Go driver (e.g. <code>modernc.org/sqlite</code>) so cross-compilation stays trivial.</blockquote>
+
+<h2 id="a-minimal-docker-image">A minimal Docker image</h2>
+<p><span class="level intermediate">Intermediate</span> Multi-stage builds compile in a full Go image, then copy just the binary into a tiny base — a few MB total:</p>
+<pre><code># Dockerfile
+FROM golang:1.23 AS build
+WORKDIR /src
+COPY go.mod go.sum ./
+RUN go mod download                 # cached layer: deps change rarely
+COPY . .
+RUN CGO_ENABLED=0 go build -ldflags="-s -w" -o /app .
+
+FROM gcr.io/distroless/static-debian12   # no shell, no package manager
+COPY --from=build /app /app
+USER nonroot:nonroot
+ENTRYPOINT ["/app"]</code></pre>
+<pre><code>docker build -t myapp .
+docker run -p 8080:8080 myapp</code></pre>
+<blockquote class="tip">Order the Dockerfile so <code>go.mod</code>/<code>go.sum</code> and <code>go mod download</code> come <em>before</em> <code>COPY . .</code>. Then a code change doesn't invalidate the dependency-download layer, and rebuilds are seconds instead of minutes.</blockquote>
+
+<h2 id="configuration-via-environment">Configuration via environment</h2>
+<pre><code>port := os.Getenv("PORT")
+if port == "" { port = "8080" }      // sensible default
+dsn := os.Getenv("DATABASE_URL")     // never hard-code secrets</code></pre>
+<p>Twelve-factor style: read config from the environment, keep secrets out of the image, and inject them at runtime (Compose env, Kubernetes Secrets, or your platform's secret store).</p>
+
+<h2 id="running-as-a-systemd-service">Running as a systemd service</h2>
+<p><span class="level intermediate">Intermediate</span> On a plain Linux server, systemd keeps your binary running and restarts it on crash or reboot:</p>
+<pre><code># /etc/systemd/system/myapp.service
+[Unit]
+Description=My Go App
+After=network.target
+
+[Service]
+ExecStart=/usr/local/bin/myapp
+Restart=always
+Environment=PORT=8080
+User=myapp
+
+[Install]
+WantedBy=multi-user.target</code></pre>
+<pre><code>sudo systemctl daemon-reload
+sudo systemctl enable --now myapp
+sudo systemctl status myapp
+journalctl -u myapp -f           # follow its logs</code></pre>
+
+<h2 id="graceful-shutdown">Graceful shutdown</h2>
+<pre><code>// Drain in-flight requests on SIGTERM instead of dropping them
+srv := &amp;http.Server{Addr: ":8080", Handler: mux}
+go srv.ListenAndServe()
+
+stop := make(chan os.Signal, 1)
+signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
+&lt;-stop
+
+ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+defer cancel()
+srv.Shutdown(ctx)                // waits for active requests, then exits</code></pre>
+
+<h2 id="exercises">Exercises</h2>
+<ul>
+  <li>Build your app for Linux/arm64 with <code>CGO_ENABLED=0</code> and confirm it's statically linked (<code>file app</code>).</li>
+  <li>Write the multi-stage Dockerfile and compare the image size to the full <code>golang</code> base.</li>
+  <li>Add SIGTERM graceful shutdown and verify an in-flight request completes during a redeploy.</li>
+</ul>
+
+<h2 id="mini-project-ship-the-todo-api">Mini-project: ship the TODO API</h2>
+<p>Take the SQLite-backed TODO API, switch to a pure-Go SQLite driver so <code>CGO_ENABLED=0</code> works, add graceful shutdown and env-based config, build a distroless Docker image, and write a systemd unit for the non-container path. You've now taken one program from <code>go run</code> to a deployable, restart-safe service.</p>
+
+<section class="further"><h2 id="further-reading">Further reading</h2>
+<p>Official documentation for the tools and APIs covered on this page:</p>
+<ul class="further-list"><li><a href="https://pkg.go.dev/cmd/go#hdr-Compile_packages_and_dependencies" target="_blank" rel="noopener">go build ↗</a></li>
+<li><a href="https://hub.docker.com/_/golang" target="_blank" rel="noopener">Deploying Go (official Docker image) ↗</a></li></ul></section>
+  <nav class="pager">
+<a class="prev" href="cli-tools.html"><small>Previous</small>🐹 Building CLI Tools</a>
+<a class="next" href="../bun/what-is-bun.html"><small>Next</small>🥟 What Bun Is &amp; When to Use It</a>
+  </nav>
+</main>
+<button type="button" class="fab top" id="fab-top" aria-label="Back to top">↑ Top</button>
+<div class="banner" id="update-banner" role="status">A new version is available.<button type="button">Reload</button></div>
+<div class="banner" id="offline-banner" role="status">You're offline — showing cached lessons.</div>
+<script src="../app.js" defer></script>
+</body>
+</html>

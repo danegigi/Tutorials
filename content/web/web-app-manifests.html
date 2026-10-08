@@ -1,0 +1,72 @@
+<p class="lead">The web app manifest is a JSON file that tells the browser how to present your app when installed: its name, icons, colors, launch URL, and display mode. It's small, but every field changes the installed experience.</p>
+
+<h2>A complete manifest</h2>
+<pre><code>// manifest.webmanifest  (served as application/manifest+json)
+{
+  "name": "Dev Tutorials",
+  "short_name": "Tutorials",
+  "description": "Offline-ready tutorials for Go, Bun, Web, Linux, DevOps.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0d1117",
+  "theme_color": "#0d1117",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Golang", "url": "./golang/index.html" },
+    { "name": "DevOps", "url": "./devops/index.html" }
+  ]
+}</code></pre>
+<p>This is the actual manifest for this tutorial (trimmed). Link it from every page: <code>&lt;link rel="manifest" href="/manifest.webmanifest"&gt;</code>.</p>
+
+<h2>What each field controls</h2>
+<table>
+  <thead><tr><th>Field</th><th>Effect</th></tr></thead>
+  <tbody>
+    <tr><td><code>name</code></td><td>Full name on the install dialog and splash screen.</td></tr>
+    <tr><td><code>short_name</code></td><td>Label under the home-screen icon (keep ≤12 chars).</td></tr>
+    <tr><td><code>start_url</code></td><td>What opens when the icon is tapped. Add <code>?source=pwa</code> to measure installs.</td></tr>
+    <tr><td><code>scope</code></td><td>URLs that stay "in" the app; outside links open a browser.</td></tr>
+    <tr><td><code>display</code></td><td><code>standalone</code> (no browser UI), <code>fullscreen</code>, <code>minimal-ui</code>, or <code>browser</code>.</td></tr>
+    <tr><td><code>theme_color</code></td><td>Toolbar/status-bar color of the installed app.</td></tr>
+    <tr><td><code>background_color</code></td><td>Splash-screen background while the app loads.</td></tr>
+    <tr><td><code>icons</code></td><td>Home-screen/launcher icons at required sizes.</td></tr>
+    <tr><td><code>shortcuts</code></td><td>Long-press jump actions on the installed icon.</td></tr>
+  </tbody>
+</table>
+
+<h2>Icons: sizes and maskable</h2>
+<p><span class="level intermediate">Intermediate</span> You need at least <strong>192×192</strong> and <strong>512×512</strong> PNGs. An SVG with <code>"sizes": "any"</code> is a nice extra. Then there's the <code>maskable</code> purpose:</p>
+<pre><code>{ "src": "icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }</code></pre>
+<blockquote class="warn"><strong>Maskable icons</strong> let Android crop your icon into circles, squircles, and rounded squares without clipping content. Keep the important part inside the central <strong>80% "safe zone"</strong> and fill the whole canvas (no transparency around the edges) — a normal icon used as maskable gets its corners chopped off. Test designs at <a href="https://maskable.app/" target="_blank" rel="noopener">maskable.app</a>.</blockquote>
+
+<h2>Display modes</h2>
+<table>
+  <thead><tr><th>Mode</th><th>Looks like</th></tr></thead>
+  <tbody>
+    <tr><td><code>standalone</code></td><td>Own window, app icon, no address bar — the usual choice.</td></tr>
+    <tr><td><code>fullscreen</code></td><td>No system UI at all — games, kiosks.</td></tr>
+    <tr><td><code>minimal-ui</code></td><td>Standalone + minimal back/reload controls.</td></tr>
+    <tr><td><code>browser</code></td><td>A normal tab (not really "installed").</td></tr>
+  </tbody>
+</table>
+
+<h2>Validating</h2>
+<pre><code># DevTools → Application → Manifest shows parsed fields + icon previews
+#   and lists installability errors ("no matching icon", bad start_url, etc.)</code></pre>
+<blockquote class="warn"><strong>Common mistakes:</strong> (1) wrong MIME type — serve <code>.webmanifest</code> as <code>application/manifest+json</code> or some browsers ignore it. (2) <code>start_url</code> outside <code>scope</code> — install silently fails. (3) relative paths that resolve wrong depending on which page linked the manifest; use paths relative to the manifest's own location or absolute from root.</blockquote>
+
+<h2>Exercises</h2>
+<ul>
+  <li>Write a manifest with name, two icon sizes, <code>start_url</code>, and <code>display: standalone</code>; verify in the DevTools Manifest panel.</li>
+  <li>Add a maskable icon and confirm (in the panel's preview) nothing important is clipped.</li>
+  <li>Add two <code>shortcuts</code> and long-press the installed icon to use them.</li>
+</ul>
+
+<h2>Mini-project: a themed installable app</h2>
+<p>Author a manifest for an app of yours with a matching <code>theme_color</code>/<code>background_color</code>, a proper icon set including a maskable variant, and 2–3 shortcuts to key routes. Install it on desktop and (if possible) a phone, and confirm the splash screen, window chrome color, and icon all look right.</p>

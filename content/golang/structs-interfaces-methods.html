@@ -1,0 +1,91 @@
+<p class="lead">Go has no classes. Instead you compose <strong>structs</strong>, attach <strong>methods</strong> to them, and satisfy <strong>interfaces</strong> implicitly. Add <strong>generics</strong> and you have everything you need for reusable, type-safe code.</p>
+
+<h2>Structs and methods</h2>
+<pre><code>type Account struct {
+	Owner   string
+	balance int   // lowercase = unexported (package-private)
+}
+
+// Value receiver: operates on a copy
+func (a Account) Balance() int { return a.balance }
+
+// Pointer receiver: can mutate the original
+func (a *Account) Deposit(n int) { a.balance += n }
+
+acc := Account{Owner: "Ada"}
+acc.Deposit(100)             // Go auto-takes the address
+fmt.Println(acc.Balance())   // → 100</code></pre>
+<blockquote class="tip"><strong>Pick one receiver style per type.</strong> If any method needs a pointer receiver (to mutate, or because the struct is large), use pointer receivers for all of them. Mixing confuses callers and the method set rules.</blockquote>
+
+<h2>Composition over inheritance</h2>
+<p><span class="level intermediate">Intermediate</span> Go embeds structs to reuse behavior — the embedded type's fields and methods are promoted:</p>
+<pre><code>type Timestamps struct {
+	CreatedAt, UpdatedAt time.Time
+}
+type User struct {
+	Timestamps        // embedded (no field name)
+	Name string
+}
+
+u := User{Name: "Bo"}
+u.CreatedAt = time.Now()   // promoted field, no u.Timestamps.CreatedAt needed</code></pre>
+
+<h2>Interfaces are satisfied implicitly</h2>
+<p>An interface is a set of method signatures. A type satisfies it just by having those methods — no <code>implements</code> keyword, no declaration linking them. This decoupling is central to Go's design.</p>
+<pre><code>type Shape interface {
+	Area() float64
+}
+
+type Circle struct{ R float64 }
+func (c Circle) Area() float64 { return math.Pi * c.R * c.R }
+
+type Rect struct{ W, H float64 }
+func (r Rect) Area() float64 { return r.W * r.H }
+
+// Both satisfy Shape automatically
+shapes := []Shape{Circle{2}, Rect{3, 4}}
+for _, s := range shapes { fmt.Printf("%.2f\n", s.Area()) }</code></pre>
+<p>The canonical example is the standard library's <code>io.Writer</code> — one method, <code>Write([]byte) (int, error)</code> — satisfied by files, network connections, buffers, HTTP responses, and <code>os.Stdout</code> alike. Accept the interface, and your code works with all of them.</p>
+
+<h3>The empty interface and <code>any</code></h3>
+<pre><code>// any (alias for interface{}) holds a value of any type
+func describe(v any) {
+	switch x := v.(type) {
+	case int:    fmt.Println("int:", x)
+	case string: fmt.Println("string:", x)
+	default:     fmt.Printf("%T: %v\n", x, x)
+	}
+}</code></pre>
+<blockquote class="warn"><strong>Common mistake:</strong> reaching for <code>any</code> to make something "flexible". It throws away compile-time type safety and forces type assertions everywhere. Prefer a small purposeful interface, or generics (below), and keep <code>any</code> for genuinely heterogeneous data like decoded JSON.</blockquote>
+
+<h2>Generics</h2>
+<p><span class="level advanced">Advanced</span> Since Go 1.18, functions and types can be parameterized by type, constrained by interfaces:</p>
+<pre><code>// A type parameter T constrained to comparable
+func Index[T comparable](s []T, target T) int {
+	for i, v := range s {
+		if v == target { return i }
+	}
+	return -1
+}
+
+Index([]int{3, 5, 7}, 5)        // → 1
+Index([]string{"a", "b"}, "b")  // → 1
+
+// Constraints with the constraints-style union
+type Number interface { ~int | ~int64 | ~float64 }
+func Sum[T Number](xs []T) T {
+	var total T
+	for _, x := range xs { total += x }
+	return total
+}</code></pre>
+<blockquote class="tip">Don't reach for generics first. If a plain function or an interface does the job clearly, use that. Generics shine for container-like code (collections, map/filter helpers) where the logic is identical across types.</blockquote>
+
+<h2>Exercises</h2>
+<ul>
+  <li>Define a <code>Stringer</code> (<code>String() string</code>) on a struct and watch <code>fmt.Println</code> use it automatically.</li>
+  <li>Write a function that accepts <code>io.Writer</code> and works with both a file and a <code>bytes.Buffer</code>.</li>
+  <li>Implement generic <code>Map[T, U any](s []T, f func(T) U) []U</code> and use it to turn <code>[]int</code> into <code>[]string</code>.</li>
+</ul>
+
+<h2>Mini-project: a shape registry</h2>
+<p>Define a <code>Shape</code> interface with <code>Area()</code> and <code>Perimeter()</code>. Implement <code>Circle</code>, <code>Rect</code>, <code>Triangle</code>. Write <code>TotalArea(shapes []Shape) float64</code> and a generic <code>Max[T constraints.Ordered]</code> helper to find the largest shape by area — combining interfaces and generics in one small program.</p>

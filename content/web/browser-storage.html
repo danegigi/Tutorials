@@ -1,0 +1,69 @@
+<p class="lead">The browser offers several ways to persist data on the client. Each has different size limits, APIs, and lifetimes. Choosing the right one — and knowing what <em>not</em> to store — is the whole lesson.</p>
+
+<h2>The options at a glance</h2>
+<table>
+  <thead><tr><th>Mechanism</th><th>Size</th><th>API</th><th>Lifetime</th><th>Best for</th></tr></thead>
+  <tbody>
+    <tr><td><code>localStorage</code></td><td>~5–10 MB</td><td>Sync, strings</td><td>Until cleared</td><td>Small prefs, flags, tokens (with care)</td></tr>
+    <tr><td><code>sessionStorage</code></td><td>~5 MB</td><td>Sync, strings</td><td>Per tab</td><td>Transient per-tab state</td></tr>
+    <tr><td>Cookies</td><td>~4 KB</td><td>Sync, sent to server</td><td>Set by expiry</td><td>Server-read auth/session</td></tr>
+    <tr><td>IndexedDB</td><td>Large (quota-based)</td><td>Async, structured</td><td>Until cleared</td><td>Offline data, big datasets</td></tr>
+    <tr><td>Cache API</td><td>Large (quota-based)</td><td>Async, Response objects</td><td>Until cleared</td><td>Offline assets (service workers)</td></tr>
+  </tbody>
+</table>
+
+<h2>localStorage &amp; sessionStorage</h2>
+<p><span class="level beginner">Beginner</span> Simple key→string stores. Serialize objects with JSON yourself.</p>
+<pre><code>// Store
+localStorage.setItem("theme", "dark");
+localStorage.setItem("prefs", JSON.stringify({ fontSize: 16 }));
+
+// Read (returns null if absent)
+const theme = localStorage.getItem("theme");
+const prefs = JSON.parse(localStorage.getItem("prefs") || "{}");
+
+localStorage.removeItem("theme");
+localStorage.clear();
+
+// React to changes from OTHER tabs
+window.addEventListener("storage", (e) =&gt; {
+  if (e.key === "theme") applyTheme(e.newValue);
+});</code></pre>
+<blockquote class="warn"><strong>Common mistakes:</strong> (1) storing non-strings — <code>setItem("x", {a:1})</code> saves the string <code>"[object Object]"</code>. Always <code>JSON.stringify</code>. (2) Assuming it's always available — it throws in private mode on some browsers and when quota is exceeded, so wrap writes in <code>try/catch</code>. (3) It's <em>synchronous</em> and blocks the main thread; don't put megabytes in it.</blockquote>
+<p>This very PWA uses <code>localStorage</code> for your theme choice, completed lessons, and bookmarks — all small, all per-device.</p>
+
+<h2>Cookies</h2>
+<p><span class="level intermediate">Intermediate</span> Cookies are automatically sent to the server on every request to their domain — which is why they're used for sessions, and why they need security flags:</p>
+<pre><code>// Server sets them (not JS) for auth:
+Set-Cookie: session=abc; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=3600</code></pre>
+<blockquote class="warn"><strong>HttpOnly</strong> cookies cannot be read by JavaScript — this is the point: it protects session tokens from XSS theft. Store auth tokens in HttpOnly cookies set by the server, <em>not</em> in <code>localStorage</code>, which any injected script can read.</blockquote>
+
+<h2>IndexedDB</h2>
+<p><span class="level intermediate">Intermediate</span> A real transactional, indexed, asynchronous database in the browser — the right tool for offline-first apps storing lots of structured records. The raw API is verbose; most apps wrap it with a tiny library like <a href="https://github.com/jakearchibald/idb" target="_blank" rel="noopener">idb</a>.</p>
+<pre><code>const db = await openDB();   // promisified wrapper
+await db.put("todos", { id: 1, text: "Buy milk", done: false });
+const todo = await db.get("todos", 1);
+const all = await db.getAll("todos");
+await db.delete("todos", 1);</code></pre>
+
+<h2>Cache API</h2>
+<p>Stores whole <code>Request</code>/<code>Response</code> pairs — the storage layer service workers use to make pages work offline (covered in the Service Workers lesson):</p>
+<pre><code>const cache = await caches.open("v1");
+await cache.add("/styles.css");            // fetch + store
+const hit = await cache.match("/styles.css");  // serve from cache</code></pre>
+
+<h2>Checking your quota</h2>
+<pre><code>const { usage, quota } = await navigator.storage.estimate();
+console.log(`${(usage/1e6).toFixed(1)} MB of ${(quota/1e6).toFixed(0)} MB used`);
+// Ask the browser not to evict your data under pressure:
+await navigator.storage.persist();</code></pre>
+
+<h2>Exercises</h2>
+<ul>
+  <li>Persist a theme toggle in <code>localStorage</code> and sync it across two tabs with the <code>storage</code> event.</li>
+  <li>Wrap a <code>localStorage</code> write in <code>try/catch</code> and handle the quota-exceeded / private-mode case.</li>
+  <li>Store a list of todos in IndexedDB (via <code>idb</code>) and read them all back.</li>
+</ul>
+
+<h2>Mini-project: an offline notes app</h2>
+<p>Build a notes app that saves each note to IndexedDB (so it survives reloads and works offline), keeps the UI theme and sort order in <code>localStorage</code>, and shows a storage-usage meter via <code>navigator.storage.estimate()</code>. Deliberately keep any auth token out of <code>localStorage</code> and note why.</p>

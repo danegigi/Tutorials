@@ -1,0 +1,79 @@
+<p class="lead">Responsive design means one layout that adapts from a 360px phone to a 4K monitor. The tools: the viewport meta tag, fluid units, media and container queries, and responsive images. Build mobile-first and let layouts grow.</p>
+
+<h2>The viewport (prerequisite)</h2>
+<pre><code>&lt;meta name="viewport" content="width=device-width, initial-scale=1"&gt;</code></pre>
+<blockquote class="warn">Without this tag, mobile browsers assume a ~980px desktop canvas and shrink the page to fit — your careful mobile layout never activates. It's the single most common reason "my responsive CSS isn't working on my phone".</blockquote>
+
+<h2>Fluid units</h2>
+<table>
+  <thead><tr><th>Unit</th><th>Relative to</th><th>Use for</th></tr></thead>
+  <tbody>
+    <tr><td><code>%</code></td><td>Parent size</td><td>Widths within a container</td></tr>
+    <tr><td><code>rem</code></td><td>Root font size</td><td>Spacing, type (scales with user prefs)</td></tr>
+    <tr><td><code>vw</code>/<code>vh</code></td><td>Viewport</td><td>Full-bleed sections, hero heights</td></tr>
+    <tr><td><code>ch</code></td><td>Character width</td><td>Readable line length (<code>max-width: 65ch</code>)</td></tr>
+    <tr><td><code>clamp()</code></td><td>min, preferred, max</td><td>Fluid type/spacing without breakpoints</td></tr>
+  </tbody>
+</table>
+<pre><code>/* Fluid type: never below 1rem, never above 2rem, scales with viewport */
+h1 { font-size: clamp(1.5rem, 1rem + 2.5vw, 2.5rem); }
+
+/* Readable measure */
+article { max-width: 65ch; margin-inline: auto; }</code></pre>
+
+<h2>Mobile-first media queries</h2>
+<p><span class="level beginner">Beginner</span> Write the small-screen styles as the base, then layer enhancements with <code>min-width</code> queries. This keeps the base simple and avoids overriding desktop styles down to mobile.</p>
+<pre><code>/* Base: mobile — single column */
+.grid { display: grid; gap: 16px; }
+
+/* Tablet and up */
+@media (min-width: 48rem) {
+  .grid { grid-template-columns: 1fr 1fr; }
+}
+/* Desktop and up */
+@media (min-width: 72rem) {
+  .grid { grid-template-columns: repeat(3, 1fr); }
+}</code></pre>
+<blockquote class="tip">Pick breakpoints where the <em>content</em> breaks, not at specific device widths — chasing "iPhone 15 is 393px" is a losing game. Resize the browser slowly and add a breakpoint when the layout starts to look wrong.</blockquote>
+
+<h2>Container queries</h2>
+<p><span class="level intermediate">Intermediate</span> Media queries react to the <em>viewport</em>; container queries react to a <em>component's own</em> width — so a card adapts whether it's in a wide main area or a narrow sidebar:</p>
+<pre><code>.card-list { container-type: inline-size; }
+
+/* When the CONTAINER is ≥400px, not the viewport */
+@container (min-width: 400px) {
+  .card { display: grid; grid-template-columns: 120px 1fr; }
+}</code></pre>
+
+<h2>Responsive layout without queries</h2>
+<pre><code>/* Auto-fitting grid: as many columns as fit, each ≥240px */
+.gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 16px;
+}
+/* Flex wrap: items flow to new rows when they run out of room */
+.tags { display: flex; flex-wrap: wrap; gap: 8px; }</code></pre>
+
+<h2>Responsive images</h2>
+<pre><code>&lt;img src="small.jpg"
+     srcset="small.jpg 480w, medium.jpg 960w, large.jpg 1600w"
+     sizes="(min-width: 72rem) 50vw, 100vw"
+     alt="…" width="1600" height="900"&gt;</code></pre>
+<p>The browser picks the smallest adequate file for the device's screen and the slot's rendered width — saving bandwidth on phones. Always include intrinsic <code>width</code>/<code>height</code> to reserve space and prevent layout shift.</p>
+
+<h2>Respecting user preferences</h2>
+<pre><code>@media (prefers-color-scheme: dark) { :root { --bg: #0d1117; } }
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important; }
+}</code></pre>
+
+<h2>Exercises</h2>
+<ul>
+  <li>Make a heading fluid with <code>clamp()</code> and confirm it scales smoothly with no breakpoints.</li>
+  <li>Build a 1→2→3 column grid, mobile-first, with <code>min-width</code> queries at content-driven breakpoints.</li>
+  <li>Add a <code>srcset</code>/<code>sizes</code> image and watch the network panel load different files as you resize.</li>
+</ul>
+
+<h2>Mini-project: a responsive product page</h2>
+<p>Build a product page that is a single column on mobile, image-beside-details on tablet, and adds a related-items rail on desktop — using one <code>auto-fit</code> grid plus two breakpoints. Make a card component adapt via a container query so it works in both the main column and a sidebar, honor <code>prefers-reduced-motion</code>, and verify at 360/768/1440px.</p>

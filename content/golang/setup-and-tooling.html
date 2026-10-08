@@ -1,0 +1,92 @@
+<p class="lead">Install Go, learn the one command you'll use for everything (<code>go</code>), and wire up the formatting and vetting tools that keep Go code uniform across every project and team.</p>
+
+<h2>Install Go</h2>
+<p><span class="level beginner">Beginner</span> Download the installer for your OS from the official site, or use a package manager. Verify the install prints a version:</p>
+<pre><code># macOS (Homebrew)
+brew install go
+
+# Debian/Ubuntu — prefer the official tarball over apt for an up-to-date Go
+curl -LO https://go.dev/dl/go1.23.0.linux-amd64.tar.gz
+sudo rm -rf /usr/local/go &amp;&amp; sudo tar -C /usr/local -xzf go1.23.0.linux-amd64.tar.gz
+export PATH=$PATH:/usr/local/go/bin   # add to ~/.profile to persist
+
+# Verify
+go version
+# → go version go1.23.0 darwin/arm64</code></pre>
+<blockquote class="tip">Go releases every ~6 months and keeps strong backward compatibility (the "Go 1 compatibility promise"). Staying on a recent version is low-risk and gets you new stdlib and tooling.</blockquote>
+
+<h2>The <code>go</code> command does everything</h2>
+<p>Unlike ecosystems with a dozen separate tools, Go ships one command. The subcommands you'll use daily:</p>
+<table>
+  <thead><tr><th>Command</th><th>What it does</th></tr></thead>
+  <tbody>
+    <tr><td><code>go run .</code></td><td>Compile and run the current package in one step (no binary left behind).</td></tr>
+    <tr><td><code>go build</code></td><td>Compile to a binary in the current directory.</td></tr>
+    <tr><td><code>go test ./...</code></td><td>Run every test in the module.</td></tr>
+    <tr><td><code>go fmt ./...</code></td><td>Rewrite source in the canonical format.</td></tr>
+    <tr><td><code>go vet ./...</code></td><td>Report suspicious constructs the compiler accepts but are likely bugs.</td></tr>
+    <tr><td><code>go mod tidy</code></td><td>Add missing and remove unused module dependencies.</td></tr>
+    <tr><td><code>go install pkg@latest</code></td><td>Build and install a command into <code>$GOBIN</code>.</td></tr>
+    <tr><td><code>go doc fmt.Println</code></td><td>Print documentation for a symbol, offline.</td></tr>
+  </tbody>
+</table>
+
+<h2>Your first program</h2>
+<pre><code>mkdir hello &amp;&amp; cd hello
+go mod init example.com/hello     # creates go.mod
+cat &gt; main.go &lt;&lt;'EOF'
+package main
+
+import "fmt"
+
+func main() {
+	fmt.Println("Hello, Go!")
+}
+EOF
+go run .
+# → Hello, Go!</code></pre>
+<p>Every executable lives in <code>package main</code> and starts at <code>func main()</code>. The module path (<code>example.com/hello</code>) is the import prefix for your own packages — it does not need to be a real URL unless you publish the module.</p>
+
+<h2>Formatting and vetting are not optional</h2>
+<p><span class="level beginner">Beginner</span> Go has exactly one canonical format, enforced by <code>gofmt</code>. There are no style debates: tabs for indentation, specific brace placement, aligned struct fields. Your editor should format on save.</p>
+<pre><code>gofmt -l .        # list files that are NOT formatted (empty = all good)
+gofmt -w .        # rewrite them in place
+go vet ./...      # static analysis: printf format mismatches, unreachable code, etc.</code></pre>
+<blockquote class="warn"><strong>Common mistake:</strong> committing unformatted code. CI pipelines routinely fail on <code>gofmt -l .</code> returning any file. Set your editor to run <code>gofmt</code> (or <code>goimports</code>, which also fixes imports) on save and this never bites you.</blockquote>
+
+<h3>goimports: formatting + import management</h3>
+<pre><code>go install golang.org/x/tools/cmd/goimports@latest
+goimports -w .    # formats AND adds/removes import lines to match usage</code></pre>
+
+<h2>Environment: GOPATH is (mostly) history</h2>
+<p>Before Go 1.11 all code had to live under a single <code>$GOPATH/src</code> tree. With modules (the default since Go 1.16) your project lives anywhere. The variables still worth knowing:</p>
+<table>
+  <thead><tr><th>Variable</th><th>Meaning</th></tr></thead>
+  <tbody>
+    <tr><td><code>GOPATH</code></td><td>Where the module cache and installed binaries live (default <code>~/go</code>).</td></tr>
+    <tr><td><code>GOBIN</code></td><td>Where <code>go install</code> puts binaries (default <code>$GOPATH/bin</code> — add it to <code>PATH</code>).</td></tr>
+    <tr><td><code>GOOS</code> / <code>GOARCH</code></td><td>Target OS/arch for cross-compilation (see Deployment).</td></tr>
+    <tr><td><code>GOFLAGS</code></td><td>Default flags for every <code>go</code> command, e.g. <code>-mod=readonly</code>.</td></tr>
+  </tbody>
+</table>
+<pre><code>go env            # print the whole resolved environment
+go env GOPATH     # just one value
+go env -w GOBIN=$HOME/.local/bin   # persist a setting</code></pre>
+
+<h2>Exercises</h2>
+<ul>
+  <li>Run <code>go env GOVERSION GOOS GOARCH</code> and note your toolchain and target.</li>
+  <li>Intentionally mis-indent <code>main.go</code>, then fix it with <code>gofmt -w .</code> and watch the diff.</li>
+  <li>Add a line <code>fmt.Printf("%d\n", "oops")</code> and run <code>go vet ./...</code> — read the format-mismatch warning it produces.</li>
+</ul>
+
+<h2>Mini-project: a reproducible dev setup</h2>
+<p>Create a <code>Makefile</code> that standardizes the common tasks so every contributor runs the same checks:</p>
+<pre><code># Makefile
+.PHONY: fmt vet test run
+fmt:  ; gofmt -w . &amp;&amp; goimports -w .
+vet:  ; go vet ./...
+test: ; go test ./...
+run:  ; go run .
+check: fmt vet test   # run before every commit</code></pre>
+<p>Now <code>make check</code> formats, vets, and tests in one step — the foundation every later Go lesson builds on.</p>

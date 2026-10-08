@@ -1,0 +1,112 @@
+<p class="lead">A service worker is a script the browser runs in the background, separate from any page, that can intercept every network request. It's the engine behind offline support, caching strategies, and background sync. Get its lifecycle and caching right and your app works with no network at all.</p>
+
+<h2>The lifecycle</h2>
+<p><span class="level beginner">Beginner</span> A worker goes through <code>install</code> → <code>activate</code> → <code>fetch</code>. Understanding each stage is the whole game.</p>
+<pre><code>const CACHE = "app-v1";
+const SHELL = ["/", "/index.html", "/app.css", "/app.js", "/offline.html"];
+
+self.addEventListener("install", (event) =&gt; {
+  event.waitUntil(
+    caches.open(CACHE).then((c) =&gt; c.addAll(SHELL))
+      .then(() =&gt; self.skipWaiting())   // activate immediately
+  );
+});
+
+self.addEventListener("activate", (event) =&gt; {
+  event.waitUntil(
+    caches.keys().then((keys) =&gt;
+      Promise.all(keys.filter((k) =&gt; k !== CACHE).map((k) =&gt; caches.delete(k)))
+    ).then(() =&gt; self.clients.claim())   // control open pages now
+  );
+});</code></pre>
+<blockquote class="warn"><strong>Common mistake:</strong> expecting a new worker to take over instantly. By default a new worker <em>waits</em> until every tab using the old one closes. <code>skipWaiting()</code> + <code>clients.claim()</code> override that, but then you must handle the version change on the page side (see "Updates" below) or users get a half-old, half-new app.</blockquote>
+
+<h2>Caching strategies</h2>
+<p><span class="level intermediate">Intermediate</span> The <code>fetch</code> handler decides, per request, where the response comes from. The main strategies:</p>
+<table>
+  <thead><tr><th>Strategy</th><th>Behavior</th><th>Use for</th></tr></thead>
+  <tbody>
+    <tr><td>Cache-first</td><td>Serve cache; fetch only on miss</td><td>Versioned static assets</td></tr>
+    <tr><td>Network-first</td><td>Try network; fall back to cache</td><td>HTML pages, fresh-ish data</td></tr>
+    <tr><td>Stale-while-revalidate</td><td>Serve cache now, update it in background</td><td>Assets that change occasionally</td></tr>
+    <tr><td>Network-only / Cache-only</td><td>No fallback</td><td>Analytics / precached shell</td></tr>
+  </tbody>
+</table>
+
+<h3>Network-first for navigations, with offline fallback</h3>
+<pre><code>self.addEventListener("fetch", (event) =&gt; {
+  const req = event.request;
+  if (req.method !== "GET") return;
+
+  if (req.mode === "navigate") {
+    event.respondWith(
+      fetch(req)
+        .then((res) =&gt; {
+          const copy = res.clone();
+          caches.open(CACHE).then((c) =&gt; c.put(req, copy));  // keep cache warm
+          return res;
+        })
+        .catch(() =&gt; caches.match(req).then((hit) =&gt; hit || caches.match("/offline.html")))
+    );
+    return;
+  }
+
+  // Stale-while-revalidate for assets
+  event.respondWith(
+    caches.match(req).then((hit) =&gt; {
+      const net = fetch(req).then((res) =&gt; {
+        if (res.ok) caches.open(CACHE).then((c) =&gt; c.put(req, res.clone()));
+        return res;
+      }).catch(() =&gt; hit);
+      return hit || net;
+    })
+  );
+});</code></pre>
+<p>This is close to the exact service worker running this tutorial: navigations are network-first (fresh pages when online, cached pages or the offline fallback when not), and assets are stale-while-revalidate.</p>
+
+<h2>Updating the active worker</h2>
+<pre><code>// Page side: detect a new worker waiting, prompt to reload
+navigator.serviceWorker.register("/sw.js").then((reg) =&gt; {
+  reg.addEventListener("updatefound", () =&gt; {
+    const sw = reg.installing;
+    sw.addEventListener("statechange", () =&gt; {
+      if (sw.state === "installed" &amp;&amp; navigator.serviceWorker.controller) {
+        showUpdateBanner(() =&gt; reg.waiting.postMessage({ type: "SKIP_WAITING" }));
+      }
+    });
+  });
+});
+navigator.serviceWorker.addEventListener("controllerchange", () =&gt; location.reload());
+
+// Worker side:
+self.addEventListener("message", (e) =&gt; {
+  if (e.data.type === "SKIP_WAITING") self.skipWaiting();
+});</code></pre>
+<blockquote class="tip"><strong>Cache versioning:</strong> change the cache name (<code>app-v2</code>) whenever assets change; the <code>activate</code> handler deletes old caches. This tutorial's build stamps the version into <code>sw.js</code> on every build, so a redeploy invalidates stale caches automatically.</blockquote>
+
+<h2>Background sync (brief)</h2>
+<p><span class="level advanced">Advanced</span> Defer failed writes until connectivity returns:</p>
+<pre><code>// Page: queue a sync
+const reg = await navigator.serviceWorker.ready;
+await reg.sync.register("send-outbox");
+// Worker:
+self.addEventListener("sync", (e) =&gt; {
+  if (e.tag === "send-outbox") e.waitUntil(flushOutbox());
+});</code></pre>
+
+<h2>Debugging</h2>
+<ul>
+  <li>DevTools → <strong>Application → Service Workers</strong>: see state, "Update on reload", "Offline" toggle, unregister.</li>
+  <li>DevTools → <strong>Application → Cache Storage</strong>: inspect exactly what's cached.</li>
+  <li>Hard-reset during development: unregister + "Clear site data" — stale workers cause the most confusing bugs.</li>
+</ul>
+
+<h2>Exercises</h2>
+<ul>
+  <li>Pre-cache an app shell in <code>install</code>, then toggle "Offline" in DevTools and confirm the page still loads.</li>
+  <li>Serve a page network-first with an <code>offline.html</code> fallback; verify both online and offline paths.</li>
+  <li>Bump the cache version and confirm the old cache is deleted on <code>activate</code>.</li>
+</ul>
+
+<h2>Mini-project: an offline-capable site</h2>
+<p>Add a service worker to a multi-page site: pre-cache the shell + an offline page on install, clean old caches on activate, serve navigations network-first and assets stale-while-revalidate, and wire a page-side "new version available — reload" banner using <code>SKIP_WAITING</code>. Prove it in DevTools' offline mode. (Then read this tutorial's own <code>sw.js</code> — it does exactly this.)</p>

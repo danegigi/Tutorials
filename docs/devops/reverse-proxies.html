@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en" data-base="../">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0d1117">
+<meta name="description" content="Dev Tutorials — Golang, Bun, Web Development, Linux and DevOps, offline-ready.">
+<title>Reverse Proxies — DevOps</title>
+<link rel="manifest" href="../manifest.webmanifest">
+<link rel="icon" href="../icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="../icon-192.png">
+<link rel="stylesheet" href="../app.css">
+<script>/* set theme before paint to avoid flash */(function(){try{var t=localStorage.getItem('tut.theme');document.documentElement.setAttribute('data-theme',t||'dark');}catch(e){document.documentElement.setAttribute('data-theme','dark');}})();</script>
+
+</head>
+<body class="lesson">
+<header class="nav">
+  <a class="brand" href="../index.html">📚 Dev Tutorials</a>
+  <span class="crumb">Reverse Proxies — DevOps</span>
+  <span class="spacer"></span>
+  <a class="navbtn" href="../search.html">🔎 Search</a>
+  <button class="navbtn" id="install-btn" type="button">⬇️ Install</button>
+  <button class="navbtn" id="theme-btn" type="button" aria-label="Toggle theme">🌙 Dark</button>
+</header>
+<main class="wrap lesson-body">
+  <h1 class="page-title">Reverse Proxies</h1>
+  <div class="lesson-tools" data-lesson-id="devops/reverse-proxies">
+    <button id="done-btn" type="button" aria-pressed="false">○ Mark complete</button>
+    <button id="mark-btn" type="button" aria-pressed="false">☆ Bookmark</button>
+    <a class="navbtn" href="index.html" style="margin-left:auto">All DevOps lessons →</a>
+  </div>
+<nav class="toc" aria-label="On this page"><strong>On this page</strong><ul>
+<li class="lvl2"><a href="#why-a-reverse-proxy">Why a reverse proxy</a></li>
+<li class="lvl2"><a href="#layer-4-vs-layer-7">Layer 4 vs Layer 7</a></li>
+<li class="lvl2"><a href="#nginx-as-a-reverse-proxy">Nginx as a reverse proxy</a></li>
+<li class="lvl2"><a href="#haproxy">HAProxy</a></li>
+<li class="lvl2"><a href="#traefik-v3-with-automatic-tls">Traefik v3 with automatic TLS</a></li>
+<li class="lvl2"><a href="#choosing-between-the-three">Choosing between the three</a></li>
+<li class="lvl2"><a href="#common-mistakes">Common mistakes</a></li>
+<li class="lvl2"><a href="#exercises">Exercises</a></li>
+<li class="lvl2"><a href="#mini-project-one-site-three-proxies">Mini-project: one site, three proxies</a></li>
+</ul></nav>
+<p class="lead">A reverse proxy sits at the edge of your network, accepts every incoming request, and forwards it to the right backend behind it — spreading load across a pool of servers, terminating TLS, and routing by hostname or path. This lesson covers why you need one, the Layer 4 vs Layer 7 split that decides everything, and three production tools: Nginx, HAProxy, and Traefik v3 with automatic Let's Encrypt certificates.</p>
+
+<h2 id="why-a-reverse-proxy">Why a reverse proxy</h2>
+<p><span class="level beginner">Beginner</span> A <em>forward</em> proxy sits in front of clients and hides them from the internet. A <strong>reverse proxy</strong> sits in front of servers and hides them from clients: the client only ever talks to the proxy, which decides which backend fulfils the request. One stable public address, many servers coming and going behind it.</p>
+<p>What a reverse proxy buys you:</p>
+<ul>
+  <li><strong>Scale</strong> — one server handles only so many connections. Add more behind the proxy and capacity grows horizontally.</li>
+  <li><strong>High availability</strong> — if a backend dies, the proxy stops sending it traffic and the site stays up.</li>
+  <li><strong>Zero-downtime deploys</strong> — drain one backend, update it, return it to the pool, repeat.</li>
+  <li><strong>TLS termination</strong> — decrypt HTTPS once at the edge instead of on every backend.</li>
+  <li><strong>Routing</strong> — send <code>/api</code> to one service and <code>/blog</code> to another; serve many hostnames from one address.</li>
+</ul>
+
+<h2 id="layer-4-vs-layer-7">Layer 4 vs Layer 7</h2>
+<p><span class="level beginner">Beginner</span> This is the central distinction and it decides which tool and mode you pick.</p>
+<ul>
+  <li><strong>Layer 4 (transport / TCP-UDP)</strong> — the proxy forwards raw packets. It knows IP addresses and ports, not URLs. Extremely fast and protocol-agnostic (works for MySQL, Redis, gRPC, game servers). It cannot route on the HTTP path because it never parses HTTP.</li>
+  <li><strong>Layer 7 (application / HTTP)</strong> — the proxy terminates the connection, parses the HTTP request, and can route on hostname, path, headers, cookies, and method. Slower and HTTP-specific, but far smarter.</li>
+</ul>
+<p>Two more concepts you will meet in every tool:</p>
+<ul>
+  <li><strong>Health checks</strong> — the proxy periodically probes each backend; only <em>healthy</em> ones receive traffic. L7 checks hit a path like <code>/healthz</code> and require a <code>200</code>; L4 checks just open a TCP connection.</li>
+  <li><strong>Algorithms</strong> — <em>round-robin</em> (each request to the next server in turn), <em>least-connections</em> (to whichever server has the fewest active connections — better when request durations vary), and <em>weighted</em> (bigger servers get proportionally more).</li>
+</ul>
+<blockquote class="tip">Sticky sessions (pinning a client to one backend via a cookie or source IP) exist for apps that keep per-user state in memory. The better long-term fix is to make servers <em>stateless</em> — store session state in Redis or a database — so any server can handle any request.</blockquote>
+
+<h2 id="nginx-as-a-reverse-proxy">Nginx as a reverse proxy</h2>
+<p><span class="level intermediate">Intermediate</span> <strong>Nginx</strong> is a web server that doubles as an L7 reverse proxy and load balancer — the common front door to an app. You define a backend pool with an <code>upstream</code> block and forward to it with <code>proxy_pass</code>.</p>
+<p>Algorithms: default is round-robin; <code>least_conn;</code> sends to the fewest active connections; <code>ip_hash;</code> pins a client IP to one server; <code>server … weight=3;</code> weights distribution.</p>
+<pre><code># /etc/nginx/conf.d/example.conf
+
+upstream app_servers {
+    least_conn;                                            # fewest-connections
+    server 10.0.1.10:8080 max_fails=3 fail_timeout=30s;    # passive health check
+    server 10.0.1.11:8080 max_fails=3 fail_timeout=30s;
+    server 10.0.1.12:8080 backup;                          # only if the others are down
+    keepalive 32;                                          # reuse upstream connections
+}
+
+# Redirect all HTTP to HTTPS
+server {
+    listen 80;
+    server_name example.com www.example.com;
+    return 301 https://$host$request_uri;
+}
+
+# HTTPS: terminate TLS, proxy to the upstream
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name example.com www.example.com;
+
+    ssl_certificate     /etc/letsencrypt/live/example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/example.com/privkey.pem;
+    ssl_protocols       TLSv1.2 TLSv1.3;
+
+    location /blog/ {
+        proxy_pass http://blog_servers;      # path routing to a different pool
+    }
+
+    location / {
+        proxy_pass http://app_servers;
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_http_version 1.1;              # required for upstream keepalive
+        proxy_set_header Connection "";
+    }
+}</code></pre>
+<pre><code>nginx -t             # test the config for syntax errors
+# -&gt; nginx: configuration file /etc/nginx/nginx.conf test is successful
+nginx -s reload      # apply with zero downtime (graceful reload)</code></pre>
+<blockquote class="tip">Open-source Nginx does <em>passive</em> health checks only (<code>max_fails</code>/<code>fail_timeout</code> — it marks a server down after real requests fail). Active health checks (proactively probing <code>/healthz</code>) are an Nginx Plus feature; HAProxy does active checks for free.</blockquote>
+
+<h2 id="haproxy">HAProxy</h2>
+<p><span class="level advanced">Advanced</span> <strong>HAProxy</strong> (High Availability Proxy) is the industry-standard software load balancer. It does both L4 (<code>mode tcp</code>) and L7 (<code>mode http</code>), with first-class active health checks. A config has four section types: <strong>global</strong> (process settings), <strong>defaults</strong> (inherited by all), <strong>frontend</strong> (where it accepts connections), and <strong>backend</strong> (the server pool plus algorithm and checks).</p>
+<pre><code># haproxy.cfg — L7 HTTP with path routing
+global
+    maxconn 4000
+    log /dev/log local0
+
+defaults
+    mode    http                 # Layer 7 — parse HTTP
+    log     global
+    option  httplog
+    option  redispatch           # if a server dies mid-request, retry elsewhere
+    retries 3
+    timeout connect 5s
+    timeout client  50s
+    timeout server  50s
+
+frontend http_in
+    bind *:80
+    # ACL = Access Control List: tests a condition, like an ALB listener rule
+    acl url_blog path_beg /blog   # true when path starts with /blog
+    acl url_api  path_beg /api
+    use_backend blog_servers if url_blog
+    use_backend api_servers  if url_api
+    default_backend web_servers
+
+backend web_servers
+    balance roundrobin
+    option httpchk GET /healthz   # active L7 health check
+    http-check expect status 200
+    server web1 10.0.1.10:8080 check
+    server web2 10.0.1.11:8080 check
+
+backend api_servers
+    balance roundrobin
+    server api1 10.0.1.20:7070 check weight 2   # gets 2x the traffic
+    server api2 10.0.1.21:7071 check weight 1</code></pre>
+<p>For non-HTTP protocols switch to <code>mode tcp</code> and HAProxy balances raw connections — here a MySQL pool with a MySQL-aware health check:</p>
+<pre><code>frontend mysql_frontend
+    mode tcp
+    bind *:3306
+    default_backend mysql_backend
+
+backend mysql_backend
+    mode tcp
+    balance roundrobin
+    option mysql-check user haproxy_user     # MySQL-aware probe
+    server mysql1 10.0.1.30:3306 check inter 2s
+    server mysql2 10.0.1.31:3306 check inter 2s</code></pre>
+<blockquote class="warn">Destructive if skipped: always run <code>haproxy -c -f haproxy.cfg</code> before deploying. A single typo in a live config can take your whole entry point down — the syntax check is your safety net and belongs in CI.</blockquote>
+<pre><code>haproxy -c -f /etc/haproxy/haproxy.cfg
+# -&gt; Configuration file is valid</code></pre>
+
+<h2 id="traefik-v3-with-automatic-tls">Traefik v3 with automatic TLS</h2>
+<p><span class="level advanced">Advanced</span> <strong>Traefik</strong> sits at the edge, owns ports 80 and 443, and routes each request to the right container by reading the container's Docker <strong>labels</strong> — no static backend list to maintain. It also obtains and renews Let's Encrypt certificates automatically. Every request flows <strong>EntryPoint &amp;rarr; Router &amp;rarr; (Middleware) &amp;rarr; Service &amp;rarr; Container</strong>.</p>
+<pre><code># traefik/compose.yaml — the edge
+name: edge
+
+services:
+  traefik:
+    image: traefik:v3.4
+    command:
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false     # only labeled containers routed
+      - --entrypoints.web.address=:80
+      - --entrypoints.websecure.address=:443
+      # Redirect every HTTP request to HTTPS
+      - --entrypoints.web.http.redirections.entrypoint.to=websecure
+      - --entrypoints.web.http.redirections.entrypoint.scheme=https
+      # Let's Encrypt via TLS-ALPN-01 challenge
+      - --certificatesresolvers.le.acme.email=admin@example.com
+      - --certificatesresolvers.le.acme.storage=/letsencrypt/acme.json
+      - --certificatesresolvers.le.acme.tlschallenge=true
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro   # read-only!
+      - letsencrypt:/letsencrypt
+    networks:
+      - web
+    restart: unless-stopped
+
+volumes:
+  letsencrypt:
+
+networks:
+  web:
+    name: web
+    driver: bridge</code></pre>
+<p>An application declares its routing entirely through labels and joins the shared <code>web</code> network so Traefik can reach it:</p>
+<pre><code># app/compose.yaml
+services:
+  app:
+    image: example/app:1.0
+    networks:
+      - web
+      - internal
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=web
+      # Route app.example.com over HTTPS with a Let's Encrypt cert
+      - traefik.http.routers.myapp.rule=Host(`app.example.com`)
+      - traefik.http.routers.myapp.entrypoints=websecure
+      - traefik.http.routers.myapp.tls.certresolver=le
+      - traefik.http.services.myapp.loadbalancer.server.port=3000
+
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_PASSWORD: change-me
+    networks:
+      - internal        # private only: no traefik.enable, no web network
+
+networks:
+  web:
+    external: true      # created by the edge stack; shared across projects
+  internal:
+    driver: bridge</code></pre>
+<pre><code>docker network create web                         # one-time shared network
+docker compose -f traefik/compose.yaml up -d
+docker compose -f app/compose.yaml up -d
+docker compose -f traefik/compose.yaml logs -f traefik
+# -&gt; ... Serving certificate for domain "app.example.com"</code></pre>
+<blockquote class="warn">Mount the Docker socket read-only (<code>:ro</code>), never expose the Traefik dashboard on the public internet without auth and TLS, and in production prefer a Docker-socket proxy so Traefik cannot control the daemon directly. In a compose file a literal <code>$</code> (e.g. in a bcrypt auth hash) must be escaped as <code>$$</code> or Compose tries to interpolate it.</blockquote>
+
+<h2 id="choosing-between-the-three">Choosing between the three</h2>
+<p><span class="level intermediate">Intermediate</span> They overlap, but each has a sweet spot.</p>
+<table>
+  <thead><tr><th>Tool</th><th>Layers</th><th>Config model</th><th>Reach for it when</th></tr></thead>
+  <tbody>
+    <tr><td>Nginx</td><td>L7 (L4 via stream)</td><td>Static files, reload</td><td>Lightest front door for HTTP; TLS termination; serving static assets too.</td></tr>
+    <tr><td>HAProxy</td><td>L4 &amp; L7</td><td>Static file, reload</td><td>Best free active health checks; TCP/MySQL balancing; total control on VMs/on-prem.</td></tr>
+    <tr><td>Traefik v3</td><td>L7 (L4 via TCP routers)</td><td>Dynamic — reads labels/CRDs</td><td>Container &amp; Kubernetes environments where backends churn; automatic Let's Encrypt.</td></tr>
+  </tbody>
+</table>
+<blockquote class="tip">Rule of thumb: static VMs and raw TCP &amp;rarr; HAProxy. Lightweight HTTP front door &amp;rarr; Nginx. Containers/Kubernetes with churning backends and auto-TLS &amp;rarr; Traefik. Inside Kubernetes, all three can run as an Ingress controller — the same job, driven by <code>Ingress</code> objects instead of a static file.</blockquote>
+
+<h2 id="common-mistakes">Common mistakes</h2>
+<blockquote class="warn"><strong>Common mistakes</strong>
+<ul>
+  <li><strong>Deploying without a syntax check.</strong> <code>nginx -t</code>, <code>haproxy -c -f …</code>, and <code>docker compose config</code> each catch the typo that would otherwise take your edge down.</li>
+  <li><strong>Picking L7 for raw TCP.</strong> An HTTP proxy cannot forward MySQL or Redis — use <code>mode tcp</code> (HAProxy) or an NLB/stream block.</li>
+  <li><strong>Forgetting <code>X-Forwarded-For</code>/<code>X-Forwarded-Proto</code>.</strong> After TLS termination the backend sees the proxy's IP and plain HTTP unless you forward these headers.</li>
+  <li><strong>Mounting the Docker socket read-write for Traefik.</strong> That hands container-escape-to-root. Mount <code>:ro</code> and prefer a socket proxy.</li>
+  <li><strong>Unescaped <code>$</code> in a compose-embedded Traefik auth hash.</strong> Compose interpolates it; double every dollar sign (<code>$$</code>).</li>
+  <li><strong>Relying on sticky sessions forever.</strong> It papers over in-memory state; move the state to Redis so any backend can serve any request.</li>
+</ul></blockquote>
+
+<h2 id="exercises">Exercises</h2>
+<ul>
+  <li>Run two tiny backend containers and put Nginx in front with <code>least_conn</code>; stop one backend and confirm traffic shifts to the survivor.</li>
+  <li>Write an HAProxy config that routes <code>/api</code> and <code>/blog</code> to separate backends via ACLs, then validate it with <code>haproxy -c -f</code>.</li>
+  <li>Bring up the Traefik v3 edge plus one labeled app on a local machine (use a fake hostname in <code>/etc/hosts</code>) and watch the router appear in the logs.</li>
+  <li>Add an HTTP&amp;rarr;HTTPS 301 redirect in all three tools and confirm it with <code>curl -I http://…</code>.</li>
+  <li>Switch an HAProxy backend from <code>roundrobin</code> to <code>leastconn</code> and reason about which workload each suits.</li>
+</ul>
+
+<h2 id="mini-project-one-site-three-proxies">Mini-project: one site, three proxies</h2>
+<p>Stand up two identical backend web containers that print which instance served the request. Front them in turn with (1) Nginx terminating TLS with a self-signed cert and load-balancing <code>least_conn</code>, (2) HAProxy with an active <code>/healthz</code> check and path routing, and (3) Traefik v3 discovering the backends by Docker labels with an HTTP&amp;rarr;HTTPS redirect. For each, verify load spreads across both backends, a stopped backend is removed from rotation, and HTTP redirects to HTTPS. Write a short comparison of the config model and operational feel of each.</p>
+
+<section class="further"><h2 id="further-reading">Further reading</h2>
+<p>Official documentation for the tools and APIs covered on this page:</p>
+<ul class="further-list"><li><a href="https://doc.traefik.io/traefik/" target="_blank" rel="noopener">Traefik docs ↗</a></li>
+<li><a href="https://docs.nginx.com/nginx/admin-guide/web-server/reverse-proxy/" target="_blank" rel="noopener">Nginx reverse proxy ↗</a></li></ul></section>
+  <nav class="pager">
+<a class="prev" href="kubernetes-basics.html"><small>Previous</small>🔁 Kubernetes Basics</a>
+<a class="next" href="tls-and-domains.html"><small>Next</small>🔁 TLS &amp; Domains</a>
+  </nav>
+</main>
+<button type="button" class="fab top" id="fab-top" aria-label="Back to top">↑ Top</button>
+<div class="banner" id="update-banner" role="status">A new version is available.<button type="button">Reload</button></div>
+<div class="banner" id="offline-banner" role="status">You're offline — showing cached lessons.</div>
+<script src="../app.js" defer></script>
+</body>
+</html>

@@ -1,0 +1,124 @@
+<p class="lead">Every file on Linux carries an owner, a group, and three sets of read/write/execute bits that decide who may do what. Permissions are the first line of defence on a server and the most common cause of a &ldquo;permission denied&rdquo; that stops a deploy cold. This lesson teaches you to read <code>ls -l</code> fluently, set permissions in both octal and symbolic form, change ownership, and understand the special bits (setuid, setgid, sticky) that trip people up.</p>
+
+<h2>Reading <code>ls -l</code></h2>
+<p><span class="level beginner">Beginner</span> The first column of a long listing is a ten-character string that encodes everything:</p>
+<pre><code>ls -l deploy.sh
+# -> -rwxr-xr-x 1 ada devs 2048 Oct  8 11:14 deploy.sh</code></pre>
+<p>Break the <code>-rwxr-xr-x</code> apart:</p>
+<table>
+  <thead><tr><th>Position</th><th>Chars</th><th>Meaning</th></tr></thead>
+  <tbody>
+    <tr><td>1</td><td><code>-</code></td><td>File type: <code>-</code> regular, <code>d</code> directory, <code>l</code> symlink, <code>c</code>/<code>b</code> device.</td></tr>
+    <tr><td>2-4</td><td><code>rwx</code></td><td><strong>Owner</strong> (user <code>ada</code>) may read, write, execute.</td></tr>
+    <tr><td>5-7</td><td><code>r-x</code></td><td><strong>Group</strong> (<code>devs</code>) may read and execute, not write.</td></tr>
+    <tr><td>8-10</td><td><code>r-x</code></td><td><strong>Others</strong> (everyone else) may read and execute.</td></tr>
+  </tbody>
+</table>
+<p>So this script is owned by <code>ada</code>, grouped under <code>devs</code>, runnable by everyone and writable only by <code>ada</code>.</p>
+
+<h3>What read/write/execute mean for directories</h3>
+<p>The same three bits behave differently on a directory, which surprises people:</p>
+<table>
+  <thead><tr><th>Bit</th><th>On a file</th><th>On a directory</th></tr></thead>
+  <tbody>
+    <tr><td><code>r</code></td><td>Read the contents.</td><td>List the names inside (<code>ls</code>).</td></tr>
+    <tr><td><code>w</code></td><td>Modify the contents.</td><td>Create/delete/rename entries inside.</td></tr>
+    <tr><td><code>x</code></td><td>Run it as a program.</td><td>Enter it (<code>cd</code>) and access files by name.</td></tr>
+  </tbody>
+</table>
+<blockquote class="tip">A directory needs <code>x</code> to be entered at all. A common puzzle: you can <code>ls</code> a directory (it has <code>r</code>) but <code>cd</code> into it fails — it is missing <code>x</code>. And deleting a file depends on write permission to its <em>directory</em>, not to the file itself.</blockquote>
+
+<h2>Octal permissions</h2>
+<p><span class="level beginner">Beginner</span> Each permission is a number: <strong>read=4, write=2, execute=1</strong>. Sum them per role to get one digit, three digits total (owner, group, others).</p>
+<table>
+  <thead><tr><th>Octal</th><th>Symbolic</th><th>Typical use</th></tr></thead>
+  <tbody>
+    <tr><td><code>644</code></td><td><code>rw-r--r--</code></td><td>A normal file: owner edits, everyone reads.</td></tr>
+    <tr><td><code>755</code></td><td><code>rwxr-xr-x</code></td><td>A script or a directory: owner full, others run/enter.</td></tr>
+    <tr><td><code>600</code></td><td><code>rw-------</code></td><td>A private file: owner only. SSH keys, cert stores.</td></tr>
+    <tr><td><code>700</code></td><td><code>rwx------</code></td><td>A private directory, e.g. <code>~/.ssh</code>.</td></tr>
+    <tr><td><code>664</code></td><td><code>rw-rw-r--</code></td><td>Shared within a group: owner and group edit.</td></tr>
+  </tbody>
+</table>
+<pre><code>chmod 644 config.yaml
+chmod 755 deploy.sh
+chmod 600 ~/.ssh/id_ed25519
+ls -l ~/.ssh/id_ed25519
+# -> -rw------- 1 ada ada 411 Oct  8 11:20 /home/ada/.ssh/id_ed25519</code></pre>
+
+<h3>Symbolic chmod</h3>
+<p>When you want to add or remove one bit without recalculating the whole number, use symbolic mode: <code>u</code>ser, <code>g</code>roup, <code>o</code>thers, <code>a</code>ll, with <code>+</code>/<code>-</code>/<code>=</code>.</p>
+<pre><code>chmod +x deploy.sh          # add execute for everyone
+chmod u+x,go-w script.sh    # owner can run; group/others cannot write
+chmod g=rx shared/          # group gets exactly r-x
+chmod -R a-w release/       # recursively make a tree read-only</code></pre>
+
+<h2>Changing ownership</h2>
+<p><span class="level intermediate">Intermediate</span> <code>chown</code> sets the owner (and optionally the group); <code>chgrp</code> sets just the group. Changing an owner you do not own needs <code>sudo</code>.</p>
+<pre><code>sudo chown ada file.txt            # owner only
+sudo chown ada:devs file.txt       # owner and group
+sudo chown -R www-data:www-data /var/www/site   # a whole tree
+sudo chgrp devs report.csv         # group only
+id ada
+# -> uid=1001(ada) gid=1001(ada) groups=1001(ada),1005(devs),27(sudo)</code></pre>
+<blockquote class="warn"><strong>Common mistake:</strong> running a web server as <code>root</code> and then being baffled that files it writes are owned by <code>root</code> and the app cannot clean them up later. Run services as a dedicated unprivileged user (<code>www-data</code>, <code>app</code>) and <code>chown</code> the data directory to that user once, rather than loosening permissions with <code>chmod 777</code>.</blockquote>
+
+<h2>umask: the default for new files</h2>
+<p>New files do not start at <code>777</code>. The <strong>umask</strong> is subtracted (masked off) from the base permissions. The common umask <code>022</code> turns the file base <code>666</code> into <code>644</code> and the directory base <code>777</code> into <code>755</code>.</p>
+<pre><code>umask
+# -> 0022
+
+touch newfile; ls -l newfile
+# -> -rw-r--r-- 1 ada ada 0 Oct  8 newfile      (666 - 022 = 644)
+
+umask 077            # stricter: new files are private (600 / 700)
+touch secret; ls -l secret
+# -> -rw------- 1 ada ada 0 Oct  8 secret</code></pre>
+
+<h2>The special bits</h2>
+<p><span class="level advanced">Advanced</span> Beyond rwx there are three extra bits, shown as a fourth leading octal digit (<code>4</code>=setuid, <code>2</code>=setgid, <code>1</code>=sticky).</p>
+<table>
+  <thead><tr><th>Bit</th><th>Octal</th><th>Effect</th></tr></thead>
+  <tbody>
+    <tr><td>setuid</td><td><code>4000</code></td><td>Run the program as its <em>owner</em>, not the caller. How <code>passwd</code> edits <code>/etc/shadow</code> as root. Shows as <code>s</code> in the owner-execute slot.</td></tr>
+    <tr><td>setgid</td><td><code>2000</code></td><td>On a directory, new files inherit the directory's <em>group</em> — ideal for shared project folders. Shows as <code>s</code> in the group-execute slot.</td></tr>
+    <tr><td>sticky</td><td><code>1000</code></td><td>On a world-writable directory, only a file's owner may delete it. Why <code>/tmp</code> is safe. Shows as <code>t</code> in the others-execute slot.</td></tr>
+  </tbody>
+</table>
+<pre><code>ls -ld /tmp
+# -> drwxrwxrwt 10 root root 4096 Oct  8 /tmp       (note the trailing t)
+
+ls -l /usr/bin/passwd
+# -> -rwsr-xr-x 1 root root 68208 /usr/bin/passwd    (note the s)
+
+# A shared, group-sticky project directory
+sudo mkdir /srv/project
+sudo chgrp devs /srv/project
+sudo chmod 2775 /srv/project        # setgid + rwxrwxr-x
+ls -ld /srv/project
+# -> drwxrwsr-x 2 root devs 4096 /srv/project</code></pre>
+<blockquote class="warn"><code>chmod 777</code> grants write to <em>everyone on the system</em> and is almost always the wrong fix for a permissions error — it is a security hole, not a solution. Find the real owner/group the process runs as and <code>chown</code> to it instead. If you ever type <code>chmod -R 777</code> on a system path, you have likely broken something that relied on tighter permissions (SSH refuses keys that are group/world-readable, for one).</blockquote>
+
+<h2>Exercises</h2>
+<ul>
+  <li>Create a file, give it <code>640</code>, and translate that into the <code>rwx</code> string from memory before checking with <code>ls -l</code>.</li>
+  <li>Make a script executable with symbolic mode (<code>chmod +x</code>), then remove the execute bit for group and others only.</li>
+  <li>Set <code>umask 077</code>, create a file, and confirm it came out <code>600</code>. Reset your umask afterward.</li>
+  <li>Create a directory, set its setgid bit (<code>chmod g+s</code>), create a file inside it as a user in a second group, and confirm the file inherited the directory's group.</li>
+</ul>
+
+<h2>Mini-project: lock down an SSH key directory correctly</h2>
+<p>SSH silently refuses to use keys with loose permissions, so getting this right is a real, daily task. Build a correctly-permissioned <code>~/.ssh</code> from scratch and prove it.</p>
+<pre><code>mkdir -p ~/.ssh
+chmod 700 ~/.ssh                       # only you may enter it
+ssh-keygen -t ed25519 -f ~/.ssh/id_demo -N ""
+chmod 600 ~/.ssh/id_demo               # private key: owner read/write only
+chmod 644 ~/.ssh/id_demo.pub           # public key may be world-readable
+touch ~/.ssh/authorized_keys &amp;&amp; chmod 600 ~/.ssh/authorized_keys
+
+ls -la ~/.ssh
+# -> drwx------ 2 ada ada 4096 .
+# -> -rw------- 1 ada ada  411 id_demo
+# -> -rw-r--r-- 1 ada ada  101 id_demo.pub
+# -> -rw------- 1 ada ada    0 authorized_keys</code></pre>
+<p>Now deliberately break it with <code>chmod 644 ~/.ssh/id_demo</code> and note that <code>ssh -i ~/.ssh/id_demo ...</code> prints <em>&ldquo;Permissions 0644 for id_demo are too open&rdquo;</em> and refuses the key. Restore <code>600</code> and it works again — a lesson you only need to learn once.</p>

@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en" data-base="../">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0d1117">
+<meta name="description" content="Dev Tutorials — Golang, Bun, Web Development, Linux and DevOps, offline-ready.">
+<title>Frontend / Backend Integration &amp; Deployment — Web Development</title>
+<link rel="manifest" href="../manifest.webmanifest">
+<link rel="icon" href="../icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="../icon-192.png">
+<link rel="stylesheet" href="../app.css">
+<script>/* set theme before paint to avoid flash */(function(){try{var t=localStorage.getItem('tut.theme');document.documentElement.setAttribute('data-theme',t||'dark');}catch(e){document.documentElement.setAttribute('data-theme','dark');}})();</script>
+
+</head>
+<body class="lesson">
+<header class="nav">
+  <a class="brand" href="../index.html">📚 Dev Tutorials</a>
+  <span class="crumb">Frontend / Backend Integration &amp; Deployment — Web Development</span>
+  <span class="spacer"></span>
+  <a class="navbtn" href="../search.html">🔎 Search</a>
+  <button class="navbtn" id="install-btn" type="button">⬇️ Install</button>
+  <button class="navbtn" id="theme-btn" type="button" aria-label="Toggle theme">🌙 Dark</button>
+</header>
+<main class="wrap lesson-body">
+  <h1 class="page-title">Frontend / Backend Integration &amp; Deployment</h1>
+  <div class="lesson-tools" data-lesson-id="web/frontend-backend-integration">
+    <button id="done-btn" type="button" aria-pressed="false">○ Mark complete</button>
+    <button id="mark-btn" type="button" aria-pressed="false">☆ Bookmark</button>
+    <a class="navbtn" href="index.html" style="margin-left:auto">All Web Development lessons →</a>
+  </div>
+<nav class="toc" aria-label="On this page"><strong>On this page</strong><ul>
+<li class="lvl2"><a href="#how-the-pieces-connect">How the pieces connect</a></li>
+<li class="lvl2"><a href="#environment-configuration">Environment configuration</a></li>
+<li class="lvl2"><a href="#a-dev-proxy-avoids-cors-locally">A dev proxy avoids CORS locally</a></li>
+<li class="lvl2"><a href="#build-output">Build output</a></li>
+<li class="lvl2"><a href="#deploying-a-static-site">Deploying a static site</a></li>
+<li class="lvl2"><a href="#deploying-an-app-with-a-backend">Deploying an app with a backend</a></li>
+<li class="lvl2"><a href="#pre-deploy-checklist">Pre-deploy checklist</a></li>
+<li class="lvl2"><a href="#exercises">Exercises</a></li>
+<li class="lvl2"><a href="#mini-project-ship-a-full-stack-app">Mini-project: ship a full-stack app</a></li>
+</ul></nav>
+<p class="lead">A real app is a frontend talking to a backend, built and deployed somewhere. Learn how the two connect across environments, how configuration and secrets flow in, and how to ship a static site or an app to production.</p>
+
+<h2 id="how-the-pieces-connect">How the pieces connect</h2>
+<p><span class="level beginner">Beginner</span> The frontend (HTML/CSS/JS, possibly built from a framework) runs in the browser; the backend (an HTTP API) runs on a server. They talk over HTTP/JSON. Two common topologies:</p>
+<table>
+  <thead><tr><th>Topology</th><th>Shape</th><th>CORS?</th></tr></thead>
+  <tbody>
+    <tr><td>Same origin</td><td>Backend serves the frontend's files and the API under one domain</td><td>No (same origin)</td></tr>
+    <tr><td>Split origin</td><td>Static frontend on a CDN; API on <code>api.example.com</code></td><td>Yes — API must send CORS headers</td></tr>
+  </tbody>
+</table>
+<blockquote class="tip">Same-origin is simplest: no CORS, cookies "just work". A reverse proxy (Nginx/Traefik — see the DevOps section) can serve <code>/</code> from the static files and proxy <code>/api/*</code> to the backend, giving you one origin even with separate services.</blockquote>
+
+<h2 id="environment-configuration">Environment configuration</h2>
+<p>The frontend and backend each need per-environment config (API URL, feature flags, keys). The twelve-factor rule: config comes from the <em>environment</em>, not hard-coded.</p>
+<pre><code># Backend reads from env
+DATABASE_URL=postgres://…
+JWT_SECRET=…
+PORT=8080
+
+# Frontend build-time config (bundlers inline these at build)
+VITE_API_URL=https://api.example.com
+# → import.meta.env.VITE_API_URL in code</code></pre>
+<blockquote class="warn"><strong>Frontend "secrets" are not secret.</strong> Anything a bundler inlines (<code>VITE_*</code>, <code>NEXT_PUBLIC_*</code>) ships to the browser and is fully visible. Never put API secrets, DB credentials, or private keys in frontend env — only public config (API URLs, publishable keys). Real secrets live on the backend.</blockquote>
+
+<h2 id="a-dev-proxy-avoids-cors-locally">A dev proxy avoids CORS locally</h2>
+<pre><code>// vite.config.js — proxy /api to the backend during development
+export default {
+  server: {
+    proxy: { "/api": "http://localhost:8080" },
+  },
+};
+// Frontend calls fetch("/api/users") → proxied to the backend, same-origin, no CORS</code></pre>
+
+<h2 id="build-output">Build output</h2>
+<p><span class="level intermediate">Intermediate</span> A build step turns source into static assets a server/CDN can serve:</p>
+<pre><code># Typical commands
+bun run build        # → dist/ with hashed filenames (app.4f3a.js)
+# Hashed names enable long cache headers: the name changes when content does</code></pre>
+<p>For this very tutorial, the "build" is <code>bun run scripts/build-site.js</code>, producing a static <code>docs/</code> folder with the app shell, lesson pages, manifest, and service worker — nothing to run server-side.</p>
+
+<h2 id="deploying-a-static-site">Deploying a static site</h2>
+<pre><code># GitHub Pages: push docs/ (with a .nojekyll file) → Settings → Pages → /docs
+# Or any static host: Netlify, Cloudflare Pages, S3+CloudFront, nginx
+#   just copy the built folder to the web root.</code></pre>
+<blockquote class="tip">Set caching headers right: hashed assets (<code>app.4f3a.js</code>) get a long <code>Cache-Control: max-age=31536000, immutable</code>; HTML and the service worker get <code>no-cache</code> so updates are picked up. A stale cached <code>sw.js</code> can pin users to an old build.</blockquote>
+
+<h2 id="deploying-an-app-with-a-backend">Deploying an app with a backend</h2>
+<pre><code># Containerize the backend, put a reverse proxy in front, serve the frontend as static.
+# docker-compose (conceptual):
+services:
+  api:   { build: ./api, environment: [DATABASE_URL, JWT_SECRET] }
+  web:   { image: nginx, volumes: ["./dist:/usr/share/nginx/html"] }
+  proxy: { image: traefik, ... }   # routes / → web, /api → api, terminates TLS</code></pre>
+<p>The DevOps section covers Docker, Compose, reverse proxies, and TLS in depth — this is the frontend/backend view of the same picture.</p>
+
+<h2 id="pre-deploy-checklist">Pre-deploy checklist</h2>
+<ul>
+  <li>Production build runs clean; type-check and tests pass.</li>
+  <li>No secrets in frontend bundles or committed <code>.env</code> files.</li>
+  <li>CORS configured for the real frontend origin (if split).</li>
+  <li>HTTPS everywhere; secure cookie flags set.</li>
+  <li>Correct cache headers; service worker version bumped.</li>
+</ul>
+
+<h2 id="exercises">Exercises</h2>
+<ul>
+  <li>Set up a Vite dev proxy so <code>fetch("/api/...")</code> reaches a local backend with no CORS.</li>
+  <li>Move a hard-coded API URL into an env var and read it via <code>import.meta.env</code>.</li>
+  <li>Build a static site and deploy it to GitHub Pages (or Netlify) with correct cache headers.</li>
+</ul>
+
+<h2 id="mini-project-ship-a-full-stack-app">Mini-project: ship a full-stack app</h2>
+<p>Take a frontend (your choice) and a backend from the Go or Bun section. Wire them with a dev proxy locally, move all config to env vars (secrets backend-only), build the frontend to static assets, and deploy: frontend to a static host and backend as a container behind a reverse proxy that serves both under one origin with TLS. Run the pre-deploy checklist before going live.</p>
+
+<section class="further"><h2 id="further-reading">Further reading</h2>
+<p>Official documentation for the tools and APIs covered on this page:</p>
+<ul class="further-list"><li><a href="https://developer.mozilla.org/en-US/docs/Learn_web_development/Howto/Tools_and_setup/Deployment" target="_blank" rel="noopener">Deploy static sites (MDN) ↗</a></li>
+<li><a href="https://docs.github.com/en/pages" target="_blank" rel="noopener">GitHub Pages ↗</a></li></ul></section>
+  <nav class="pager">
+<a class="prev" href="authentication-concepts.html"><small>Previous</small>🌐 Authentication Concepts</a>
+<a class="next" href="../linux/shell-basics.html"><small>Next</small>🐧 Shell Basics</a>
+  </nav>
+</main>
+<button type="button" class="fab top" id="fab-top" aria-label="Back to top">↑ Top</button>
+<div class="banner" id="update-banner" role="status">A new version is available.<button type="button">Reload</button></div>
+<div class="banner" id="offline-banner" role="status">You're offline — showing cached lessons.</div>
+<script src="../app.js" defer></script>
+</body>
+</html>

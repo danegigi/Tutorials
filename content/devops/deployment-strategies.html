@@ -1,0 +1,56 @@
+<p class="lead">How you roll a new version out determines how much risk each release carries and how fast you can recover. The main strategies — rolling, blue/green, canary — trade off resource cost, blast radius, and rollback speed. Feature flags decouple deploy from release entirely.</p>
+
+<h2>Recreate (the naive one)</h2>
+<p><span class="level beginner">Beginner</span> Stop all old instances, start all new ones. Simple, but there's downtime during the gap, and if the new version is broken you're down until you roll back.</p>
+<blockquote class="warn">Only acceptable where brief downtime is fine (internal tools, maintenance windows). For anything user-facing, use one of the zero-downtime strategies below.</blockquote>
+
+<h2>Rolling update</h2>
+<p>Replace instances a few at a time: new ones come up healthy, old ones drain, repeat until done. No downtime, no extra capacity beyond a small surge. This is the Kubernetes default.</p>
+<pre><code># Kubernetes rolling update knobs
+strategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxUnavailable: 0     # never go below desired count
+    maxSurge: 1           # at most one extra pod during the roll
+# A readiness probe gates traffic: a pod gets requests only once it reports ready.</code></pre>
+<blockquote class="warn"><strong>Common mistake:</strong> rolling updates with no readiness/health probe. Kubernetes then routes traffic to pods that are still starting (or crash-looping), causing errors mid-deploy. The probe is what makes "rolling" actually zero-downtime.</blockquote>
+
+<h2>Blue/green</h2>
+<p><span class="level intermediate">Intermediate</span> Run two full environments: <strong>blue</strong> (current) and <strong>green</strong> (new). Deploy to green, test it in isolation, then flip the load balancer/router from blue to green instantly. Rollback is flipping back.</p>
+<pre><code>  LB → blue (v1)   [live]        LB → green (v2)  [live]
+       green (v2)  [warming]  ⇒       blue (v1)   [standby, instant rollback]</code></pre>
+<table>
+  <thead><tr><th>Pro</th><th>Con</th></tr></thead>
+  <tbody>
+    <tr><td>Instant switch &amp; instant rollback</td><td>Double the resources during the overlap</td></tr>
+    <tr><td>Full testing of green before any traffic</td><td>Database migrations must work for both versions</td></tr>
+  </tbody>
+</table>
+
+<h2>Canary</h2>
+<p><span class="level intermediate">Intermediate</span> Release the new version to a <em>small slice</em> of traffic (1% → 10% → 50% → 100%), watching error rates and latency at each step. If metrics degrade, roll back having exposed only a few users.</p>
+<pre><code># Progressive shift, gated on metrics (via a service mesh / ingress / Argo Rollouts)
+1%  → observe 5m → errors ok? → 10% → observe → 50% → observe → 100%
+                           ↳ metrics bad at any step → automatic rollback</code></pre>
+<blockquote class="tip">Canary is the safest for high-traffic services because the blast radius of a bad release is a few percent of users for a few minutes. It requires good observability — you need real-time error/latency metrics to make the promote-or-rollback decision (see the Monitoring lesson).</blockquote>
+
+<h2>Database migrations: the hard part</h2>
+<p>Any zero-downtime strategy means old and new code run <em>simultaneously</em> against the same database. Schema changes must be <strong>backward-compatible</strong>:</p>
+<pre><code># The expand/contract (parallel-change) pattern:
+1. EXPAND:   add the new column (nullable) — old code ignores it
+2. MIGRATE:  deploy new code that writes BOTH old and new; backfill
+3. CONTRACT: once all code uses the new column, drop the old one (later deploy)</code></pre>
+<blockquote class="warn"><strong>Never</strong> rename or drop a column in the same deploy that ships the code depending on the change — during the roll, the other version breaks. Split it across deploys with expand/contract.</blockquote>
+
+<h2>Feature flags: decouple deploy from release</h2>
+<p><span class="level advanced">Advanced</span> Ship code to production <em>dark</em> (behind a flag that's off), then turn the feature on independently — for everyone, or a cohort — without a deploy. Deploying becomes low-risk (the code path is inert) and "releasing" becomes a config toggle you can instantly reverse.</p>
+
+<h2>Exercises</h2>
+<ul>
+  <li>Configure a Kubernetes Deployment with <code>maxUnavailable: 0</code> + a readiness probe and watch a zero-downtime roll.</li>
+  <li>Describe the exact rollback step for recreate, rolling, blue/green, and canary.</li>
+  <li>Plan an expand/contract migration for renaming a <code>username</code> column to <code>handle</code>.</li>
+</ul>
+
+<h2>Mini-project: a canary release plan</h2>
+<p>For the containerized app from earlier lessons, write a canary release runbook: the traffic-shift steps (1/10/50/100%), the exact metrics (error rate, p99 latency) and thresholds that gate each promotion, the automatic rollback trigger, and an expand/contract plan for a schema change that ships alongside it. Add a feature flag for the risky new feature so deploy and release are separate decisions.</p>

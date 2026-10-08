@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en" data-base="../">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0d1117">
+<meta name="description" content="Dev Tutorials — Golang, Bun, Web Development, Linux and DevOps, offline-ready.">
+<title>Processes &amp; Services — Linux</title>
+<link rel="manifest" href="../manifest.webmanifest">
+<link rel="icon" href="../icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="../icon-192.png">
+<link rel="stylesheet" href="../app.css">
+<script>/* set theme before paint to avoid flash */(function(){try{var t=localStorage.getItem('tut.theme');document.documentElement.setAttribute('data-theme',t||'dark');}catch(e){document.documentElement.setAttribute('data-theme','dark');}})();</script>
+
+</head>
+<body class="lesson">
+<header class="nav">
+  <a class="brand" href="../index.html">📚 Dev Tutorials</a>
+  <span class="crumb">Processes &amp; Services — Linux</span>
+  <span class="spacer"></span>
+  <a class="navbtn" href="../search.html">🔎 Search</a>
+  <button class="navbtn" id="install-btn" type="button">⬇️ Install</button>
+  <button class="navbtn" id="theme-btn" type="button" aria-label="Toggle theme">🌙 Dark</button>
+</header>
+<main class="wrap lesson-body">
+  <h1 class="page-title">Processes &amp; Services</h1>
+  <div class="lesson-tools" data-lesson-id="linux/processes-and-services">
+    <button id="done-btn" type="button" aria-pressed="false">○ Mark complete</button>
+    <button id="mark-btn" type="button" aria-pressed="false">☆ Bookmark</button>
+    <a class="navbtn" href="index.html" style="margin-left:auto">All Linux lessons →</a>
+  </div>
+<nav class="toc" aria-label="On this page"><strong>On this page</strong><ul>
+<li class="lvl2"><a href="#seeing-what-is-running">Seeing what is running</a></li>
+<li class="lvl3"><a href="#live-views-top-and-htop">Live views: top and htop</a></li>
+<li class="lvl2"><a href="#signals-and-kill">Signals and kill</a></li>
+<li class="lvl2"><a href="#jobs-background-and-surviving-logout">Jobs, background, and surviving logout</a></li>
+<li class="lvl2"><a href="#services-with-systemd">Services with systemd</a></li>
+<li class="lvl2"><a href="#exercises">Exercises</a></li>
+<li class="lvl2"><a href="#mini-project-run-your-app-as-a-systemd-service">Mini-project: run your app as a systemd service</a></li>
+</ul></nav>
+<p class="lead">Everything running on a Linux box is a process, and the long-lived ones you care about — web servers, databases, your own app — are managed as services by systemd. This lesson covers inspecting what is running (<code>ps</code>, <code>top</code>, <code>htop</code>), sending signals to control or stop a process (<code>kill</code>, SIGTERM vs SIGKILL), keeping work running after you log off (<code>jobs</code>, <code>bg</code>, <code>fg</code>, <code>nohup</code>), and driving services with <code>systemctl</code>.</p>
+
+<h2 id="seeing-what-is-running">Seeing what is running</h2>
+<p><span class="level beginner">Beginner</span> <code>ps</code> takes a one-time snapshot; <code>top</code> and <code>htop</code> refresh live. The <code>aux</code> flags to <code>ps</code> are the ones everyone memorises: <strong>a</strong>ll users, <strong>u</strong>ser-oriented columns, including processes with no controlling terminal (<strong>x</strong>).</p>
+<pre><code>ps aux | head -3
+# -> USER   PID %CPU %MEM    VSZ   RSS TTY  STAT START TIME COMMAND
+# -> root     1  0.0  0.1 168140 11236 ?    Ss   09:12 0:03 /sbin/init
+# -> ada   3120  0.4  1.2 998220 50104 ?    Sl   10:55 0:11 node server.js
+
+# Find a specific process (the grep -v drops the grep line itself)
+ps aux | grep -v grep | grep nginx
+# -> www-data 814 0.0 0.3 55200 13004 ? S 09:13 0:00 nginx: worker process
+
+# Just the PID of a named process
+pgrep -f "node server.js"
+# -> 3120</code></pre>
+<table>
+  <thead><tr><th>Column</th><th>Meaning</th></tr></thead>
+  <tbody>
+    <tr><td><code>PID</code></td><td>Process ID — the number you pass to <code>kill</code>.</td></tr>
+    <tr><td><code>%CPU</code> / <code>%MEM</code></td><td>Share of CPU and physical RAM.</td></tr>
+    <tr><td><code>RSS</code></td><td>Resident set size — actual RAM used, in KB.</td></tr>
+    <tr><td><code>STAT</code></td><td>State: <code>R</code> running, <code>S</code> sleeping, <code>Z</code> zombie, <code>D</code> uninterruptible.</td></tr>
+  </tbody>
+</table>
+
+<h3 id="live-views-top-and-htop">Live views: top and htop</h3>
+<pre><code>top        # built in everywhere; press 'M' to sort by memory, 'P' by CPU, 'q' to quit
+htop       # friendlier (install it): colour bars, scroll, F9 to send a signal</code></pre>
+<blockquote class="tip">The <strong>load average</strong> in <code>top</code>'s header (e.g. <code>0.52 0.40 0.33</code>) is the 1/5/15-minute average number of processes wanting the CPU. As a rough rule, a sustained load above your core count means the machine is saturated — check with <code>nproc</code>.</blockquote>
+
+<h2 id="signals-and-kill">Signals and kill</h2>
+<p><span class="level intermediate">Intermediate</span> You stop or control a process by sending it a <em>signal</em>. The two that matter most:</p>
+<table>
+  <thead><tr><th>Signal</th><th>Number</th><th>Meaning</th></tr></thead>
+  <tbody>
+    <tr><td><code>SIGTERM</code></td><td>15</td><td><strong>Default.</strong> &ldquo;Please shut down.&rdquo; The process can catch it, flush buffers, close connections, then exit cleanly.</td></tr>
+    <tr><td><code>SIGKILL</code></td><td>9</td><td>&ldquo;Die now.&rdquo; Cannot be caught or ignored — the kernel kills it instantly. No cleanup.</td></tr>
+    <tr><td><code>SIGHUP</code></td><td>1</td><td>Terminal hangup; many daemons treat it as &ldquo;reload your config.&rdquo;</td></tr>
+    <tr><td><code>SIGINT</code></td><td>2</td><td>What Ctrl-C sends — interrupt the foreground program.</td></tr>
+  </tbody>
+</table>
+<pre><code>kill 3120          # polite: send SIGTERM, let it clean up
+kill -HUP 814      # ask nginx to reload its config
+kill -9 3120       # last resort: SIGKILL, no cleanup
+pkill -f "node server.js"   # by command pattern instead of PID</code></pre>
+<blockquote class="warn"><strong>Common mistake:</strong> reaching for <code>kill -9</code> first. SIGKILL gives the process zero chance to close files, finish writes, or release locks, which can corrupt data or leave stale lock files. Always try plain <code>kill</code> (SIGTERM) first and only escalate to <code>-9</code> if it will not exit. And be careful with <code>pkill -f</code>: the pattern matches the whole command line, so <code>pkill -f node</code> can take down more Node processes than you meant. Scope it to a single PID (<code>kill $(pgrep -f "node server.js")</code>) when you can.</blockquote>
+
+<h2 id="jobs-background-and-surviving-logout">Jobs, background, and surviving logout</h2>
+<p><span class="level intermediate">Intermediate</span> A command you start normally runs in the <em>foreground</em>, tying up your terminal. You can suspend it, move it to the background, and bring it back.</p>
+<pre><code>./long-task.sh          # runs in foreground, blocks the prompt
+^Z                      # Ctrl-Z suspends it -> "[1]+  Stopped"
+bg                      # resume it in the background
+jobs
+# -> [1]+  Running    ./long-task.sh &amp;
+fg %1                   # bring job 1 back to the foreground
+
+# Start something in the background directly
+./long-task.sh &amp;
+# -> [1] 4210            (job number and PID)</code></pre>
+<p>But a backgrounded job still dies when you log out (it receives SIGHUP). To outlive your session use <code>nohup</code>, or better, a terminal multiplexer or a systemd service:</p>
+<pre><code># nohup: ignore the hangup, redirect output to a file
+nohup ./server &gt; server.log 2&gt;&amp;1 &amp;
+# -> nohup: ignoring input and appending output to 'server.log'
+
+# For anything long-lived in production, DON'T use nohup — make it a service (below).</code></pre>
+
+<h2 id="services-with-systemd">Services with systemd</h2>
+<p><span class="level intermediate">Intermediate</span> On a modern server, long-running programs are <strong>units</strong> managed by <code>systemd</code>, controlled through <code>systemctl</code>. This gives you auto-restart on crash, start-on-boot, and unified logging via <code>journalctl</code> — everything <code>nohup</code> cannot do.</p>
+<table>
+  <thead><tr><th>Command</th><th>What it does</th></tr></thead>
+  <tbody>
+    <tr><td><code>systemctl status nginx</code></td><td>Is it running? Show recent log lines and the main PID.</td></tr>
+    <tr><td><code>systemctl start nginx</code></td><td>Start it now.</td></tr>
+    <tr><td><code>systemctl stop nginx</code></td><td>Stop it now.</td></tr>
+    <tr><td><code>systemctl restart nginx</code></td><td>Stop then start (picks up new config/binary).</td></tr>
+    <tr><td><code>systemctl reload nginx</code></td><td>Re-read config without dropping connections (if supported).</td></tr>
+    <tr><td><code>systemctl enable nginx</code></td><td>Start automatically on every boot.</td></tr>
+    <tr><td><code>systemctl disable nginx</code></td><td>Do not start on boot.</td></tr>
+    <tr><td><code>systemctl enable --now nginx</code></td><td>Enable AND start in one step.</td></tr>
+  </tbody>
+</table>
+<pre><code>sudo systemctl status nginx
+# -> * nginx.service - A high performance web server
+# ->      Loaded: loaded (/lib/systemd/system/nginx.service; enabled)
+# ->      Active: active (running) since Thu 2026-10-08 09:13:02 UTC; 2h ago
+# ->    Main PID: 812 (nginx)
+# ->       Tasks: 3 (limit: 4631)
+
+sudo systemctl restart nginx
+systemctl is-active nginx
+# -> active
+systemctl is-enabled nginx
+# -> enabled</code></pre>
+<blockquote class="tip"><code>restart</code> vs <code>reload</code>: <code>restart</code> fully stops and starts the service (brief downtime, always picks up changes); <code>reload</code> sends a signal asking it to re-read config without dropping live connections, but only works for services that support it. When in doubt, <code>restart</code>.</blockquote>
+
+<h2 id="exercises">Exercises</h2>
+<ul>
+  <li>Use <code>ps aux</code> piped through <code>sort</code> to find the three processes using the most memory on your machine.</li>
+  <li>Start <code>sleep 300 &amp;</code>, list it with <code>jobs</code>, then terminate it with a polite <code>kill</code> (not <code>-9</code>).</li>
+  <li>Run <code>top</code>, sort by CPU with <code>P</code> then by memory with <code>M</code>, and quit with <code>q</code>.</li>
+  <li>Check whether <code>cron</code> (or <code>ssh</code>) is active and enabled on your system using <code>systemctl is-active</code> and <code>systemctl is-enabled</code>.</li>
+</ul>
+
+<h2 id="mini-project-run-your-app-as-a-systemd-service">Mini-project: run your app as a systemd service</h2>
+<p>Take a long-running program and turn it from a fragile <code>nohup</code> job into a real managed service that restarts on crash and starts on boot.</p>
+<pre><code>sudo tee /etc/systemd/system/widgetd.service &gt;/dev/null &lt;&lt;'EOF'
+[Unit]
+Description=Widget daemon
+After=network.target
+
+[Service]
+ExecStart=/opt/widgetd/widgetd --port 8080
+User=widgetd
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+sudo systemctl daemon-reload          # re-read unit files after editing
+sudo systemctl enable --now widgetd   # start now + on every boot
+systemctl status widgetd
+# -> Active: active (running) ... Main PID: 5120 (widgetd)
+
+# Prove the auto-restart works: kill it and watch systemd bring it back
+sudo kill $(systemctl show -p MainPID --value widgetd)
+sleep 3; systemctl status widgetd | grep Active
+# -> Active: active (running)   (restarted automatically)</code></pre>
+<p>The service now survives crashes and reboots, logs to the journal (<code>journalctl -u widgetd -f</code>), and runs as an unprivileged user — the production-grade replacement for backgrounding a process by hand.</p>
+
+<section class="further"><h2 id="further-reading">Further reading</h2>
+<p>Official documentation for the tools and APIs covered on this page:</p>
+<ul class="further-list"><li><a href="https://man7.org/linux/man-pages/man1/systemctl.1.html" target="_blank" rel="noopener">systemctl (man) ↗</a></li>
+<li><a href="https://man7.org/linux/man-pages/man7/signal.7.html" target="_blank" rel="noopener">Signals (man) ↗</a></li></ul></section>
+  <nav class="pager">
+<a class="prev" href="users-and-groups.html"><small>Previous</small>🐧 Users &amp; Groups</a>
+<a class="next" href="package-managers.html"><small>Next</small>🐧 Package Managers</a>
+  </nav>
+</main>
+<button type="button" class="fab top" id="fab-top" aria-label="Back to top">↑ Top</button>
+<div class="banner" id="update-banner" role="status">A new version is available.<button type="button">Reload</button></div>
+<div class="banner" id="offline-banner" role="status">You're offline — showing cached lessons.</div>
+<script src="../app.js" defer></script>
+</body>
+</html>

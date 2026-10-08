@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en" data-base="../">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0d1117">
+<meta name="description" content="Dev Tutorials — Golang, Bun, Web Development, Linux and DevOps, offline-ready.">
+<title>TLS &amp; Domains — DevOps</title>
+<link rel="manifest" href="../manifest.webmanifest">
+<link rel="icon" href="../icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="../icon-192.png">
+<link rel="stylesheet" href="../app.css">
+<script>/* set theme before paint to avoid flash */(function(){try{var t=localStorage.getItem('tut.theme');document.documentElement.setAttribute('data-theme',t||'dark');}catch(e){document.documentElement.setAttribute('data-theme','dark');}})();</script>
+
+</head>
+<body class="lesson">
+<header class="nav">
+  <a class="brand" href="../index.html">📚 Dev Tutorials</a>
+  <span class="crumb">TLS &amp; Domains — DevOps</span>
+  <span class="spacer"></span>
+  <a class="navbtn" href="../search.html">🔎 Search</a>
+  <button class="navbtn" id="install-btn" type="button">⬇️ Install</button>
+  <button class="navbtn" id="theme-btn" type="button" aria-label="Toggle theme">🌙 Dark</button>
+</header>
+<main class="wrap lesson-body">
+  <h1 class="page-title">TLS &amp; Domains</h1>
+  <div class="lesson-tools" data-lesson-id="devops/tls-and-domains">
+    <button id="done-btn" type="button" aria-pressed="false">○ Mark complete</button>
+    <button id="mark-btn" type="button" aria-pressed="false">☆ Bookmark</button>
+    <a class="navbtn" href="index.html" style="margin-left:auto">All DevOps lessons →</a>
+  </div>
+<nav class="toc" aria-label="On this page"><strong>On this page</strong><ul>
+<li class="lvl2"><a href="#dns-records">DNS records</a></li>
+<li class="lvl2"><a href="#how-tlshttps-works">How TLS/HTTPS works</a></li>
+<li class="lvl3"><a href="#the-handshake">The handshake</a></li>
+<li class="lvl3"><a href="#the-certificate-chain">The certificate chain</a></li>
+<li class="lvl2"><a href="#lets-encrypt-acme">Let's Encrypt &amp;amp; ACME</a></li>
+<li class="lvl2"><a href="#wiring-a-domain-to-a-server-or-load-balancer">Wiring a domain to a server or load balancer</a></li>
+<li class="lvl3"><a href="#pointing-at-a-single-server-fixed-ip">Pointing at a single server (fixed IP)</a></li>
+<li class="lvl3"><a href="#pointing-at-a-load-balancer-rotating-ips">Pointing at a load balancer (rotating IPs)</a></li>
+<li class="lvl3"><a href="#the-clean-path-route-53-alias">The clean path: Route 53 ALIAS</a></li>
+<li class="lvl2"><a href="#aws-certificate-manager-acm">AWS Certificate Manager (ACM)</a></li>
+<li class="lvl2"><a href="#common-mistakes">Common mistakes</a></li>
+<li class="lvl2"><a href="#exercises">Exercises</a></li>
+<li class="lvl2"><a href="#mini-project-a-domain-to-a-secure-site-end-to-end">Mini-project: a domain to a secure site, end to end</a></li>
+</ul></nav>
+<p class="lead">Before anyone can reach your server securely, three things have to work: a domain name must resolve to your server's address, a TLS certificate must prove the server is who it claims to be, and the two must be wired together. This lesson covers DNS record types, how the TLS handshake and certificate chain actually work, Let's Encrypt and the ACME protocol, pointing a registrar like GoDaddy at a server or load balancer, and AWS Certificate Manager.</p>
+
+<h2 id="dns-records">DNS records</h2>
+<p><span class="level beginner">Beginner</span> DNS is the phone book of the internet: it maps human names to machine addresses. A <strong>zone</strong> is the set of records for a domain, and each record has a type that says what it answers.</p>
+<table>
+  <thead><tr><th>Record</th><th>Maps</th><th>Example</th></tr></thead>
+  <tbody>
+    <tr><td><code>A</code></td><td>A name &amp;rarr; an IPv4 address</td><td><code>example.com &amp;rarr; 203.0.113.10</code></td></tr>
+    <tr><td><code>AAAA</code></td><td>A name &amp;rarr; an IPv6 address</td><td><code>example.com &amp;rarr; 2001:db8::1</code></td></tr>
+    <tr><td><code>CNAME</code></td><td>A name &amp;rarr; another name (alias)</td><td><code>www &amp;rarr; example.com</code></td></tr>
+    <tr><td><code>MX</code></td><td>A domain &amp;rarr; its mail servers (with priority)</td><td><code>10 mail.example.com</code></td></tr>
+    <tr><td><code>TXT</code></td><td>Arbitrary text (verification, SPF, ACME challenges)</td><td><code>"v=spf1 include:_spf.google.com ~all"</code></td></tr>
+    <tr><td><code>NS</code></td><td>A zone &amp;rarr; its authoritative nameservers</td><td><code>ns-123.awsdns-45.com</code></td></tr>
+  </tbody>
+</table>
+<pre><code># Query records yourself with dig
+dig example.com +short
+# -&gt; 203.0.113.10
+dig NS example.com +short
+# -&gt; ns-123.awsdns-45.com.
+dig TXT example.com +short
+# -&gt; "v=spf1 include:_spf.google.com ~all"</code></pre>
+<p><strong>TTL</strong> (time to live) is how long resolvers may cache a record. A low TTL (e.g. 300s) makes changes propagate fast but increases query load; raise it once a record is stable.</p>
+<blockquote class="warn">You cannot put a <code>CNAME</code> on the <em>apex</em> (bare) domain <code>example.com</code>: the apex must also carry <code>SOA</code> and <code>NS</code> records, and a CNAME cannot coexist with other records. This single rule drives most of the domain-wiring decisions below.</blockquote>
+
+<h2 id="how-tlshttps-works">How TLS/HTTPS works</h2>
+<p><span class="level intermediate">Intermediate</span> HTTPS is HTTP carried inside a TLS session. TLS gives you three guarantees: <strong>encryption</strong> (eavesdroppers see ciphertext), <strong>integrity</strong> (tampering is detected), and <strong>authentication</strong> (you are talking to the real server, proven by its certificate).</p>
+
+<h3 id="the-handshake">The handshake</h3>
+<p>When a browser connects to <code>https://example.com</code>:</p>
+<ol>
+  <li><strong>ClientHello</strong> — the client offers its TLS versions and cipher suites.</li>
+  <li><strong>ServerHello + certificate</strong> — the server picks a cipher and sends its certificate (containing its public key and the domain it is valid for).</li>
+  <li><strong>Verification</strong> — the client checks the certificate: is it for this hostname, unexpired, and signed by a trusted authority?</li>
+  <li><strong>Key exchange</strong> — both sides derive a shared symmetric session key (modern TLS 1.3 uses ephemeral Diffie-Hellman for forward secrecy).</li>
+  <li><strong>Encrypted session</strong> — all further traffic uses the fast symmetric key.</li>
+</ol>
+<p>Asymmetric crypto (slow) is used only to establish trust and exchange keys; the bulk data then flows under symmetric crypto (fast).</p>
+
+<h3 id="the-certificate-chain">The certificate chain</h3>
+<p>Your browser does not trust your server's certificate directly. It trusts a small set of <strong>root CAs</strong> baked into the OS/browser. Those roots sign <strong>intermediate</strong> CA certificates, which sign your <strong>leaf</strong> (server) certificate. The server must present the leaf <em>and</em> the intermediates (the <code>fullchain.pem</code>) so the client can build a path from leaf up to a trusted root.</p>
+<pre><code># Inspect what a server actually serves
+openssl s_client -connect example.com:443 -servername example.com &lt; /dev/null \
+  | openssl x509 -noout -subject -issuer -dates
+# -&gt; subject=CN = example.com
+# -&gt; issuer=C = US, O = Let's Encrypt, CN = R11
+# -&gt; notBefore=... notAfter=...</code></pre>
+<blockquote class="warn">The #1 TLS deployment bug is serving the leaf certificate <em>without</em> its intermediates. Desktop browsers often cache the intermediate and seem fine, while mobile clients and API calls fail with "unable to get local issuer certificate." Always deploy the full chain.</blockquote>
+
+<h2 id="lets-encrypt-acme">Let's Encrypt &amp; ACME</h2>
+<p><span class="level intermediate">Intermediate</span> <strong>Let's Encrypt</strong> is a free, automated certificate authority. <strong>ACME</strong> (Automatic Certificate Management Environment) is the protocol a client uses to prove domain control and get a certificate issued and renewed with no human in the loop. You prove control by solving a <em>challenge</em>:</p>
+<ul>
+  <li><strong>HTTP-01</strong> — the CA asks you to serve a specific token at <code>http://your-domain/.well-known/acme-challenge/&lt;token&gt;</code>. Simple; needs port 80 reachable.</li>
+  <li><strong>DNS-01</strong> — the CA asks you to publish a specific <code>TXT</code> record. Works behind a firewall and is the only method that can issue <em>wildcard</em> certs (<code>*.example.com</code>).</li>
+  <li><strong>TLS-ALPN-01</strong> — proof happens during a special TLS handshake on port 443 (what Traefik's <code>tlschallenge</code> uses).</li>
+</ul>
+<pre><code># certbot: issue a cert for a domain served by Nginx (HTTP-01)
+sudo certbot --nginx -d example.com -d www.example.com
+# -&gt; Successfully received certificate.
+# -&gt; Certificate is saved at: /etc/letsencrypt/live/example.com/fullchain.pem
+
+# A systemd timer renews automatically; test the renewal path with:
+sudo certbot renew --dry-run
+# -&gt; Congratulations, all simulated renewals succeeded</code></pre>
+<blockquote class="warn">Let's Encrypt has strict rate limits (e.g. failed-authorization and duplicate-certificate caps per hour/week). While fixing a broken setup, test against the <strong>staging</strong> environment (its certs are untrusted but do not count against quotas) and stop retrying a failing challenge — each failure burns the quota and can lock you out of that domain for the cooldown window.</blockquote>
+
+<h2 id="wiring-a-domain-to-a-server-or-load-balancer">Wiring a domain to a server or load balancer</h2>
+<p><span class="level intermediate">Intermediate</span> Your domain is registered at a registrar like <strong>GoDaddy</strong>, and you need <code>example.com</code> to resolve to your server or load balancer. A single server has a fixed IP, which is easy. A load balancer typically has a <em>DNS name</em> whose underlying IPs rotate — which is where the apex-CNAME rule bites.</p>
+
+<h3 id="pointing-at-a-single-server-fixed-ip">Pointing at a single server (fixed IP)</h3>
+<pre><code># In GoDaddy -&gt; Domain -&gt; DNS -&gt; Manage Zones:
+Type   Name   Value           TTL
+A      @      203.0.113.10     600    # apex -&gt; the server's IP
+CNAME  www    example.com      600    # www aliases to the apex</code></pre>
+
+<h3 id="pointing-at-a-load-balancer-rotating-ips">Pointing at a load balancer (rotating IPs)</h3>
+<p>A load balancer gives you a name like <code>my-alb-123.us-east-1.elb.amazonaws.com</code>, not a stable IP — so you cannot use a plain <code>A</code> record, and a <code>CNAME</code> is illegal at the apex.</p>
+<pre><code># Sub-domain is fine — CNAME to the LB's DNS name:
+Type   Name   Value                                          TTL
+CNAME  www    my-alb-123.us-east-1.elb.amazonaws.com          600
+
+# Apex example.com — a CNAME is ILLEGAL here. Options:
+#   - Use GoDaddy Forwarding to redirect example.com -&gt; www.example.com
+#   - Use a DNS provider with ANAME/ALIAS flattening at the apex
+#   - Move DNS to Route 53 and use an ALIAS record (below)</code></pre>
+<blockquote class="warn">A common mistake is "set the A record to the load balancer's DNS name." An <code>A</code> record only holds an IP, and the LB's IPs rotate — this breaks the moment AWS changes them. Use <code>CNAME</code> for sub-domains and <code>ALIAS</code>/<code>ANAME</code> (or forwarding) for the apex.</blockquote>
+
+<h3 id="the-clean-path-route-53-alias">The clean path: Route 53 ALIAS</h3>
+<p><strong>Route 53</strong> solves the apex problem with an <strong>ALIAS</strong> record — it behaves like an A record at the apex but points at an AWS resource by name and tracks its changing IPs automatically. Keep the domain <em>registered</em> at GoDaddy but let Route 53 answer DNS:</p>
+<pre><code># 1. Create a Public Hosted Zone for example.com in Route 53.
+#    It gives you 4 nameservers, e.g. ns-123.awsdns-45.com ...
+
+# 2. In GoDaddy -&gt; Nameservers -&gt; "Enter my own": replace GoDaddy's
+#    nameservers with the 4 from Route 53. (Registration stays at GoDaddy.)
+
+# 3. In the Route 53 zone, create ALIAS records:
+#    example.com       A  ALIAS -&gt; your ALB/NLB   (apex — works!)
+#    www.example.com   A  ALIAS -&gt; your ALB/NLB
+
+# 4. Verify after propagation (minutes to a couple of hours):
+dig NS example.com +short
+dig example.com +short</code></pre>
+
+<h2 id="aws-certificate-manager-acm">AWS Certificate Manager (ACM)</h2>
+<p><span class="level intermediate">Intermediate</span> <strong>ACM</strong> issues free public TLS certificates for use with AWS load balancers and CloudFront, and renews them automatically. You never touch private key files — ACM holds them and the load balancer uses them.</p>
+<p>Request a cert with <strong>DNS validation</strong>: ACM gives you a <code>CNAME</code> to add to your DNS; once it resolves, the cert is issued and auto-renews for as long as the record stays in place.</p>
+<pre><code>Type   Name                            Value
+CNAME  _a1b2c3.example.com             _x9y8z7.acm-validations.aws.</code></pre>
+<pre><code># Request a cert (DNS validation) via the CLI
+aws acm request-certificate \
+  --domain-name example.com \
+  --subject-alternative-names "*.example.com" \
+  --validation-method DNS
+# -&gt; { "CertificateArn": "arn:aws:acm:us-east-1:...:certificate/abc-123" }</code></pre>
+<blockquote class="warn">The certificate must live in the <em>same region</em> as the load balancer that uses it. The one exception is CloudFront, which always wants its certificate in <code>us-east-1</code>. Requesting a cert in the wrong region is a classic "why won't the HTTPS listener accept my cert" trap.</blockquote>
+<p>Attach the issued cert to an HTTPS listener and redirect HTTP to it:</p>
+<pre><code>aws elbv2 create-listener \
+  --load-balancer-arn $ALB_ARN \
+  --protocol HTTPS --port 443 \
+  --certificates CertificateArn=$ACM_CERT_ARN \
+  --ssl-policy ELBSecurityPolicy-TLS13-1-2-2021-06 \
+  --default-actions Type=forward,TargetGroupArn=$TG_ARN</code></pre>
+
+<h2 id="common-mistakes">Common mistakes</h2>
+<blockquote class="warn"><strong>Common mistakes</strong>
+<ul>
+  <li><strong>CNAME on the apex.</strong> Illegal — the bare domain already has SOA/NS records. Use ALIAS/ANAME or redirect to <code>www</code>.</li>
+  <li><strong>Putting a DNS name in an A record.</strong> An A record holds an IP only; a load balancer's name must be a CNAME (sub-domain) or ALIAS (apex).</li>
+  <li><strong>Serving the leaf cert without intermediates.</strong> Works in some desktop browsers, fails on mobile/API. Always deploy <code>fullchain.pem</code>.</li>
+  <li><strong>ACM cert in the wrong region.</strong> Must match the load balancer's region (CloudFront excepted — always us-east-1).</li>
+  <li><strong>Retrying a failing ACME challenge.</strong> Each failure burns the rate limit. Fix the root cause, test in staging, then issue once.</li>
+  <li><strong>Expecting instant propagation.</strong> Nameserver changes follow the TLD's schedule (minutes to ~48h). Verify with <code>dig</code> before assuming the config is wrong.</li>
+</ul></blockquote>
+
+<h2 id="exercises">Exercises</h2>
+<ul>
+  <li>Use <code>dig</code> to pull the <code>A</code>, <code>NS</code>, and <code>MX</code> records of a domain you know, and explain what each answers.</li>
+  <li>Run <code>openssl s_client -connect …:443</code> against a public site and read the subject, issuer, and validity dates of its certificate.</li>
+  <li>On a test server with a real domain, issue a Let's Encrypt cert with certbot (HTTP-01), then run <code>certbot renew --dry-run</code>.</li>
+  <li>Write the exact DNS records (apex + <code>www</code>) to point a GoDaddy domain at (a) a fixed-IP server and (b) an AWS load balancer, and justify each record type.</li>
+  <li>Request an ACM certificate with DNS validation and describe where the validation CNAME must live and why the cert must share the LB's region.</li>
+</ul>
+
+<h2 id="mini-project-a-domain-to-a-secure-site-end-to-end">Mini-project: a domain to a secure site, end to end</h2>
+<p>Take a domain registered at GoDaddy and bring up a server (or AWS load balancer) serving a small app. Decide and implement the DNS wiring: a fixed-IP server gets an apex <code>A</code> record plus a <code>www</code> CNAME; a load balancer gets Route 53 ALIAS records (moving nameservers while keeping registration at GoDaddy). Obtain a trusted certificate — Let's Encrypt on the server, or ACM on the load balancer — validate the full chain with <code>openssl s_client</code>, confirm <code>http://</code> redirects to <code>https://</code>, and verify renewal works (certbot dry-run, or confirm ACM auto-renew with the validation record in place).</p>
+
+<section class="further"><h2 id="further-reading">Further reading</h2>
+<p>Official documentation for the tools and APIs covered on this page:</p>
+<ul class="further-list"><li><a href="https://letsencrypt.org/how-it-works/" target="_blank" rel="noopener">Let's Encrypt how it works ↗</a></li>
+<li><a href="https://developer.mozilla.org/en-US/docs/Web/Security/Transport_Layer_Security" target="_blank" rel="noopener">How HTTPS works (MDN TLS) ↗</a></li></ul></section>
+  <nav class="pager">
+<a class="prev" href="reverse-proxies.html"><small>Previous</small>🔁 Reverse Proxies</a>
+<a class="next" href="cloud-basics.html"><small>Next</small>🔁 Cloud Basics (AWS)</a>
+  </nav>
+</main>
+<button type="button" class="fab top" id="fab-top" aria-label="Back to top">↑ Top</button>
+<div class="banner" id="update-banner" role="status">A new version is available.<button type="button">Reload</button></div>
+<div class="banner" id="offline-banner" role="status">You're offline — showing cached lessons.</div>
+<script src="../app.js" defer></script>
+</body>
+</html>

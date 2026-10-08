@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en" data-base="../">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0d1117">
+<meta name="description" content="Dev Tutorials — Golang, Bun, Web Development, Linux and DevOps, offline-ready.">
+<title>Bash Scripting Basics — Linux</title>
+<link rel="manifest" href="../manifest.webmanifest">
+<link rel="icon" href="../icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="../icon-192.png">
+<link rel="stylesheet" href="../app.css">
+<script>/* set theme before paint to avoid flash */(function(){try{var t=localStorage.getItem('tut.theme');document.documentElement.setAttribute('data-theme',t||'dark');}catch(e){document.documentElement.setAttribute('data-theme','dark');}})();</script>
+
+</head>
+<body class="lesson">
+<header class="nav">
+  <a class="brand" href="../index.html">📚 Dev Tutorials</a>
+  <span class="crumb">Bash Scripting Basics — Linux</span>
+  <span class="spacer"></span>
+  <a class="navbtn" href="../search.html">🔎 Search</a>
+  <button class="navbtn" id="install-btn" type="button">⬇️ Install</button>
+  <button class="navbtn" id="theme-btn" type="button" aria-label="Toggle theme">🌙 Dark</button>
+</header>
+<main class="wrap lesson-body">
+  <h1 class="page-title">Bash Scripting Basics</h1>
+  <div class="lesson-tools" data-lesson-id="linux/bash-scripting">
+    <button id="done-btn" type="button" aria-pressed="false">○ Mark complete</button>
+    <button id="mark-btn" type="button" aria-pressed="false">☆ Bookmark</button>
+    <a class="navbtn" href="index.html" style="margin-left:auto">All Linux lessons →</a>
+  </div>
+<nav class="toc" aria-label="On this page"><strong>On this page</strong><ul>
+<li class="lvl2"><a href="#the-shebang-and-running-a-script">The shebang and running a script</a></li>
+<li class="lvl2"><a href="#variables-and-quoting">Variables and quoting</a></li>
+<li class="lvl2"><a href="#conditionals-if-and">Conditionals: if and [[ ]]</a></li>
+<li class="lvl2"><a href="#loops">Loops</a></li>
+<li class="lvl2"><a href="#functions-arguments-and-exit-codes">Functions, arguments, and exit codes</a></li>
+<li class="lvl2"><a href="#set--euo-pipefail-the-safety-line">set -euo pipefail: the safety line</a></li>
+<li class="lvl2"><a href="#exercises">Exercises</a></li>
+<li class="lvl2"><a href="#mini-project-a-real-backup-script">Mini-project: a real backup script</a></li>
+</ul></nav>
+<p class="lead">A shell script is just a file of the same commands you type at the prompt, saved so you can run them again and share them. The step up from one-liner to robust script is small but important: a shebang, careful quoting, a few control structures, and the safety line <code>set -euo pipefail</code> that turns silent failures into loud ones. This lesson builds up to a real, re-runnable backup script you would trust on a server.</p>
+
+<h2 id="the-shebang-and-running-a-script">The shebang and running a script</h2>
+<p><span class="level beginner">Beginner</span> The first line, the <em>shebang</em>, tells the system which interpreter to use. Then make the file executable and run it.</p>
+<pre><code>cat &gt; hello.sh &lt;&lt;'EOF'
+#!/usr/bin/env bash
+echo "Hello from $(hostname)"
+EOF
+chmod +x hello.sh
+./hello.sh
+# -> Hello from web-01</code></pre>
+<blockquote class="tip">Use <code>#!/usr/bin/env bash</code> rather than <code>#!/bin/bash</code>: it finds bash via <code>PATH</code>, which matters on systems (like some BSDs or Nix) where bash is not in <code>/bin</code>. Use <code>#!/bin/sh</code> only if you are deliberately writing portable POSIX shell without bash features.</blockquote>
+
+<h2 id="variables-and-quoting">Variables and quoting</h2>
+<p><span class="level beginner">Beginner</span> Assign with <strong>no spaces</strong> around <code>=</code>. Expand with <code>$name</code> or <code>${name}</code>. The single most common bug in shell scripts is forgetting to quote expansions.</p>
+<pre><code>name="Ada Lovelace"       # no spaces around =
+echo "$name"              # QUOTED: prints the whole value
+# -> Ada Lovelace
+echo $name                # UNQUOTED: word-split into two arguments
+# -> Ada Lovelace    (looks the same here, but breaks with globs/extra spaces)
+
+dir="/var/log/my app"
+ls "$dir"                 # correct: one argument
+ls $dir                   # WRONG: ls gets '/var/log/my' and 'app' separately
+
+# Command substitution captures a command's output
+today="$(date +%F)"
+echo "today is $today"
+# -> today is 2026-10-08
+
+# Default values and required values
+port="${PORT:-8080}"      # use $PORT, or 8080 if unset/empty
+file="${1:?usage: backup.sh FILE}"   # error out if $1 is missing</code></pre>
+<blockquote class="warn"><strong>Common mistake:</strong> unquoted variables. <code>rm -rf $dir/*</code> with <code>$dir</code> empty becomes <code>rm -rf /*</code> — catastrophic. Quoting (<code>"$dir"</code>) and <code>set -u</code> (error on unset variables) together prevent the whole class. Treat every <code>$var</code> as if it might contain spaces or be empty, because one day it will.</blockquote>
+
+<h2 id="conditionals-if-and">Conditionals: if and [[ ]]</h2>
+<p><span class="level intermediate">Intermediate</span> Use <code>[[ ... ]]</code> (bash's test construct) over the older <code>[ ... ]</code> — it is safer with unquoted variables and supports <code>&amp;&amp;</code>, <code>||</code>, and pattern matching.</p>
+<pre><code>if [[ -f "$file" ]]; then
+  echo "$file exists"
+elif [[ -d "$file" ]]; then
+  echo "$file is a directory"
+else
+  echo "$file not found"
+fi
+
+# Numeric vs string comparison
+count=5
+[[ $count -gt 3 ]] &amp;&amp; echo "more than three"      # -gt -lt -eq -ge for numbers
+[[ "$env" == prod ]] &amp;&amp; echo "production"          # == != for strings
+[[ "$name" == A* ]] &amp;&amp; echo "starts with A"        # glob pattern match</code></pre>
+<table>
+  <thead><tr><th>Test</th><th>True when</th></tr></thead>
+  <tbody>
+    <tr><td><code>-f path</code></td><td>path is a regular file.</td></tr>
+    <tr><td><code>-d path</code></td><td>path is a directory.</td></tr>
+    <tr><td><code>-e path</code></td><td>path exists (any type).</td></tr>
+    <tr><td><code>-z str</code> / <code>-n str</code></td><td>string is empty / non-empty.</td></tr>
+    <tr><td><code>a -gt b</code></td><td>number a greater than b (<code>-lt -eq -ge -le -ne</code> too).</td></tr>
+  </tbody>
+</table>
+
+<h2 id="loops">Loops</h2>
+<pre><code># for over a list / glob (quote the loop variable!)
+for f in /var/log/*.log; do
+  echo "rotating $f"
+done
+
+# C-style for with a counter
+for ((i=1; i&lt;=3; i++)); do echo "attempt $i"; done
+# -> attempt 1 / attempt 2 / attempt 3
+
+# while, reading a file line by line (the safe idiom)
+while IFS= read -r line; do
+  echo "got: $line"
+done &lt; input.txt
+
+# until: loop until a condition becomes true (e.g. wait for a service)
+until curl -sf http://localhost:8080/health &gt;/dev/null; do
+  echo "waiting for app..."; sleep 1
+done</code></pre>
+
+<h2 id="functions-arguments-and-exit-codes">Functions, arguments, and exit codes</h2>
+<p><span class="level intermediate">Intermediate</span> Positional arguments are <code>$1</code>, <code>$2</code>, &hellip;; <code>$@</code> is all of them, <code>$#</code> is the count. Every command returns an <em>exit code</em>: <code>0</code> means success, non-zero means failure — this is what <code>if</code> and <code>&amp;&amp;</code> actually test.</p>
+<pre><code>log() { echo "[$(date +%T)] $*"; }     # $* / $@ = all args
+
+greet() {
+  local who="${1:-world}"              # 'local' keeps it scoped to the function
+  echo "hello, $who"
+  return 0                             # explicit exit code
+}
+
+greet Ada
+# -> hello, Ada
+log "starting with $# args: $@"
+
+# Exit codes drive control flow
+if grep -q ERROR app.log; then
+  log "errors found"; exit 1           # non-zero = this script failed
+fi
+echo "last command exit code: $?"      # $? holds the previous exit code</code></pre>
+
+<h2 id="set--euo-pipefail-the-safety-line">set -euo pipefail: the safety line</h2>
+<p><span class="level intermediate">Intermediate</span> Put this near the top of every non-trivial script. It converts the three silent-failure traps that bite everyone into immediate, visible errors.</p>
+<table>
+  <thead><tr><th>Option</th><th>Effect</th></tr></thead>
+  <tbody>
+    <tr><td><code>set -e</code></td><td>Exit immediately if any command fails (non-zero), instead of plowing on.</td></tr>
+    <tr><td><code>set -u</code></td><td>Error on use of an <em>unset</em> variable — catches typos and empty paths.</td></tr>
+    <tr><td><code>set -o pipefail</code></td><td>A pipeline fails if <em>any</em> stage fails, not just the last — <code>false | true</code> now fails.</td></tr>
+  </tbody>
+</table>
+<pre><code>#!/usr/bin/env bash
+set -euo pipefail
+IFS=$'\n\t'                 # safer word-splitting (newlines/tabs only, not spaces)
+
+# With -e, this script stops the moment tar fails — you never run the next line
+# against a half-made archive. Without it, failures pass silently.
+trap 'echo "FAILED at line $LINENO" &gt;&amp;2' ERR   # print where it died</code></pre>
+<blockquote class="warn">Even with <code>set -e</code>, a command whose failure you expect (like <code>grep</code> finding nothing) will abort the script. Guard those explicitly: <code>grep X file || true</code>, or test in an <code>if</code>. And remember <code>set -e</code> does not fire inside <code>&amp;&amp;</code>/<code>||</code> chains or on the left of a pipe without <code>pipefail</code> — which is exactly why you want all three options together.</blockquote>
+
+<h2 id="exercises">Exercises</h2>
+<ul>
+  <li>Write a script that takes a filename as <code>$1</code>, errors with a usage message if none is given (<code>${1:?...}</code>), and prints whether it exists.</li>
+  <li>Loop over every <code>.txt</code> file in a directory and print its line count, quoting the loop variable correctly.</li>
+  <li>Write a function that retries a command up to 3 times with a 2-second sleep between attempts, returning the command's exit code.</li>
+  <li>Add <code>set -euo pipefail</code> and an <code>ERR</code> trap to a script, then deliberately reference an unset variable and watch it fail loudly with the line number.</li>
+</ul>
+
+<h2 id="mini-project-a-real-backup-script">Mini-project: a real backup script</h2>
+<p>Write a production-shaped backup script: strict mode, argument validation, logging, a retention policy, and a clear success/failure exit code — everything a cron job or systemd timer would invoke.</p>
+<pre><code>#!/usr/bin/env bash
+set -euo pipefail
+IFS=$'\n\t'
+
+# --- config (overridable via environment) ---
+SRC="${1:?usage: backup.sh SOURCE_DIR [DEST_DIR]}"
+DEST="${2:-/var/backups}"
+KEEP_DAYS="${KEEP_DAYS:-7}"
+STAMP="$(date +%Y%m%d-%H%M%S)"
+ARCHIVE="$DEST/$(basename "$SRC")-$STAMP.tar.gz"
+
+log()  { echo "[$(date +%T)] $*"; }
+die()  { echo "[$(date +%T)] ERROR: $*" &gt;&amp;2; exit 1; }
+trap 'die "aborted at line $LINENO"' ERR
+
+# --- preconditions ---
+[[ -d "$SRC" ]]  || die "source '$SRC' is not a directory"
+mkdir -p "$DEST"
+
+# --- do the work ---
+log "backing up $SRC -> $ARCHIVE"
+tar czf "$ARCHIVE" -C "$(dirname "$SRC")" "$(basename "$SRC")"
+size="$(du -h "$ARCHIVE" | cut -f1)"
+log "created $ARCHIVE ($size)"
+
+# --- retention ---
+deleted="$(find "$DEST" -name '*.tar.gz' -mtime +"$KEEP_DAYS" -print -delete | wc -l)"
+log "pruned $deleted archive(s) older than $KEEP_DAYS days"
+log "backup OK"</code></pre>
+<pre><code>./backup.sh /var/www/site
+# -> [10:40:02] backing up /var/www/site -> /var/backups/site-20261008-104002.tar.gz
+# -> [10:40:03] created /var/backups/site-20261008-104002.tar.gz (4.1M)
+# -> [10:40:03] pruned 1 archive(s) older than 7 days
+# -> [10:40:03] backup OK
+echo $?
+# -> 0        (success — a monitoring tool or cron can rely on this)</code></pre>
+<p>Run it with a missing argument and it exits non-zero with a usage message; run it against a bad path and the <code>ERR</code> trap reports the exact line. That combination of strict mode, validation, logging, and a meaningful exit code is what separates a throwaway snippet from a script you can schedule and forget.</p>
+
+<section class="further"><h2 id="further-reading">Further reading</h2>
+<p>Official documentation for the tools and APIs covered on this page:</p>
+<ul class="further-list"><li><a href="https://www.gnu.org/software/bash/manual/bash.html" target="_blank" rel="noopener">Bash manual ↗</a></li>
+<li><a href="https://www.shellcheck.net/" target="_blank" rel="noopener">ShellCheck ↗</a></li></ul></section>
+  <nav class="pager">
+<a class="prev" href="cron-and-systemd-timers.html"><small>Previous</small>🐧 Cron &amp; systemd Timers</a>
+<a class="next" href="troubleshooting.html"><small>Next</small>🐧 Troubleshooting Workflow</a>
+  </nav>
+</main>
+<button type="button" class="fab top" id="fab-top" aria-label="Back to top">↑ Top</button>
+<div class="banner" id="update-banner" role="status">A new version is available.<button type="button">Reload</button></div>
+<div class="banner" id="offline-banner" role="status">You're offline — showing cached lessons.</div>
+<script src="../app.js" defer></script>
+</body>
+</html>

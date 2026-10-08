@@ -1,0 +1,123 @@
+<p class="lead">Bun's package manager is a drop-in replacement for npm/yarn/pnpm — it reads <code>package.json</code>, installs from the npm registry, and is dramatically faster thanks to a global cache and a binary lockfile. This lesson covers install/add/remove, the lockfile, outdated checks, workspaces, overrides, and <code>bunx</code>.</p>
+
+<h2>install, add, remove</h2>
+<p><span class="level beginner">Beginner</span> The core commands mirror npm but run faster:</p>
+<pre><code>bun install                 # install everything in package.json
+bun add hono                # add a runtime dependency
+bun add -d @types/bun       # add a dev dependency
+bun add zod@3.23.8          # pin an exact version
+bun add -g wrangler         # install a global tool
+bun remove hono             # remove a dependency
+bun update                  # update within the semver ranges in package.json
+bun update hono             # update just one package</code></pre>
+<pre><code>bun add hono
+# bun add v1.4.2
+# installed hono@4.6.3
+# 1 package installed [142.00ms]</code></pre>
+<blockquote class="tip">Prefer exact/pinned versions for reproducibility — set <code>exact = true</code> under <code>[install]</code> in <code>bunfig.toml</code> so <code>bun add</code> writes <code>"hono": "4.6.3"</code> instead of <code>"^4.6.3"</code>. A pinned dependency that looks unusual or near a popular name may be a typosquat — read the name twice before adding.</blockquote>
+
+<h2>The binary lockfile: bun.lockb</h2>
+<p>Bun writes a <strong>binary</strong> lockfile, <code>bun.lockb</code>, which parses far faster than a huge JSON lockfile. Commit it; never hand-generate <code>package-lock.json</code> or <code>yarn.lock</code> alongside it.</p>
+<pre><code>bun install --frozen-lockfile    # CI: fail if the lockfile would change at all
+bun pm ls                        # print the installed dependency tree
+bun pm ls --all                  # include transitive deps
+bun pm cache rm                  # clear the global install cache</code></pre>
+<p>Because it's binary you can't eyeball a diff. In code review, trust that a changed <code>bun.lockb</code> means dependencies moved, and rely on <code>--frozen-lockfile</code> in CI to catch an un-committed bump.</p>
+
+<h2>bun outdated</h2>
+<pre><code>bun outdated
+# ┌──────────┬─────────┬────────┬────────┐
+# │ Package  │ Current │ Update │ Latest │
+# ├──────────┼─────────┼────────┼────────┤
+# │ hono     │ 4.6.1   │ 4.6.3  │ 4.6.3  │
+# │ zod      │ 3.23.8  │ 3.23.8 │ 3.24.1 │
+# └──────────┴─────────┴────────┴────────┘</code></pre>
+<p><strong>Update</strong> is the newest version your semver range allows; <strong>Latest</strong> is the absolute newest (which may be a major bump outside your range). <code>bun update</code> moves to the Update column; reaching Latest for a major bump means editing the version and re-adding.</p>
+
+<h2>Workspaces (monorepos)</h2>
+<p><span class="level intermediate">Intermediate</span> Declare workspaces in the root <code>package.json</code>; Bun installs them together and symlinks internal dependencies.</p>
+<pre><code>// package.json (repo root)
+{
+  "name": "my-monorepo",
+  "private": true,
+  "workspaces": ["packages/*", "apps/*"],
+  "engines": { "bun": "&gt;=1.0.0" }
+}</code></pre>
+<p>A package depends on a sibling by name using the <code>workspace:</code> protocol:</p>
+<pre><code>// apps/web/package.json
+{ "dependencies": { "@myorg/ui": "workspace:*" } }</code></pre>
+<pre><code>bun install                     # links every workspace together
+bun run --filter='*' build      # run "build" in every workspace
+bun run --filter='@myorg/ui' test   # run a script in one workspace
+bun add lodash --filter apps/web    # add a dep to a specific workspace</code></pre>
+
+<h2>Overrides — pin a transitive dependency</h2>
+<p>When a package deep in your tree pulls a version you need to fix (a security patch, a compatibility pin), force it across the whole tree with <code>overrides</code> in the root <code>package.json</code>:</p>
+<pre><code>{
+  "overrides": {
+    "semver": "7.6.3",             // force this exact version everywhere
+    "foo": { "bar": "1.2.3" }       // scoped: only bar inside foo
+  }
+}</code></pre>
+<p>After editing, run <code>bun install</code> to re-resolve. This is the escape hatch for "a transitive dep has a CVE but the direct dependency hasn't bumped it yet."</p>
+
+<h2>bunx — run a package without installing</h2>
+<pre><code>bunx cowsay "hello from bun"    # like npx, but fast (cached)
+bunx --bun vite                 # force the tool to run under Bun's runtime
+bunx prettier --write .         # one-off tool invocation</code></pre>
+<p><code>bunx &lt;pkg&gt;</code> downloads (once, into the cache) and runs a package's binary without adding it to your project. <code>--bun</code> forces the tool to execute on Bun rather than any Node on your PATH — useful for tools that behave differently per runtime.</p>
+
+<h2>Scripts and lifecycle</h2>
+<pre><code>// package.json
+{
+  "scripts": {
+    "dev": "bun --watch src/index.ts",
+    "build": "bun build src/index.ts --outdir dist",
+    "test": "bun test",
+    "prepare": "bun run build"     // lifecycle hook: runs after install
+  }
+}</code></pre>
+<blockquote class="warn"><strong>Common mistake:</strong> running two package managers in the same repo. If you <code>bun install</code> and a teammate <code>npm install</code>, you end up with both <code>bun.lockb</code> and <code>package-lock.json</code> resolving to <em>different</em> trees, and "works on my machine" bugs follow. Pick Bun, commit <code>bun.lockb</code>, delete any <code>package-lock.json</code>/<code>yarn.lock</code>, and add <code>--frozen-lockfile</code> to CI so a drifted lockfile fails the build instead of silently installing something else. A second trap: forgetting <code>private: true</code> on a monorepo root — without it, <code>workspaces</code> is ignored and you'll accidentally try to publish the root.</blockquote>
+
+<h2>Exercises</h2>
+<ul>
+  <li>In a fresh project, <code>bun add zod@3.23.8</code> and confirm <code>package.json</code> records the exact version (set <code>exact = true</code> if it wrote a <code>^</code>).</li>
+  <li>Run <code>bun pm ls</code> and <code>bun outdated</code>; identify one package where Update and Latest differ and explain why.</li>
+  <li>Run a one-off tool with <code>bunx cowsay</code> and confirm it was never added to <code>package.json</code>.</li>
+  <li>Create a two-package workspace where <code>apps/web</code> imports <code>packages/ui</code> via <code>workspace:*</code>, then <code>bun run --filter='*' build</code>.</li>
+</ul>
+
+<h2>Mini-project: a reproducible monorepo + CI install</h2>
+<p>Set up a monorepo with a shared UI package consumed by an app, then write the exact CI steps that make installs deterministic. This is the real-world shape of a Bun monorepo.</p>
+<pre><code>// package.json (root)
+{
+  "name": "acme",
+  "private": true,
+  "workspaces": ["packages/*", "apps/*"],
+  "engines": { "bun": "&gt;=1.0.0" },
+  "scripts": {
+    "build": "bun run --filter='*' build",
+    "test": "bun test",
+    "typecheck": "bunx tsc --noEmit"
+  },
+  "overrides": { "semver": "7.6.3" }
+}</code></pre>
+<pre><code>// packages/ui/package.json
+{ "name": "@acme/ui", "version": "0.0.0", "module": "index.ts",
+  "scripts": { "build": "bun build index.ts --outdir dist" } }
+
+// apps/web/package.json
+{ "name": "@acme/web", "private": true,
+  "dependencies": { "@acme/ui": "workspace:*" },
+  "scripts": { "build": "bun build src/index.ts --outdir dist" } }</code></pre>
+<pre><code># .github/workflows/ci.yml (install step)
+- uses: oven-sh/setup-bun@v2
+  with: { bun-version: 1.4.2 }
+
+# Fail if the committed lockfile would change — catches an un-committed bump
+- run: bun install --frozen-lockfile
+
+# Build + test every workspace in one pass
+- run: bun run --filter='*' build
+- run: bun test</code></pre>
+<p>The workflow to internalize: run <code>bun install</code> locally (which updates <code>bun.lockb</code>), commit the lockfile, and let CI run <code>--frozen-lockfile</code> so any drift fails loudly instead of silently resolving different versions. The <code>overrides</code> entry pins a transitive package across every workspace at once.</p>

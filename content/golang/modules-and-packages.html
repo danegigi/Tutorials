@@ -1,0 +1,65 @@
+<p class="lead">A module is the unit Go downloads, versions, and builds. Learn <code>go.mod</code>, how dependencies are added and pinned, how packages map to directories, and how <code>go work</code> lets you develop several modules at once.</p>
+
+<h2>Modules vs packages</h2>
+<p><span class="level beginner">Beginner</span> A <strong>package</strong> is all the <code>.go</code> files in one directory sharing a <code>package</code> name. A <strong>module</strong> is a tree of packages versioned together, rooted at a <code>go.mod</code> file. You import packages; you depend on modules.</p>
+<pre><code>myapp/
+├── go.mod                 # module example.com/myapp
+├── main.go                # package main
+└── internal/
+    └── store/
+        └── store.go       # package store → import "example.com/myapp/internal/store"</code></pre>
+<blockquote class="tip">A package under a directory named <code>internal/</code> can only be imported by code rooted at the parent of <code>internal/</code>. It's the language-level way to keep implementation packages private to your module.</blockquote>
+
+<h2>go.mod</h2>
+<pre><code>go mod init example.com/myapp</code></pre>
+<pre><code>// go.mod
+module example.com/myapp
+
+go 1.23
+
+require (
+	github.com/google/uuid v1.6.0
+	github.com/jmoiron/sqlx v1.4.0
+)</code></pre>
+<p>The <code>go</code> directive sets the language version. The <code>require</code> block lists direct dependencies with exact versions. A <code>go.sum</code> file (committed alongside) records cryptographic checksums so every build is verifiable.</p>
+
+<h2>Adding and managing dependencies</h2>
+<pre><code># Add a dependency (fetches, records in go.mod + go.sum)
+go get github.com/google/uuid@latest
+go get github.com/google/uuid@v1.6.0   # pin a specific version
+
+# Remove unused + add missing in one pass (run before committing)
+go mod tidy
+
+# See the full dependency graph / why something is pulled in
+go mod graph
+go mod why github.com/google/uuid</code></pre>
+<blockquote class="warn"><strong>Common mistake:</strong> hand-editing <code>go.mod</code> to bump a version and forgetting <code>go.sum</code>. Always change versions with <code>go get</code> (or edit then run <code>go mod tidy</code>), which keeps the checksum file consistent — otherwise the build fails with a "missing go.sum entry" error.</blockquote>
+
+<h2>Semantic import versioning</h2>
+<p><span class="level intermediate">Intermediate</span> Go encodes major versions ≥2 in the import path. <code>v1</code> is implicit; <code>v2+</code> appends <code>/v2</code> to both the module path and the import:</p>
+<pre><code>require github.com/some/lib/v2 v2.3.1
+import "github.com/some/lib/v2"</code></pre>
+<p>This lets a program depend on <code>v1</code> and <code>v2</code> of the same library simultaneously without conflict — they are, to the toolchain, different modules.</p>
+
+<h2>Multi-module workspaces (<code>go work</code>)</h2>
+<p><span class="level intermediate">Intermediate</span> When you're editing a library and an app that uses it at the same time, a workspace lets the app see your local, uncommitted library changes without a <code>replace</code> directive:</p>
+<pre><code>go work init ./myapp ./mylib
+# creates go.work pointing at both local modules</code></pre>
+<pre><code>// go.work
+go 1.23
+use (
+	./myapp
+	./mylib
+)</code></pre>
+<p>Now <code>go build</code> in <code>myapp</code> resolves imports of <code>mylib</code> to your local checkout. Commit <code>go.work</code> only for shared monorepos; otherwise keep it local (it's often <code>.gitignore</code>d).</p>
+
+<h2>Exercises</h2>
+<ul>
+  <li>Create a module, <code>go get</code> <code>github.com/google/uuid</code>, print a <code>uuid.NewString()</code>, then run <code>go mod why</code> on it.</li>
+  <li>Move a helper into <code>internal/util/</code> and import it from <code>main</code>; confirm an outside module cannot import it.</li>
+  <li>Set up a two-module <code>go work</code> workspace and verify an edit in the library is picked up by the app without committing.</li>
+</ul>
+
+<h2>Mini-project: a library + CLI in one workspace</h2>
+<p>Build <code>mylib</code> exposing <code>func Slugify(s string) string</code>, and <code>slugcli</code> that reads a line from stdin and prints its slug. Wire them with <code>go work</code> so you can iterate on <code>Slugify</code> and immediately test it through the CLI, then <code>go mod tidy</code> each module before "shipping".</p>

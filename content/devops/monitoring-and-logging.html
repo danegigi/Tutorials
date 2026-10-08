@@ -1,0 +1,234 @@
+<p class="lead">You have deployed your application — but how do you know it is healthy, and how do you find out <em>why</em> it is not? Observability is understanding a running system from what it emits: metrics, logs, and traces. This lesson takes you from the three pillars through a Prometheus + Grafana + Alertmanager stack, structured logging with Loki, distributed tracing with OpenTelemetry, and the production kube-prometheus-stack on Kubernetes.</p>
+
+<h2>The three pillars</h2>
+<p><span class="level beginner">Beginner</span> Observability answers <em>"why is the system behaving this way?"</em>, not just <em>"is it up?"</em>. Three kinds of signal, each good at a different question:</p>
+<table>
+  <thead><tr><th>Pillar</th><th>What it is</th><th>Tool</th><th>Answers</th></tr></thead>
+  <tbody>
+    <tr><td><strong>Metrics</strong></td><td>Numeric time-series: counters, gauges, histograms</td><td>Prometheus</td><td>"How many req/sec? How full is the disk?"</td></tr>
+    <tr><td><strong>Logs</strong></td><td>Timestamped text events from a process</td><td>Loki</td><td>"What happened at 03:14?"</td></tr>
+    <tr><td><strong>Traces</strong></td><td>A request's journey across services, as spans</td><td>Jaeger / Tempo</td><td>"Which service is slow?"</td></tr>
+  </tbody>
+</table>
+<p>No single pillar is enough: metrics tell you <em>something</em> is wrong, logs tell you <em>what</em> happened, traces tell you <em>where</em> in the request chain.</p>
+<p><strong>Monitoring</strong> checks known failure modes ("is CPU above 90%?"). <strong>Observability</strong> lets you ask new questions you did not predict ("why is p99 latency spiking only for region X?").</p>
+<blockquote class="tip">Google's four golden signals are the shortlist of what to measure: <strong>latency</strong> (how long requests take), <strong>traffic</strong> (demand, req/sec), <strong>errors</strong> (rate of failed requests), and <strong>saturation</strong> (how full the system is). Instrument these first — they cover most real incidents.</blockquote>
+
+<h2>Prometheus</h2>
+<p><span class="level intermediate">Intermediate</span> Prometheus is a metrics system built for cloud-native workloads. It <em>pulls</em> (scrapes) metrics from your services over HTTP, stores them as time-series, and lets you query and alert with PromQL. Targets expose a <code>/metrics</code> endpoint; exporters translate third-party systems (a host, MySQL, Nginx) into that format.</p>
+<p>The four metric types: <code>counter</code> (monotonically increasing, e.g. <code>http_requests_total</code>), <code>gauge</code> (up and down, e.g. <code>go_goroutines</code>), <code>histogram</code> (observations into buckets, e.g. request durations), and <code>summary</code>.</p>
+<pre><code># prometheus.yml
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ['alertmanager:9093']
+
+rule_files:
+  - "rules/*.yml"
+
+scrape_configs:
+  - job_name: 'app'
+    metrics_path: /metrics
+    static_configs:
+      - targets: ['app:8080']
+
+  - job_name: 'node-exporter'
+    static_configs:
+      - targets: ['node-exporter:9100']</code></pre>
+
+<h3>PromQL basics</h3>
+<pre><code># Per-second rate of a counter over 5 minutes
+rate(http_requests_total[5m])
+
+# Total rate across instances, grouped by status
+sum by (status) (rate(http_requests_total[5m]))
+
+# p95 latency from a histogram
+histogram_quantile(0.95, sum by (le) (rate(http_request_duration_seconds_bucket[5m])))
+
+# Percent memory available
+avg(node_memory_MemAvailable_bytes) / avg(node_memory_MemTotal_bytes) * 100
+
+# When will the disk fill? (linear extrapolation)
+predict_linear(node_filesystem_avail_bytes[6h], 24*3600)</code></pre>
+<blockquote class="tip"><code>rate()</code> only works on counters; it computes per-second growth and handles counter resets. Use <code>irate()</code> for a spiky, responsive graph (last two points) but <code>rate()</code> for alerts, because it smooths noise.</blockquote>
+
+<h3>Alerting rules</h3>
+<pre><code># rules/alerts.yml
+groups:
+  - name: app_alerts
+    rules:
+      - alert: HighErrorRate
+        expr: sum(rate(http_requests_total{status=~"5.."}[5m]))
+            / sum(rate(http_requests_total[5m])) &gt; 0.05
+        for: 5m
+        labels:    { severity: critical }
+        annotations:
+          summary: "High 5xx error rate"
+
+      - alert: InstanceDown
+        expr: up == 0
+        for: 2m
+        labels:    { severity: warning }
+        annotations:
+          summary: "{{ $labels.instance }} is down"</code></pre>
+<blockquote class="warn">Always use a <code>for:</code> duration on alerts. Without it a single noisy sample fires and resolves repeatedly (flapping), training everyone to ignore the alert. 2–5 minutes is typical.</blockquote>
+
+<h2>Grafana</h2>
+<p><span class="level intermediate">Intermediate</span> Grafana is the dashboard UI for Prometheus (and many other sources). A <strong>dashboard</strong> holds <strong>panels</strong>, each running a query; <strong>variables</strong> turn one dashboard into many (pick a <code>job</code> or <code>instance</code> from a dropdown).</p>
+<pre><code># compose.yaml additions — Prometheus + Grafana
+services:
+  prometheus:
+    image: prom/prometheus:v2.53.0
+    ports: ["9090:9090"]
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./rules:/etc/prometheus/rules:ro
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.retention.time=30d'
+
+  grafana:
+    image: grafana/grafana:11.1.0
+    ports: ["3000:3000"]
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin   # change in prod
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro</code></pre>
+<p>For GitOps, provision data sources and dashboards as code so nothing is clicked by hand:</p>
+<pre><code># grafana/provisioning/datasources/prometheus.yml
+apiVersion: 1
+datasources:
+  - name: Prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true</code></pre>
+<blockquote class="tip">Export a dashboard from the UI as its JSON model, commit it under <code>provisioning/dashboards/json/</code>, and it auto-loads on restart. Editing raw dashboard JSON by hand is painful — generate it with the Grafana Terraform provider or grafonnet at scale.</blockquote>
+
+<h2>Alertmanager</h2>
+<p><span class="level intermediate">Intermediate</span> Alertmanager receives fired alerts from Prometheus and decides <em>who</em> is notified, <em>how</em> (Slack, PagerDuty, email), and <em>how often</em> — with grouping, inhibition, and silencing so you do not drown in noise.</p>
+<pre><code># alertmanager.yml
+route:
+  receiver: default-slack
+  group_by: ['alertname', 'job']
+  group_wait: 30s          # wait before the first notification for a new group
+  group_interval: 5m
+  repeat_interval: 4h      # re-send if still firing after this
+  routes:
+    - match: { severity: critical }
+      receiver: pagerduty-critical
+
+receivers:
+  - name: default-slack
+    slack_configs:
+      - channel: '#alerts'
+        send_resolved: true
+  - name: pagerduty-critical
+    pagerduty_configs:
+      - service_key: '&lt;PD_SERVICE_KEY&gt;'
+
+inhibit_rules:               # suppress warnings when a critical already fires
+  - source_match: { severity: critical }
+    target_match: { severity: warning }
+    equal: ['alertname', 'instance']</code></pre>
+<p>Mute alerts during planned maintenance with a silence instead of disabling the rule:</p>
+<pre><code>amtool silence add alertname="DiskWillFillIn24h" instance="web-1:9100" \
+  --comment="Scheduled disk expansion" --duration=2h</code></pre>
+
+<h2>Structured logging with Loki</h2>
+<p><span class="level intermediate">Intermediate</span> <strong>Loki</strong> is a log aggregation system that indexes only <em>labels</em> (like Prometheus), not the full log text — making it cheap to run. The stack: your app writes structured JSON to stdout &amp;rarr; <strong>Promtail</strong> (or Grafana Alloy) tails and labels it &amp;rarr; Loki stores it &amp;rarr; Grafana queries it with LogQL.</p>
+<p>Structured logs are the point. Unstructured text is human-readable but unqueryable; JSON lets you filter and aggregate programmatically:</p>
+<pre><code>// Unstructured — hard to parse
+ERROR 2026-08-26 user 42 failed login from 203.0.113.10
+
+// Structured JSON — easy to query
+{"level":"error","ts":"2026-08-26T14:05:00Z","msg":"login failed","user_id":42,"ip":"203.0.113.10"}</code></pre>
+<pre><code># LogQL — query logs like metrics
+{namespace="default", container="app"}          # all logs from a container
+{job="app"} |= "error"                           # filter for errors
+{job="app"} | json | level="error" | user_id &gt; 100   # parse JSON, filter a field
+count_over_time({job="app"} |= "error" [1m])     # errors per minute — a metric FROM logs!</code></pre>
+<blockquote class="tip">Add Loki as a Grafana data source and you can correlate logs and metrics on one dashboard — click a spike in a graph and jump straight to the matching logs. Most libraries emit structured output: <code>slog</code>/<code>zap</code> (Go), <code>pino</code> (Node), <code>structlog</code> (Python).</blockquote>
+
+<h2>Distributed tracing with OpenTelemetry</h2>
+<p><span class="level advanced">Advanced</span> In a microservices architecture one request may touch 5–10 services. When it is slow, <em>which</em> hop is the bottleneck? <strong>Distributed tracing</strong> propagates a trace ID across every service and records a <strong>span</strong> for each hop, forming a tree that shows exactly where time went.</p>
+<p>Key terms: a <strong>trace</strong> is the whole request journey; a <strong>span</strong> is one unit of work (an HTTP call, a DB query); <strong>context propagation</strong> passes the trace ID between services (usually in a <code>traceparent</code> header); <strong>sampling</strong> captures a representative subset because tracing everything is expensive.</p>
+<p><strong>OpenTelemetry (OTel)</strong> is the CNCF-standard, vendor-neutral SDK + collector that emits traces, metrics, and logs to any backend (Jaeger, Tempo, Datadog).</p>
+<pre><code># otel-collector.yaml — receive OTLP, batch, export to Jaeger
+receivers:
+  otlp:
+    protocols:
+      grpc: { endpoint: 0.0.0.0:4317 }
+      http: { endpoint: 0.0.0.0:4318 }
+processors:
+  batch: { timeout: 5s }
+exporters:
+  otlp/jaeger:
+    endpoint: jaeger:4317
+    tls: { insecure: true }
+service:
+  pipelines:
+    traces:
+      receivers:  [otlp]
+      processors: [batch]
+      exporters:  [otlp/jaeger]</code></pre>
+<pre><code># In Kubernetes, point apps at the collector via env vars
+env:
+  - name: OTEL_EXPORTER_OTLP_ENDPOINT
+    value: "http://otel-collector.monitoring:4317"
+  - name: OTEL_SERVICE_NAME
+    value: "my-app"</code></pre>
+<p>Run Jaeger (all-in-one for dev) and open its UI at port 16686 to see the span waterfall across services.</p>
+
+<h2>The stack on Kubernetes</h2>
+<p><span class="level advanced">Advanced</span> In production you do not run bare Prometheus containers — you install the <strong>kube-prometheus-stack</strong> Helm chart, which deploys Prometheus, Alertmanager, Grafana, node-exporter, and kube-state-metrics with ~30 dashboards and ~100 alerts out of the box.</p>
+<pre><code>helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+helm repo update
+helm install kube-prom prometheus-community/kube-prometheus-stack \
+  --namespace monitoring --create-namespace \
+  --set grafana.adminPassword=strongpassword \
+  --set prometheus.prometheusSpec.retention=30d</code></pre>
+<p>The Prometheus Operator adds CRDs so you declare scrape targets and rules as Kubernetes objects — no editing <code>prometheus.yml</code> by hand:</p>
+<pre><code># servicemonitor.yaml — tell Prometheus to scrape your app
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: my-app
+  labels:
+    release: kube-prom      # MUST match the operator's serviceMonitorSelector
+spec:
+  selector:
+    matchLabels: { app: my-app }
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 15s</code></pre>
+<blockquote class="tip">A missing or wrong <code>release</code> label is the #1 reason "my ServiceMonitor is not being scraped." Check what the operator expects with <code>helm get values kube-prom -n monitoring | grep serviceMonitorSelector</code>.</blockquote>
+
+<h2>Common mistakes</h2>
+<blockquote class="warn"><strong>Common mistakes</strong>
+<ul>
+  <li><strong>Alerts without a <code>for:</code> duration.</strong> They flap on a single noisy sample until everyone mutes them.</li>
+  <li><strong>Using <code>rate()</code> on a gauge, or <code>irate()</code> in alerts.</strong> <code>rate()</code> is for counters; <code>irate()</code> is too spiky to alert on.</li>
+  <li><strong>Unstructured logs.</strong> Plain-text lines cannot be filtered or aggregated reliably — emit JSON.</li>
+  <li><strong>No retention or log cap.</strong> Prometheus TSDB and the json-file log driver both grow without bound; set <code>retention.time</code> and <code>max-size</code>.</li>
+  <li><strong>ServiceMonitor label mismatch.</strong> Without the operator's expected <code>release</code> label, your target is silently never scraped.</li>
+  <li><strong>Tracing everything.</strong> 100% sampling is expensive and noisy — sample a representative fraction (e.g. 10%).</li>
+</ul></blockquote>
+
+<h2>Exercises</h2>
+<ul>
+  <li>Run Prometheus + node-exporter with Compose, then graph <code>rate(node_cpu_seconds_total[5m])</code> in Grafana.</li>
+  <li>Write a <code>HighErrorRate</code> alert with a <code>for: 5m</code> and prove it does not fire on a single transient 500.</li>
+  <li>Emit JSON logs from a small app, ship them with Promtail to Loki, and build a LogQL query that counts errors per minute.</li>
+  <li>Instrument a two-service app with OpenTelemetry and find the slow hop in the Jaeger span waterfall.</li>
+  <li>Install kube-prometheus-stack on a kind cluster, add a <code>ServiceMonitor</code> for your app, and confirm the target appears as "up" in Prometheus.</li>
+</ul>
+
+<h2>Mini-project: observe a two-service app</h2>
+<p>Stand up a frontend and a backend service that call each other, plus Prometheus, Grafana, Alertmanager, Loki, and an OpenTelemetry collector feeding Jaeger. Instrument both services to expose the four golden signals as metrics, emit structured JSON logs, and propagate trace context. Build a Grafana dashboard with request-rate, error-rate, and p95-latency panels (provisioned as code), wire a <code>HighErrorRate</code> alert to a Slack receiver, and verify you can go from a latency spike on the dashboard, to the correlated error logs in Loki, to the exact slow span in Jaeger — the full metrics&amp;rarr;logs&amp;rarr;traces path.</p>

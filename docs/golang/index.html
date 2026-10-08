@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en" data-base="../">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0d1117">
+<meta name="description" content="Dev Tutorials — Golang, Bun, Web Development, Linux and DevOps, offline-ready.">
+<title>Golang</title>
+<link rel="manifest" href="../manifest.webmanifest">
+<link rel="icon" href="../icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="../icon-192.png">
+<link rel="stylesheet" href="../app.css">
+<script>/* set theme before paint to avoid flash */(function(){try{var t=localStorage.getItem('tut.theme');document.documentElement.setAttribute('data-theme',t||'dark');}catch(e){document.documentElement.setAttribute('data-theme','dark');}})();</script>
+
+</head>
+<body>
+<header class="nav">
+  <a class="brand" href="../index.html">📚 Dev Tutorials</a>
+  <span class="crumb">Golang</span>
+  <span class="spacer"></span>
+  <a class="navbtn" href="../search.html">🔎 Search</a>
+  <button class="navbtn" id="install-btn" type="button">⬇️ Install</button>
+  <button class="navbtn" id="theme-btn" type="button" aria-label="Toggle theme">🌙 Dark</button>
+</header>
+<main class="wrap">
+  <h1 class="page-title">🐹 Golang</h1>
+  <p class="section-tagline">From setup and syntax to concurrency, HTTP services, testing, and deployment.</p>
+  <div class="progress-overall" data-progress-ids="golang/setup-and-tooling,golang/modules-and-packages,golang/variables-types-functions,golang/control-flow,golang/structs-interfaces-methods,golang/error-handling,golang/concurrency,golang/http-servers-and-apis,golang/files-and-json,golang/testing,golang/database-basics,golang/cli-tools,golang/deployment-basics" style="margin:0 0 10px">
+    <div class="bar"><span></span></div>
+    <div class="label">0 / 13 done</div>
+  </div>
+  <ul class="lesson-list">
+    <li><a href="setup-and-tooling.html" data-id="golang/setup-and-tooling">
+      <span class="num">01</span>
+      <span class="body"><span class="ttl">Go Setup &amp; Tooling</span><br><span class="desc">Install Go, the go command, GOPATH vs modules, formatting, vetting, and the editor toolchain.</span></span>
+      <span class="state"></span>
+    </a></li>
+    <li><a href="modules-and-packages.html" data-id="golang/modules-and-packages">
+      <span class="num">02</span>
+      <span class="body"><span class="ttl">Modules &amp; Packages</span><br><span class="desc">go.mod, semantic import versioning, adding dependencies, go work multi-module workspaces.</span></span>
+      <span class="state"></span>
+    </a></li>
+    <li><a href="variables-types-functions.html" data-id="golang/variables-types-functions">
+      <span class="num">03</span>
+      <span class="body"><span class="ttl">Variables, Types &amp; Functions</span><br><span class="desc">Declarations, zero values, basic &amp; composite types, functions, multiple returns, closures.</span></span>
+      <span class="state"></span>
+    </a></li>
+    <li><a href="control-flow.html" data-id="golang/control-flow">
+      <span class="num">04</span>
+      <span class="body"><span class="ttl">Control Flow</span><br><span class="desc">if/else, the one and only for loop, switch (with no fallthrough), defer, and labelled breaks.</span></span>
+      <span class="state"></span>
+    </a></li>
+    <li><a href="structs-interfaces-methods.html" data-id="golang/structs-interfaces-methods">
+      <span class="num">05</span>
+      <span class="body"><span class="ttl">Structs, Interfaces &amp; Methods</span><br><span class="desc">Struct composition over inheritance, methods &amp; receivers, implicit interfaces, generics.</span></span>
+      <span class="state"></span>
+    </a></li>
+    <li><a href="error-handling.html" data-id="golang/error-handling">
+      <span class="num">06</span>
+      <span class="body"><span class="ttl">Error Handling</span><br><span class="desc">errors as values, wrapping with %w, errors.Is / errors.As, sentinel errors, custom types.</span></span>
+      <span class="state"></span>
+    </a></li>
+    <li><a href="concurrency.html" data-id="golang/concurrency">
+      <span class="num">07</span>
+      <span class="body"><span class="ttl">Concurrency: Goroutines &amp; Channels</span><br><span class="desc">goroutines, channels, select, sync primitives, context cancellation, worker pools, race detector.</span></span>
+      <span class="state"></span>
+    </a></li>
+    <li><a href="http-servers-and-apis.html" data-id="golang/http-servers-and-apis">
+      <span class="num">08</span>
+      <span class="body"><span class="ttl">HTTP Servers &amp; APIs</span><br><span class="desc">net/http servers, routing with ServeMux, JSON APIs, middleware, and the Gin framework.</span></span>
+      <span class="state"></span>
+    </a></li>
+    <li><a href="files-and-json.html" data-id="golang/files-and-json">
+      <span class="num">09</span>
+      <span class="body"><span class="ttl">Working with Files &amp; JSON</span><br><span class="desc">os &amp; io, reading/writing files, encoding/json marshalling, struct tags, streaming decoders.</span></span>
+      <span class="state"></span>
+    </a></li>
+    <li><a href="testing.html" data-id="golang/testing">
+      <span class="num">10</span>
+      <span class="body"><span class="ttl">Testing &amp; Benchmarks</span><br><span class="desc">the testing package, table-driven tests, subtests, benchmarks, fuzzing, and coverage.</span></span>
+      <span class="state"></span>
+    </a></li>
+    <li><a href="database-basics.html" data-id="golang/database-basics">
+      <span class="num">11</span>
+      <span class="body"><span class="ttl">Database Basics</span><br><span class="desc">database/sql, connection pools, prepared statements, and the Ent ORM for typed schemas.</span></span>
+      <span class="state"></span>
+    </a></li>
+    <li><a href="cli-tools.html" data-id="golang/cli-tools">
+      <span class="num">12</span>
+      <span class="body"><span class="ttl">Building CLI Tools</span><br><span class="desc">the flag package, subcommands, exit codes, reading stdin, and shipping a cross-platform binary.</span></span>
+      <span class="state"></span>
+    </a></li>
+    <li><a href="deployment-basics.html" data-id="golang/deployment-basics">
+      <span class="num">13</span>
+      <span class="body"><span class="ttl">Deployment Basics</span><br><span class="desc">go build, cross-compilation with GOOS/GOARCH, tiny Docker images, and systemd services.</span></span>
+      <span class="state"></span>
+    </a></li>
+  </ul>
+</main>
+<button type="button" class="fab top" id="fab-top" aria-label="Back to top">↑ Top</button>
+<div class="banner" id="update-banner" role="status">A new version is available.<button type="button">Reload</button></div>
+<div class="banner" id="offline-banner" role="status">You're offline — showing cached lessons.</div>
+<script src="../app.js" defer></script>
+</body>
+</html>

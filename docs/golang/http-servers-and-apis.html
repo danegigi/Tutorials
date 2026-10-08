@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en" data-base="../">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0d1117">
+<meta name="description" content="Dev Tutorials — Golang, Bun, Web Development, Linux and DevOps, offline-ready.">
+<title>HTTP Servers &amp; APIs — Golang</title>
+<link rel="manifest" href="../manifest.webmanifest">
+<link rel="icon" href="../icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="../icon-192.png">
+<link rel="stylesheet" href="../app.css">
+<script>/* set theme before paint to avoid flash */(function(){try{var t=localStorage.getItem('tut.theme');document.documentElement.setAttribute('data-theme',t||'dark');}catch(e){document.documentElement.setAttribute('data-theme','dark');}})();</script>
+
+</head>
+<body class="lesson">
+<header class="nav">
+  <a class="brand" href="../index.html">📚 Dev Tutorials</a>
+  <span class="crumb">HTTP Servers &amp; APIs — Golang</span>
+  <span class="spacer"></span>
+  <a class="navbtn" href="../search.html">🔎 Search</a>
+  <button class="navbtn" id="install-btn" type="button">⬇️ Install</button>
+  <button class="navbtn" id="theme-btn" type="button" aria-label="Toggle theme">🌙 Dark</button>
+</header>
+<main class="wrap lesson-body">
+  <h1 class="page-title">HTTP Servers &amp; APIs</h1>
+  <div class="lesson-tools" data-lesson-id="golang/http-servers-and-apis">
+    <button id="done-btn" type="button" aria-pressed="false">○ Mark complete</button>
+    <button id="mark-btn" type="button" aria-pressed="false">☆ Bookmark</button>
+    <a class="navbtn" href="index.html" style="margin-left:auto">All Golang lessons →</a>
+  </div>
+<nav class="toc" aria-label="On this page"><strong>On this page</strong><ul>
+<li class="lvl2"><a href="#a-server-in-ten-lines">A server in ten lines</a></li>
+<li class="lvl2"><a href="#routing-with-servemux-go-122">Routing with ServeMux (Go 1.22+)</a></li>
+<li class="lvl2"><a href="#json-apis">JSON APIs</a></li>
+<li class="lvl2"><a href="#middleware">Middleware</a></li>
+<li class="lvl2"><a href="#production-server-settings">Production server settings</a></li>
+<li class="lvl2"><a href="#when-to-use-a-framework-gin">When to use a framework (Gin)</a></li>
+<li class="lvl2"><a href="#exercises">Exercises</a></li>
+<li class="lvl2"><a href="#mini-project-an-in-memory-todo-api">Mini-project: an in-memory TODO API</a></li>
+</ul></nav>
+<p class="lead">The standard library's <code>net/http</code> is a production-grade web server — no framework required. Build routed JSON APIs with middleware, then see where a framework like Gin saves boilerplate.</p>
+
+<h2 id="a-server-in-ten-lines">A server in ten lines</h2>
+<pre><code>package main
+
+import (
+	"fmt"
+	"net/http"
+)
+
+func main() {
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintf(w, "Hello from %s\n", r.URL.Path)
+	})
+	http.ListenAndServe(":8080", nil)
+}
+// go run .  →  curl localhost:8080/world  →  Hello from /world</code></pre>
+<p>A handler is anything satisfying <code>http.Handler</code> (<code>ServeHTTP(w, r)</code>); <code>HandleFunc</code> adapts a plain function to it. <code>w</code> writes the response; <code>r</code> holds the request.</p>
+
+<h2 id="routing-with-servemux-go-122">Routing with ServeMux (Go 1.22+)</h2>
+<p><span class="level beginner">Beginner</span> The built-in router now supports methods and path wildcards, covering most needs without a third-party router:</p>
+<pre><code>mux := http.NewServeMux()
+mux.HandleFunc("GET /users", listUsers)
+mux.HandleFunc("POST /users", createUser)
+mux.HandleFunc("GET /users/{id}", func(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")        // path parameter
+	fmt.Fprintln(w, "user", id)
+})
+http.ListenAndServe(":8080", mux)</code></pre>
+
+<h2 id="json-apis">JSON APIs</h2>
+<pre><code>type User struct {
+	ID    int    `json:"id"`
+	Name  string `json:"name"`
+	Email string `json:"email,omitempty"`
+}
+
+func createUser(w http.ResponseWriter, r *http.Request) {
+	var u User
+	if err := json.NewDecoder(r.Body).Decode(&amp;u); err != nil {
+		http.Error(w, "bad json", http.StatusBadRequest)
+		return
+	}
+	// ... persist u ...
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(u)
+}</code></pre>
+<blockquote class="warn"><strong>Common mistake:</strong> calling <code>w.WriteHeader(201)</code> <em>after</em> writing the body, or calling it twice. The first write (or <code>Encode</code>) implicitly sends <code>200</code>, and a later <code>WriteHeader</code> is ignored with a warning. Set headers and status <em>before</em> writing the body.</blockquote>
+
+<h2 id="middleware">Middleware</h2>
+<p><span class="level intermediate">Intermediate</span> Middleware is a function that wraps a handler, returning a new handler — the standard way to add logging, auth, and recovery:</p>
+<pre><code>func logging(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		next.ServeHTTP(w, r)
+		log.Printf("%s %s %s", r.Method, r.URL.Path, time.Since(start))
+	})
+}
+
+func auth(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") == "" {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+// Compose: logging(auth(mux))
+http.ListenAndServe(":8080", logging(auth(mux)))</code></pre>
+
+<h2 id="production-server-settings">Production server settings</h2>
+<pre><code>srv := &amp;http.Server{
+	Addr:         ":8080",
+	Handler:      mux,
+	ReadTimeout:  5 * time.Second,
+	WriteTimeout: 10 * time.Second,
+	IdleTimeout:  120 * time.Second,
+}
+log.Fatal(srv.ListenAndServe())</code></pre>
+<blockquote class="tip">Always set timeouts on a public server. The zero-value <code>http.Server</code> has <em>no</em> timeouts, so a slow or malicious client can hold a connection open indefinitely (a classic Slowloris DoS).</blockquote>
+
+<h2 id="when-to-use-a-framework-gin">When to use a framework (Gin)</h2>
+<p><span class="level intermediate">Intermediate</span> Gin adds ergonomic routing groups, binding+validation, and middleware chaining. The trade is a dependency and a slightly different mental model.</p>
+<pre><code>r := gin.Default()                 // includes logger + recovery middleware
+api := r.Group("/api")
+api.GET("/users/:id", func(c *gin.Context) {
+	c.JSON(200, gin.H{"id": c.Param("id")})
+})
+api.POST("/users", func(c *gin.Context) {
+	var u User
+	if err := c.ShouldBindJSON(&amp;u); err != nil {   // validation via struct tags
+		c.JSON(400, gin.H{"error": err.Error()}); return
+	}
+	c.JSON(201, u)
+})
+r.Run(":8080")</code></pre>
+
+<h2 id="exercises">Exercises</h2>
+<ul>
+  <li>Build <code>GET /health</code> returning <code>{"status":"ok"}</code> and test it with <code>curl -i</code>.</li>
+  <li>Add a logging + recovery middleware chain and confirm panics return 500 instead of crashing.</li>
+  <li>Add struct-tag validation (<code>binding:"required,email"</code> in Gin) and return friendly 400 errors.</li>
+</ul>
+
+<h2 id="mini-project-an-in-memory-todo-api">Mini-project: an in-memory TODO API</h2>
+<p>Implement <code>GET/POST /todos</code> and <code>GET/PUT/DELETE /todos/{id}</code> over a mutex-guarded <code>map[int]Todo</code>. Add logging + recovery middleware, timeouts on the server, and JSON everywhere. This is the exact shape of a real REST service — you'll swap the map for a database in the next-but-one lesson.</p>
+
+<section class="further"><h2 id="further-reading">Further reading</h2>
+<p>Official documentation for the tools and APIs covered on this page:</p>
+<ul class="further-list"><li><a href="https://pkg.go.dev/net/http" target="_blank" rel="noopener">net/http ↗</a></li>
+<li><a href="https://go.dev/doc/articles/wiki/" target="_blank" rel="noopener">Writing web applications ↗</a></li>
+<li><a href="https://gin-gonic.com/docs/" target="_blank" rel="noopener">Gin web framework ↗</a></li></ul></section>
+  <nav class="pager">
+<a class="prev" href="concurrency.html"><small>Previous</small>🐹 Concurrency: Goroutines &amp; Channels</a>
+<a class="next" href="files-and-json.html"><small>Next</small>🐹 Working with Files &amp; JSON</a>
+  </nav>
+</main>
+<button type="button" class="fab top" id="fab-top" aria-label="Back to top">↑ Top</button>
+<div class="banner" id="update-banner" role="status">A new version is available.<button type="button">Reload</button></div>
+<div class="banner" id="offline-banner" role="status">You're offline — showing cached lessons.</div>
+<script src="../app.js" defer></script>
+</body>
+</html>

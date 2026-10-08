@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en" data-base="../">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0d1117">
+<meta name="description" content="Dev Tutorials — Golang, Bun, Web Development, Linux and DevOps, offline-ready.">
+<title>Authentication Concepts — Web Development</title>
+<link rel="manifest" href="../manifest.webmanifest">
+<link rel="icon" href="../icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="../icon-192.png">
+<link rel="stylesheet" href="../app.css">
+<script>/* set theme before paint to avoid flash */(function(){try{var t=localStorage.getItem('tut.theme');document.documentElement.setAttribute('data-theme',t||'dark');}catch(e){document.documentElement.setAttribute('data-theme','dark');}})();</script>
+
+</head>
+<body class="lesson">
+<header class="nav">
+  <a class="brand" href="../index.html">📚 Dev Tutorials</a>
+  <span class="crumb">Authentication Concepts — Web Development</span>
+  <span class="spacer"></span>
+  <a class="navbtn" href="../search.html">🔎 Search</a>
+  <button class="navbtn" id="install-btn" type="button">⬇️ Install</button>
+  <button class="navbtn" id="theme-btn" type="button" aria-label="Toggle theme">🌙 Dark</button>
+</header>
+<main class="wrap lesson-body">
+  <h1 class="page-title">Authentication Concepts</h1>
+  <div class="lesson-tools" data-lesson-id="web/authentication-concepts">
+    <button id="done-btn" type="button" aria-pressed="false">○ Mark complete</button>
+    <button id="mark-btn" type="button" aria-pressed="false">☆ Bookmark</button>
+    <a class="navbtn" href="index.html" style="margin-left:auto">All Web Development lessons →</a>
+  </div>
+<nav class="toc" aria-label="On this page"><strong>On this page</strong><ul>
+<li class="lvl2"><a href="#sessions-vs-tokens">Sessions vs tokens</a></li>
+<li class="lvl2"><a href="#password-handling">Password handling</a></li>
+<li class="lvl2"><a href="#jwts-access-refresh">JWTs: access + refresh</a></li>
+<li class="lvl2"><a href="#where-to-store-tokens">Where to store tokens</a></li>
+<li class="lvl2"><a href="#csrf-and-cors">CSRF and CORS</a></li>
+<li class="lvl2"><a href="#oauth2-openid-connect">OAuth2 &amp;amp; OpenID Connect</a></li>
+<li class="lvl2"><a href="#exercises">Exercises</a></li>
+<li class="lvl2"><a href="#mini-project-a-login-flow">Mini-project: a login flow</a></li>
+</ul></nav>
+<p class="lead">Authentication proves <em>who</em> a user is; authorization decides <em>what</em> they may do. Learn the two main session models (server sessions vs JWTs), how to store tokens safely, OAuth2/OIDC for "log in with…", and the attacks the choices defend against.</p>
+
+<h2 id="sessions-vs-tokens">Sessions vs tokens</h2>
+<p><span class="level beginner">Beginner</span> Two ways to remember a logged-in user across requests:</p>
+<table>
+  <thead><tr><th></th><th>Server session</th><th>JWT (token)</th></tr></thead>
+  <tbody>
+    <tr><td>State</td><td>Session ID in a cookie; data in server store</td><td>Signed claims in the token itself</td></tr>
+    <tr><td>Revocation</td><td>Easy — delete the session</td><td>Hard — valid until expiry (need a denylist)</td></tr>
+    <tr><td>Scaling</td><td>Needs shared store (Redis/DB)</td><td>Stateless — any server can verify</td></tr>
+    <tr><td>Size</td><td>Tiny cookie</td><td>Larger; sent on every request</td></tr>
+  </tbody>
+</table>
+
+<h2 id="password-handling">Password handling</h2>
+<pre><code>// NEVER store plaintext or a plain hash. Use a slow, salted algorithm.
+// bcrypt / argon2 / scrypt — they're slow ON PURPOSE to resist brute force.
+hash = argon2.hash(password)          // on signup; store the hash
+ok   = argon2.verify(hash, attempt)   // on login</code></pre>
+<blockquote class="warn"><strong>Non-negotiables:</strong> never store plaintext passwords; never use fast hashes (MD5/SHA-256) for passwords; always salt (bcrypt/argon2 do it for you). Rate-limit login attempts and never reveal whether the <em>email</em> or the <em>password</em> was wrong ("invalid credentials" for both).</blockquote>
+
+<h2 id="jwts-access-refresh">JWTs: access + refresh</h2>
+<p><span class="level intermediate">Intermediate</span> A JWT has three base64url parts — header, payload (claims), signature — joined by dots. The signature (not encryption) lets the server verify it wasn't tampered with:</p>
+<pre><code>eyJhbGci...  .  eyJzdWIiOiI0MiIsImV4cCI6...  .  SflKxw...
+   header              payload (claims)            signature
+
+// payload: { "sub": "42", "role": "user", "exp": 1699999999 }</code></pre>
+<p>The durable pattern is <strong>short-lived access token + long-lived refresh token with rotation</strong>:</p>
+<ul>
+  <li><strong>Access token</strong> (~15 min): sent on API calls, authorizes requests.</li>
+  <li><strong>Refresh token</strong> (days/weeks): used only to mint a new access token; <em>rotated</em> (invalidated and reissued) on each use so a stolen refresh token is detectable.</li>
+</ul>
+<blockquote class="warn"><strong>JWT pitfalls:</strong> (1) a JWT is signed, not encrypted — never put secrets in the payload; anyone can decode it. (2) Reject the <code>"alg": "none"</code> trick and never let the token pick the algorithm. (3) Always check <code>exp</code>. (4) You cannot "log out" a JWT without server state — plan for a denylist or keep access tokens short.</blockquote>
+
+<h2 id="where-to-store-tokens">Where to store tokens</h2>
+<blockquote class="warn">Store session/access tokens in an <strong>HttpOnly</strong>, <strong>Secure</strong>, <strong>SameSite</strong> cookie — <em>not</em> in <code>localStorage</code>. <code>localStorage</code> is readable by any JavaScript, so a single XSS flaw leaks every user's token. HttpOnly cookies are invisible to JS, which closes that door (at the cost of needing CSRF protection — see below).</blockquote>
+<pre><code>Set-Cookie: access=…; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=900</code></pre>
+
+<h2 id="csrf-and-cors">CSRF and CORS</h2>
+<p>Because cookies are sent automatically, a malicious site could trigger an authenticated request (CSRF). Defenses: <code>SameSite=Lax/Strict</code> cookies (blocks most cross-site sends), a CSRF token for state-changing requests, and strict CORS so other origins can't read responses.</p>
+
+<h2 id="oauth2-openid-connect">OAuth2 &amp; OpenID Connect</h2>
+<p><span class="level advanced">Advanced</span> "Log in with Google/GitHub" uses <strong>OAuth2</strong> (delegated authorization) + <strong>OIDC</strong> (an identity layer on top). The Authorization Code flow with PKCE:</p>
+<pre><code>1. App redirects user to the provider's /authorize (with client_id, redirect_uri,
+   scope, state, code_challenge).
+2. User authenticates &amp; consents at the provider.
+3. Provider redirects back with a one-time ?code=…
+4. App's SERVER exchanges code (+ code_verifier) at /token for an ID token
+   (OIDC: who the user is) + access token (what it can call).
+5. App creates its own session for the user.</code></pre>
+<blockquote class="tip">Never implement crypto or token verification by hand. Use a vetted library (your framework's auth middleware, or a provider SDK) and a battle-tested JWT library. The <code>state</code> parameter prevents CSRF on the callback; PKCE protects public clients.</blockquote>
+
+<h2 id="exercises">Exercises</h2>
+<ul>
+  <li>Hash a password with argon2/bcrypt and verify it; confirm two hashes of the same password differ (salt).</li>
+  <li>Decode a JWT at <a href="https://jwt.io" target="_blank" rel="noopener">jwt.io</a> and explain why the payload is readable but still trustworthy to the server.</li>
+  <li>List the cookie flags for a session token and what attack each one mitigates.</li>
+</ul>
+
+<h2 id="mini-project-a-login-flow">Mini-project: a login flow</h2>
+<p>Build email/password login on a small server: argon2-hashed passwords, a short-lived access JWT + rotating refresh token both in HttpOnly+Secure+SameSite cookies, a <code>/refresh</code> endpoint, rate-limited login, and a logout that clears + invalidates the refresh token. Then add "Log in with GitHub" via the Authorization Code + PKCE flow using a library — never hand-rolled crypto.</p>
+
+<section class="further"><h2 id="further-reading">Further reading</h2>
+<p>Official documentation for the tools and APIs covered on this page:</p>
+<ul class="further-list"><li><a href="https://datatracker.ietf.org/doc/html/rfc6749" target="_blank" rel="noopener">OAuth 2.0 (RFC 6749) ↗</a></li>
+<li><a href="https://openid.net/developers/how-connect-works/" target="_blank" rel="noopener">OpenID Connect ↗</a></li>
+<li><a href="https://jwt.io/introduction" target="_blank" rel="noopener">JWT introduction ↗</a></li></ul></section>
+  <nav class="pager">
+<a class="prev" href="datastar.html"><small>Previous</small>🌐 Datastar</a>
+<a class="next" href="frontend-backend-integration.html"><small>Next</small>🌐 Frontend / Backend Integration &amp; Deployment</a>
+  </nav>
+</main>
+<button type="button" class="fab top" id="fab-top" aria-label="Back to top">↑ Top</button>
+<div class="banner" id="update-banner" role="status">A new version is available.<button type="button">Reload</button></div>
+<div class="banner" id="offline-banner" role="status">You're offline — showing cached lessons.</div>
+<script src="../app.js" defer></script>
+</body>
+</html>

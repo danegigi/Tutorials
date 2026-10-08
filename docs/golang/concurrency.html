@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en" data-base="../">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0d1117">
+<meta name="description" content="Dev Tutorials — Golang, Bun, Web Development, Linux and DevOps, offline-ready.">
+<title>Concurrency: Goroutines &amp; Channels — Golang</title>
+<link rel="manifest" href="../manifest.webmanifest">
+<link rel="icon" href="../icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="../icon-192.png">
+<link rel="stylesheet" href="../app.css">
+<script>/* set theme before paint to avoid flash */(function(){try{var t=localStorage.getItem('tut.theme');document.documentElement.setAttribute('data-theme',t||'dark');}catch(e){document.documentElement.setAttribute('data-theme','dark');}})();</script>
+
+</head>
+<body class="lesson">
+<header class="nav">
+  <a class="brand" href="../index.html">📚 Dev Tutorials</a>
+  <span class="crumb">Concurrency: Goroutines &amp; Channels — Golang</span>
+  <span class="spacer"></span>
+  <a class="navbtn" href="../search.html">🔎 Search</a>
+  <button class="navbtn" id="install-btn" type="button">⬇️ Install</button>
+  <button class="navbtn" id="theme-btn" type="button" aria-label="Toggle theme">🌙 Dark</button>
+</header>
+<main class="wrap lesson-body">
+  <h1 class="page-title">Concurrency: Goroutines &amp; Channels</h1>
+  <div class="lesson-tools" data-lesson-id="golang/concurrency">
+    <button id="done-btn" type="button" aria-pressed="false">○ Mark complete</button>
+    <button id="mark-btn" type="button" aria-pressed="false">☆ Bookmark</button>
+    <a class="navbtn" href="index.html" style="margin-left:auto">All Golang lessons →</a>
+  </div>
+<nav class="toc" aria-label="On this page"><strong>On this page</strong><ul>
+<li class="lvl2"><a href="#goroutines">Goroutines</a></li>
+<li class="lvl2"><a href="#channels">Channels</a></li>
+<li class="lvl2"><a href="#select">select</a></li>
+<li class="lvl2"><a href="#sync-primitives">sync primitives</a></li>
+<li class="lvl2"><a href="#context-cancellation-and-deadlines">context: cancellation and deadlines</a></li>
+<li class="lvl2"><a href="#pattern-a-worker-pool">Pattern: a worker pool</a></li>
+<li class="lvl2"><a href="#exercises">Exercises</a></li>
+<li class="lvl2"><a href="#mini-project-a-concurrent-link-checker">Mini-project: a concurrent link checker</a></li>
+</ul></nav>
+<p class="lead">Concurrency is built into Go: start a <strong>goroutine</strong> with <code>go</code>, communicate over <strong>channels</strong>, coordinate with <code>select</code> and the <code>sync</code> package, and cancel work cleanly with <code>context</code>. "Don't communicate by sharing memory; share memory by communicating."</p>
+
+<h2 id="goroutines">Goroutines</h2>
+<p><span class="level beginner">Beginner</span> A goroutine is a function running concurrently, scheduled by the Go runtime onto OS threads. They're cheap — thousands are routine.</p>
+<pre><code>func main() {
+	go say("hello")   // runs concurrently
+	say("world")      // runs on the main goroutine
+}
+// Without synchronization, main may exit before the goroutine runs —
+// that's the whole reason channels and WaitGroups exist.</code></pre>
+
+<h2 id="channels">Channels</h2>
+<pre><code>ch := make(chan int)       // unbuffered: send blocks until a receiver is ready
+ch := make(chan int, 10)   // buffered: send blocks only when full
+
+go func() { ch &lt;- 42 }()   // send
+v := &lt;-ch                  // receive (blocks until a value arrives)
+
+// Close signals "no more values"; receivers can detect it
+close(ch)
+v, ok := &lt;-ch              // ok=false once drained &amp; closed
+
+// Range receives until the channel is closed
+for v := range ch { use(v) }</code></pre>
+<blockquote class="warn"><strong>Common mistakes:</strong> (1) sending on a closed channel — panics. (2) closing a channel twice — panics. (3) forgetting to close, so a <code>range</code> blocks forever (deadlock). Rule of thumb: <em>the sender</em> closes, and only once.</blockquote>
+
+<h2 id="select">select</h2>
+<pre><code>select {
+case v := &lt;-ch1:
+	fmt.Println("from ch1:", v)
+case ch2 &lt;- 99:
+	fmt.Println("sent to ch2")
+case &lt;-time.After(time.Second):
+	fmt.Println("timeout")       // a timeout without goroutine leaks
+default:
+	fmt.Println("nothing ready") // non-blocking select
+}</code></pre>
+
+<h2 id="sync-primitives">sync primitives</h2>
+<p><span class="level intermediate">Intermediate</span> When you genuinely share state (a counter, a cache), guard it:</p>
+<pre><code>var (
+	mu    sync.Mutex
+	count int
+)
+func incr() { mu.Lock(); count++; mu.Unlock() }
+
+// Wait for a set of goroutines to finish
+var wg sync.WaitGroup
+for _, url := range urls {
+	wg.Add(1)
+	go func(u string) {   // Go 1.22+: closure capture of range var is safe
+		defer wg.Done()
+		fetch(u)
+	}(url)
+}
+wg.Wait()
+
+// Run something exactly once
+var once sync.Once
+once.Do(func() { initExpensiveThing() })</code></pre>
+<blockquote class="tip">The race detector catches most data races: <code>go test -race ./...</code> or <code>go run -race .</code>. Run it in CI — it finds the bugs that only appear under load in production.</blockquote>
+
+<h2 id="context-cancellation-and-deadlines">context: cancellation and deadlines</h2>
+<p><span class="level advanced">Advanced</span> <code>context.Context</code> carries cancellation signals and deadlines across API boundaries. Every blocking or long-running function should accept one as its first argument.</p>
+<pre><code>ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+defer cancel()   // always call cancel to release resources
+
+req, _ := http.NewRequestWithContext(ctx, "GET", url, nil)
+resp, err := http.DefaultClient.Do(req)   // aborts if ctx expires
+
+// Honor cancellation in your own loops
+func worker(ctx context.Context, jobs &lt;-chan Job) {
+	for {
+		select {
+		case &lt;-ctx.Done():
+			return                 // caller cancelled — stop
+		case j := &lt;-jobs:
+			process(j)
+		}
+	}
+}</code></pre>
+
+<h2 id="pattern-a-worker-pool">Pattern: a worker pool</h2>
+<pre><code>func pool(ctx context.Context, jobs []Job, workers int) []Result {
+	in := make(chan Job)
+	out := make(chan Result)
+	var wg sync.WaitGroup
+
+	for i := 0; i &lt; workers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for j := range in {
+				out &lt;- do(j)
+			}
+		}()
+	}
+	go func() { for _, j := range jobs { in &lt;- j }; close(in) }()
+	go func() { wg.Wait(); close(out) }()
+
+	var results []Result
+	for r := range out { results = append(results, r) }
+	return results
+}</code></pre>
+
+<h2 id="exercises">Exercises</h2>
+<ul>
+  <li>Fetch 5 URLs concurrently with a <code>WaitGroup</code> and collect the status codes.</li>
+  <li>Reproduce a data race on a shared counter, confirm it with <code>-race</code>, then fix it with a <code>Mutex</code>.</li>
+  <li>Add a 500ms timeout to an HTTP call with <code>context.WithTimeout</code> and handle the cancellation.</li>
+</ul>
+
+<h2 id="mini-project-a-concurrent-link-checker">Mini-project: a concurrent link checker</h2>
+<p>Given a list of URLs, use a worker pool of N goroutines to fetch each and report its status code and latency. Add a global <code>context</code> timeout so the whole run can't exceed, say, 10 seconds, and use the race detector to prove your result aggregation is safe.</p>
+
+<section class="further"><h2 id="further-reading">Further reading</h2>
+<p>Official documentation for the tools and APIs covered on this page:</p>
+<ul class="further-list"><li><a href="https://go.dev/blog/codelab-share" target="_blank" rel="noopener">Share memory by communicating ↗</a></li>
+<li><a href="https://go.dev/blog/pipelines" target="_blank" rel="noopener">Go Concurrency Patterns ↗</a></li>
+<li><a href="https://pkg.go.dev/context" target="_blank" rel="noopener">context package ↗</a></li></ul></section>
+  <nav class="pager">
+<a class="prev" href="error-handling.html"><small>Previous</small>🐹 Error Handling</a>
+<a class="next" href="http-servers-and-apis.html"><small>Next</small>🐹 HTTP Servers &amp; APIs</a>
+  </nav>
+</main>
+<button type="button" class="fab top" id="fab-top" aria-label="Back to top">↑ Top</button>
+<div class="banner" id="update-banner" role="status">A new version is available.<button type="button">Reload</button></div>
+<div class="banner" id="offline-banner" role="status">You're offline — showing cached lessons.</div>
+<script src="../app.js" defer></script>
+</body>
+</html>

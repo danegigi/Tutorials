@@ -1,0 +1,133 @@
+<p class="lead">The <code>bun</code> CLI is the entry point to the runtime: it runs files and scripts, watches and hot-reloads, evaluates snippets, powers shebang tools, and gives you Web-standard APIs plus broad Node.js compatibility — this lesson is the day-to-day mechanics of running code.</p>
+
+<h2>bun run — files and scripts</h2>
+<p><span class="level beginner">Beginner</span> <code>bun run</code> executes either a file path or a <code>package.json</code> script. For a file the <code>run</code> keyword is optional.</p>
+<pre><code>bun run index.ts        # run a file
+bun index.ts            # "run" is optional for a file path
+bun run dev             # run the "dev" script from package.json
+bun dev                 # script name shorthand (when it isn't a builtin)
+bun run --filter='*' build   # run "build" in every workspace of a monorepo</code></pre>
+<pre><code>// package.json
+{
+  "scripts": {
+    "start": "bun run src/index.ts",
+    "dev": "bun --watch src/index.ts",
+    "typecheck": "bunx tsc --noEmit"
+  }
+}</code></pre>
+<blockquote class="tip">A few script names (<code>start</code>, <code>test</code>) can skip the <code>run</code> keyword, but a script that collides with a Bun builtin (e.g. a script named <code>install</code>) must be called with the explicit <code>bun run install</code>, otherwise Bun runs its own command. When in doubt, type <code>bun run &lt;name&gt;</code>.</blockquote>
+
+<h2>--print and -e: evaluate inline</h2>
+<pre><code>bun -e 'console.log(Bun.version)'           # evaluate a snippet
+bun --print "1 + 1"                          # evaluate AND print the result -&gt; 2
+bun --print "await Bun.file('package.json').json()"   # top-level await works
+echo 'console.log(42)' | bun -               # read program from stdin</code></pre>
+<p><code>-e</code> runs the code; <code>--print</code> runs it and prints the last expression's value (like a one-shot REPL). Both support top-level <code>await</code>.</p>
+
+<h2>--watch vs --hot</h2>
+<p><span class="level intermediate">Intermediate</span> Both re-run on file change, but differently:</p>
+<table>
+  <thead><tr><th>Flag</th><th>Behavior</th><th>Use for</th></tr></thead>
+  <tbody>
+    <tr><td><code>--watch</code></td><td>Restarts the whole process on change</td><td>CLIs, scripts, tests</td></tr>
+    <tr><td><code>--hot</code></td><td>Reloads modules in place, keeps state &amp; open sockets</td><td>Long-running servers</td></tr>
+  </tbody>
+</table>
+<pre><code>bun --watch script.ts      # kill &amp; restart on every save
+bun --hot server.ts        # swap modules, keep the server listening</code></pre>
+<p>Under <code>--hot</code>, a <code>Bun.serve()</code> instance and in-process <code>Bun.cron()</code> jobs are re-registered cleanly on each reload — no leaked timers, no dropped connections, no port already in use. That's why servers want <code>--hot</code> and one-shot scripts want <code>--watch</code>.</p>
+
+<h2>Shebang scripts</h2>
+<p>Make a TypeScript file directly executable — a first-class way to ship CLI tools:</p>
+<pre><code>#!/usr/bin/env bun
+// tool.ts
+const [, , ...args] = Bun.argv;    // argv[0]=bun, argv[1]=script path
+console.log("args:", args);</code></pre>
+<pre><code>chmod +x tool.ts
+./tool.ts a b c
+# args: [ "a", "b", "c" ]</code></pre>
+<blockquote class="tip">Reading arguments: <code>Bun.argv</code> is the full array including the <code>bun</code> executable and the script path, so your real arguments start at index 2. Destructure with <code>const [, , ...rest] = Bun.argv</code> to skip them. For flag parsing, Bun ships Node's <code>util.parseArgs</code> — <code>import { parseArgs } from "node:util"</code>.</blockquote>
+
+<h2>Web-standard APIs in Bun</h2>
+<p>Bun implements Web platform globals directly — no <code>node-fetch</code>, no polyfills:</p>
+<pre><code>// fetch, Request, Response, Headers, URL, URLSearchParams
+const res = await fetch("https://api.github.com/repos/oven-sh/bun");
+const repo = await res.json();
+
+// Web Crypto
+const id = crypto.randomUUID();
+const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode("x"));
+
+// Streams, Blob, File, FormData, TextEncoder/Decoder, structuredClone, WebSocket
+const blob = new Blob(["hi"], { type: "text/plain" });
+console.log(await blob.text());
+
+// Timers, queueMicrotask, AbortController all present
+const ctrl = new AbortController();
+setTimeout(() =&gt; ctrl.abort(), 1000);</code></pre>
+
+<h2>Node.js compatibility</h2>
+<p>Bun aims to be a drop-in Node replacement. Most <code>node:*</code> builtins and npm packages work unchanged:</p>
+<pre><code>import { readFile } from "node:fs/promises";   // node builtins work
+import { createServer } from "node:http";
+import path from "node:path";
+import { EventEmitter } from "node:events";
+
+// process, Buffer, __dirname-like via import.meta
+console.log(process.platform, process.cwd());
+console.log(import.meta.dir, import.meta.file);   // Bun's dirname/filename
+console.log(Buffer.from("hi").toString("base64"));</code></pre>
+<p><code>import.meta</code> gives you Bun-native location helpers that replace CommonJS <code>__dirname</code>/<code>__filename</code>:</p>
+<table>
+  <thead><tr><th>Property</th><th>Value</th></tr></thead>
+  <tbody>
+    <tr><td><code>import.meta.dir</code></td><td>Directory of the current file</td></tr>
+    <tr><td><code>import.meta.file</code></td><td>Filename of the current file</td></tr>
+    <tr><td><code>import.meta.path</code></td><td>Absolute path of the current file</td></tr>
+    <tr><td><code>import.meta.main</code></td><td><code>true</code> if this is the entry file</td></tr>
+  </tbody>
+</table>
+
+<h2>Runtime introspection</h2>
+<pre><code>Bun.version       // "1.4.2"
+Bun.revision      // git sha of this build
+Bun.main          // absolute path of the entry file
+Bun.env.NODE_ENV  // environment
+process.argv      // Node-style argv (same as Bun.argv)</code></pre>
+
+<h2>Common mistakes</h2>
+<blockquote class="warn"><strong>Common mistake:</strong> running a server with <code>--watch</code> and seeing "address already in use" or dropped WebSocket connections on every save — that's the full-process restart. Use <code>--hot</code> for servers so modules swap in place and the socket stays open. The opposite trap is using <code>--hot</code> for a one-shot script and being confused that it never exits; a plain run (or <code>--watch</code>) is right there. Also: don't reach for <code>__dirname</code> — in Bun's ESM modules it isn't defined; use <code>import.meta.dir</code>.</blockquote>
+
+<h2>Exercises</h2>
+<ul>
+  <li>Use <code>bun --print</code> to print the parsed contents of your <code>package.json</code> in one command.</li>
+  <li>Write a shebang script that echoes its arguments, <code>chmod +x</code> it, and run it with three arguments.</li>
+  <li>Start a trivial <code>Bun.serve</code> under <code>--hot</code>, change the response text, save, and hit it again <em>without</em> restarting — confirm the new text appears and the port never freed.</li>
+  <li>Print <code>import.meta.dir</code>, <code>import.meta.file</code>, and <code>import.meta.main</code> from both the entry file and an imported module; note how <code>main</code> differs.</li>
+</ul>
+
+<h2>Mini-project: a self-reloading dev dashboard</h2>
+<p>Build a tiny status server you run under <code>--hot</code> that holds in-memory state across reloads — proving hot reload preserves state while swapping code. Edit the HTML/logic while it runs and watch it update without losing the counter.</p>
+<pre><code>// dash.ts  —  run with: bun --hot dash.ts
+// A module-scoped value survives --hot reloads (it isn't re-initialized).
+const state = (globalThis as any).__state ??= { started: Date.now(), hits: 0 };
+
+Bun.serve({
+  port: 3000,
+  routes: {
+    "/": () =&gt; {
+      state.hits++;
+      const uptime = ((Date.now() - state.started) / 1000).toFixed(0);
+      return new Response(
+        `&lt;h2&gt;dev dashboard&lt;/h2&gt;
+         &lt;p&gt;bun ${Bun.version}&lt;/p&gt;
+         &lt;p&gt;uptime: ${uptime}s&lt;/p&gt;
+         &lt;p&gt;hits: ${state.hits}&lt;/p&gt;`,
+        { headers: { "Content-Type": "text/html" } },
+      );
+    },
+    "/health": () =&gt; Response.json({ ok: true, hits: state.hits }),
+  },
+});
+console.log("dashboard on http://localhost:3000  (edit this file and save)");</code></pre>
+<p>Load the page a few times to raise the counter, then change the heading text and save. The page updates on the next request, the port stays bound, and <strong>the hit counter keeps its value</strong> — the proof that <code>--hot</code> reloads code without discarding live state. Stash state on <code>globalThis</code> so it survives the module swap; a plain top-level <code>let</code> would reset each reload.</p>

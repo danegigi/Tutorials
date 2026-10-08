@@ -1,0 +1,207 @@
+<p class="lead">Bun has two built-in database APIs — <code>bun:sqlite</code>, a fast low-level SQLite driver, and <code>Bun.sql</code>, a unified Promise-based client for PostgreSQL, MySQL, and SQLite — plus first-class support for Drizzle ORM on top of them. This lesson covers all three with runnable examples.</p>
+
+<h2>bun:sqlite — the low-level SQLite driver</h2>
+<p><span class="level beginner">Beginner</span> <code>bun:sqlite</code> is a synchronous, zero-dependency SQLite driver. It's the fastest way to talk to a local database in Bun.</p>
+<pre><code>import { Database } from "bun:sqlite";
+
+const db = new Database("app.db");            // or ":memory:" for an ephemeral DB
+db.run("CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, name TEXT)");
+
+// Prepared statements — compiled once, reused (fast on the hot path)
+const insert = db.query("INSERT INTO users (name) VALUES (?)");
+insert.run("Alice");
+insert.run("Bob");
+
+// Query shapes
+const all   = db.query("SELECT * FROM users").all();              // [{id,name}, ...]
+const one   = db.query("SELECT * FROM users WHERE id = ?").get(1); // single row or null
+const names = db.query("SELECT name FROM users").values();         // [["Alice"], ...]
+
+// Named parameters
+db.query("SELECT * FROM users WHERE name = $name").all({ $name: "Alice" });</code></pre>
+
+<h3>Transactions</h3>
+<p>Wrap a batch in <code>db.transaction</code> — it's all-or-nothing and much faster than individual writes (one fsync, not N):</p>
+<pre><code>const insertMany = db.transaction((people: string[]) =&gt; {
+  for (const name of people) insert.run(name);
+});
+insertMany(["Carol", "Dave", "Eve"]);   // commits together, or rolls back on throw</code></pre>
+<blockquote class="tip">Turn on WAL mode for concurrency and foreign-key enforcement at startup: <code>db.run("PRAGMA journal_mode = WAL")</code> and <code>db.run("PRAGMA foreign_keys = ON")</code>. SQLite does <em>not</em> enforce foreign keys unless you enable them per connection — a surprise that silently lets orphan rows through.</blockquote>
+
+<h2>Bun.sql — one client for Postgres, MySQL &amp; SQLite</h2>
+<p><span class="level intermediate">Intermediate</span> The same tagged-template interface targets any of the three databases, chosen from the connection string. Values in <code>${...}</code> are always parameterized — safe against SQL injection by construction.</p>
+<pre><code>import { sql, SQL } from "bun";
+
+// PostgreSQL (default) — reads DATABASE_URL / POSTGRES_URL
+const users = await sql`SELECT * FROM users WHERE active = ${true} LIMIT ${10}`;
+
+// MySQL
+const mysql = new SQL("mysql://user:pass@localhost:3306/mydb");
+await mysql`SELECT * FROM users WHERE id = ${42}`;
+
+// SQLite
+const lite = new SQL("sqlite://app.db");
+await lite`SELECT * FROM users WHERE id = ${1}`;</code></pre>
+
+<h3>Inserting with the sql() helper</h3>
+<pre><code>const user = { name: "Alice", email: "alice@example.com" };
+
+// object -&gt; (name, email) VALUES (...)
+const [created] = await sql`INSERT INTO users ${sql(user)} RETURNING *`;
+
+// bulk insert from an array of objects
+await sql`INSERT INTO users ${sql([{ name: "Bob" }, { name: "Carol" }])}`;
+
+// WHERE IN
+await sql`SELECT * FROM users WHERE id IN ${sql([1, 2, 3])}`;</code></pre>
+
+<h3>Transactions &amp; pooling</h3>
+<pre><code>await sql.begin(async (tx) =&gt; {
+  await tx`INSERT INTO users (name) VALUES (${"Alice"})`;
+  await tx`UPDATE accounts SET balance = balance - 100 WHERE user_id = 1`;
+  // auto-COMMIT on success, auto-ROLLBACK on throw
+});
+
+const pool = new SQL({ max: 20, idleTimeout: 30 });
+using reserved = await pool.reserve();     // exclusive connection, auto-released
+await reserved`SELECT 1`;
+await pool.close();</code></pre>
+<blockquote class="warn"><strong>Common mistake:</strong> building a query by string concatenation — <code>sql(\`SELECT * FROM users WHERE id = \${id}\`)</code> as a plain string is an injection hole. With <code>Bun.sql</code>'s tagged template, <code>sql\`... WHERE id = ${id}\`</code> parameterizes <code>id</code> automatically. Also note: Postgres <code>bigint</code> comes back as a <em>string</em> by default to avoid precision loss — pass <code>{ bigint: true }</code> to the client if you need real <code>BigInt</code> values.</blockquote>
+
+<h2>Drizzle ORM with Bun SQLite</h2>
+<p><span class="level advanced">Advanced</span> When you want end-to-end type safety and real migrations, add Drizzle on top of <code>bun:sqlite</code>. You declare tables in TypeScript, get fully-typed queries, and generate SQL migrations from the same source of truth.</p>
+<pre><code>bun add drizzle-orm
+bun add -d drizzle-kit @types/bun</code></pre>
+
+<h3>Schema — the source of truth</h3>
+<pre><code>// src/db/schema.ts
+import { sqliteTable, int, text } from "drizzle-orm/sqlite-core";
+import { relations } from "drizzle-orm";
+
+export const users = sqliteTable("users", {
+  id:    int().primaryKey({ autoIncrement: true }),
+  name:  text().notNull(),
+  email: text().notNull().unique(),
+});
+
+export const posts = sqliteTable("posts", {
+  id:        int().primaryKey({ autoIncrement: true }),
+  authorId:  int("author_id").notNull().references(() =&gt; users.id, { onDelete: "cascade" }),
+  title:     text().notNull(),
+  published: int({ mode: "boolean" }).notNull().default(false),
+  createdAt: int("created_at", { mode: "timestamp" }).notNull().$defaultFn(() =&gt; new Date()),
+});
+
+// relations power the db.query.* nested API
+export const usersRelations = relations(users, ({ many }) =&gt; ({ posts: many(posts) }));
+export const postsRelations = relations(posts, ({ one }) =&gt; ({
+  author: one(users, { fields: [posts.authorId], references: [users.id] }),
+}));
+
+// row types for free
+export type User = typeof users.$inferSelect;
+export type NewPost = typeof posts.$inferInsert;</code></pre>
+
+<h3>Connection</h3>
+<pre><code>// src/db/index.ts
+import { drizzle } from "drizzle-orm/bun-sqlite";
+import { Database } from "bun:sqlite";
+import * as schema from "./schema";
+
+const sqlite = new Database(Bun.env.DB_FILE_NAME ?? "app.db");
+sqlite.exec("PRAGMA journal_mode = WAL;");
+sqlite.exec("PRAGMA foreign_keys = ON;");       // Drizzle emits FKs; the driver enforces them
+export const db = drizzle({ client: sqlite, schema });</code></pre>
+
+<h3>Migrations with drizzle-kit</h3>
+<pre><code>// drizzle.config.ts
+import { defineConfig } from "drizzle-kit";
+export default defineConfig({
+  out: "./drizzle",
+  schema: "./src/db/schema.ts",
+  dialect: "sqlite",
+  dbCredentials: { url: Bun.env.DB_FILE_NAME ?? "app.db" },
+});</code></pre>
+<pre><code>bunx drizzle-kit push        # dev: apply schema directly, no files
+bunx drizzle-kit generate    # prod: write ./drizzle/0000_xxx.sql + snapshot
+bunx drizzle-kit migrate     # apply pending migrations
+bunx drizzle-kit studio      # browse data in a local GUI</code></pre>
+
+<h3>Querying — the two APIs</h3>
+<pre><code>import { eq, and, gt, desc } from "drizzle-orm";
+import { db } from "./db";
+import { users, posts } from "./db/schema";
+
+// SQL-like builder — mirrors SQL one-to-one
+const [alice] = await db.insert(users)
+  .values({ name: "Alice", email: "alice@example.com" }).returning();
+
+const recent = await db.select().from(posts)
+  .where(and(eq(posts.published, true), gt(posts.id, 100)))
+  .orderBy(desc(posts.id)).limit(20);
+
+// Relational query API — typed nested objects, no manual join
+const withPosts = await db.query.users.findMany({ with: { posts: true } });
+const post = await db.query.posts.findFirst({
+  where: eq(posts.id, 10),
+  with: { author: { columns: { name: true } } },
+});</code></pre>
+
+<h2>Which API when</h2>
+<table>
+  <thead><tr><th>Reach for</th><th>When</th></tr></thead>
+  <tbody>
+    <tr><td><code>bun:sqlite</code></td><td>Local SQLite, raw control, hot-path prepared statements, zero deps</td></tr>
+    <tr><td><code>Bun.sql</code></td><td>One API across Postgres/MySQL/SQLite, ad-hoc parameterized queries</td></tr>
+    <tr><td>Drizzle</td><td>A growing schema that wants type safety and reviewable migrations</td></tr>
+  </tbody>
+</table>
+
+<h2>Common mistakes</h2>
+<blockquote class="warn"><strong>Common mistake:</strong> re-preparing a statement inside a loop with <code>bun:sqlite</code>. Call <code>db.query(sql)</code> <em>once</em> to compile the statement, then <code>.run()</code>/<code>.get()</code>/<code>.all()</code> it many times — recompiling each iteration throws away the whole point of prepared statements. With Drizzle, the recurring trap is editing an already-applied migration: never do that; add a new migration instead, and commit the <code>./drizzle</code> folder as your reviewable schema history. And always index foreign keys you query through — an unindexed FK join is a full table scan.</blockquote>
+
+<h2>Exercises</h2>
+<ul>
+  <li>With <code>bun:sqlite</code>, create a table, insert 1,000 rows inside a single <code>db.transaction</code>, and time it against 1,000 individual inserts.</li>
+  <li>Use <code>Bun.sql</code> against a <code>sqlite://</code> URL to run a parameterized <code>WHERE IN</code> query with the <code>sql([...])</code> helper.</li>
+  <li>Define a Drizzle schema with a one-to-many relation, run <code>bunx drizzle-kit push</code>, and fetch a parent with its children via <code>db.query.*</code>.</li>
+  <li>Add a unique index to the Drizzle schema, regenerate the migration, and read the emitted SQL.</li>
+</ul>
+
+<h2>Mini-project: a typed orders repository with reporting</h2>
+<p>Build the data layer a web route would call: Drizzle for the typed hot-path app queries and <code>Bun.sql</code> for an ad-hoc reporting query — the common split of "typed everyday access" plus "raw analytics."</p>
+<pre><code>// orders.repo.ts
+import { db } from "./db";
+import { posts } from "./db/schema";
+import { sql as rawSql } from "bun";
+import { eq, desc } from "drizzle-orm";
+
+type NewPost = typeof posts.$inferInsert;
+
+export const OrdersRepo = {
+  // Typed CRUD via Drizzle — the compiler guarantees the shape
+  create: (data: NewPost) =&gt; db.insert(posts).values(data).returning().get(),
+
+  byId: (id: number) =&gt;
+    db.query.posts.findFirst({ where: eq(posts.id, id), with: { author: true } }),
+
+  feed: (limit = 20) =&gt;
+    db.select().from(posts).where(eq(posts.published, true))
+      .orderBy(desc(posts.id)).limit(limit),
+
+  publish: (id: number) =&gt;
+    db.update(posts).set({ published: true }).where(eq(posts.id, id)).returning().get(),
+
+  // Ad-hoc reporting via Bun.sql (raw, parameterized) against Postgres
+  dailyPublishedCount: () =&gt; rawSql`
+    SELECT date_trunc('day', created_at) AS day, count(*) AS n
+    FROM posts WHERE published = ${true}
+    GROUP BY 1 ORDER BY 1 DESC LIMIT 30
+  `,
+};</code></pre>
+<pre><code>// usage
+import { OrdersRepo } from "./orders.repo";
+const post = OrdersRepo.create({ authorId: 1, title: "Hello", published: false });
+OrdersRepo.publish(post!.id);
+const feed = OrdersRepo.feed();</code></pre>
+<p>Keeping all DB access in one module (and leaning on Drizzle's inferred types) means a column rename is a single edit the compiler propagates everywhere, while the one raw reporting query stays parameterized and injection-safe. That division — typed everyday queries, raw analytics behind the same repository — is how real services keep both ergonomics and flexibility.</p>

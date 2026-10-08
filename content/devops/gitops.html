@@ -1,0 +1,202 @@
+<p class="lead">GitOps is a way of running infrastructure and applications where <strong>Git is the single source of truth</strong>: everything you want running is described declaratively in a repository, and automated agents continuously make the real world match what the repo says. This lesson takes you from the core idea through push-based CI versus pull-based GitOps, Flux and its reconciliation loop, and an end-to-end workflow tying Terraform, Helm, and GitHub Actions together.</p>
+
+<h2>Git as the source of truth</h2>
+<p><span class="level beginner">Beginner</span> GitOps rests on one idea: if you can describe your whole system as text files and store them in Git, then Git becomes the authoritative record of <em>what should exist</em>. Nothing is changed by hand on a server — you change a file, commit it, and automation reconciles reality to match. That buys three things almost for free:</p>
+<ul>
+  <li><strong>Auditability</strong> — <code>git log</code> is your complete change history: who changed what, when, and (via the PR) why.</li>
+  <li><strong>Rollback</strong> — reverting a bad change is just <code>git revert</code>; the automation notices and rolls the live system back.</li>
+  <li><strong>Reproducibility</strong> — you can rebuild the whole environment from the repo, because the repo <em>is</em> the environment's definition.</li>
+</ul>
+<p>GitOps depends on <strong>declarative</strong> tooling — Kubernetes manifests, Terraform HCL, Helm charts all describe the end state, not the steps. Because desired state is a value you can diff, a machine can always compute the difference between "what the repo says" and "what is actually running."</p>
+
+<h2>The reconciliation loop</h2>
+<p><span class="level beginner">Beginner</span> The engine of GitOps is a control loop that runs forever:</p>
+<ol>
+  <li><strong>Observe</strong> the actual state of the system.</li>
+  <li><strong>Compare</strong> it to the desired state defined in Git.</li>
+  <li><strong>Act</strong> to close any gap — apply, update, or delete resources until reality matches Git.</li>
+</ol>
+<p>This runs continuously, not just at deploy time. If someone manually edits a live resource, the loop detects the divergence and corrects it — <strong>drift detection</strong> and self-healing.</p>
+<blockquote class="tip">Mental model: CI = "is the code good?" (build, test, produce artifacts). CD in GitOps = "make the cluster match Git." Keeping them separate is what makes GitOps auditable and secure — your CI system never needs cluster credentials.</blockquote>
+
+<h2>Push-based CI vs pull-based GitOps</h2>
+<p><span class="level intermediate">Intermediate</span> In traditional <strong>push-based</strong> CD, a pipeline holds cluster credentials and reaches in from outside:</p>
+<pre><code># inside a GitHub Actions job — the "push" model
+- run: |
+    aws eks update-kubeconfig --name my-cluster
+    kubectl set image deployment/web web=ghcr.io/org/web:${{ github.sha }}</code></pre>
+<p>It works, but it has real drawbacks: your CI system holds powerful cluster credentials (a compromised workflow is now a cluster breach); the cluster is only updated at deploy time, so out-of-band changes drift uncorrected; and "what is actually deployed?" is answered by cluster inspection plus CI-log archaeology.</p>
+<p>In <strong>pull-based</strong> GitOps, an agent (Flux, Argo CD) runs <em>inside</em> the cluster and:</p>
+<ul>
+  <li><strong>pulls</strong> the desired state from Git (no inbound access to the cluster required),</li>
+  <li><strong>reconciles</strong> it against live state on a schedule and on every change,</li>
+  <li><strong>reports</strong> status back (synced / drifted / failed).</li>
+</ul>
+<p>Because the agent only needs <em>read</em> access to Git, no external system ever holds cluster credentials. CI's job shrinks to "build image, update manifest in Git." The cluster deploys itself and self-heals on drift.</p>
+
+<h2>CI with GitHub Actions</h2>
+<p><span class="level intermediate">Intermediate</span> GitHub Actions is the CI half. Workflows are YAML files under <code>.github/workflows/</code>, triggered by events; the crucial GitOps step is building a container image and pushing it to a registry, tagged with the commit SHA so every build is uniquely identifiable.</p>
+<pre><code>name: Build and Push Image
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  packages: write          # needed to push to GHCR
+
+jobs:
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}:${{ github.sha }}
+            ghcr.io/${{ github.repository }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max</code></pre>
+<blockquote class="tip">Pin to an immutable tag (the commit SHA), not <code>:latest</code>, so rollbacks are real: a specific, revertable image. <code>${{ secrets.GITHUB_TOKEN }}</code> is auto-provisioned and scoped to the repo — use it to push to GHCR without minting a personal token.</blockquote>
+
+<h2>Flux</h2>
+<p><span class="level advanced">Advanced</span> <strong>Flux</strong> is a set of Kubernetes controllers — the GitOps Toolkit — that implement the pull model. You install it, point it at a Git repo, and it reconciles the cluster to match. The controllers: <strong>source-controller</strong> (fetches from Git/Helm/OCI), <strong>kustomize-controller</strong> (applies manifests), <strong>helm-controller</strong> (manages Helm releases), <strong>notification-controller</strong> (events in/out), and the <strong>image-reflector/automation</strong> controllers (auto-bump tags).</p>
+<pre><code># Bootstrap: installs Flux AND commits its own manifests into your repo
+export GITHUB_TOKEN=&lt;your-pat&gt;
+flux bootstrap github \
+  --owner=my-org \
+  --repository=fleet-infra \
+  --branch=main \
+  --path=clusters/production
+# -&gt; ✔ all components are healthy</code></pre>
+<p>Two CRDs do the core work. A <code>GitRepository</code> (a source) says <em>where</em> and <em>how often</em> to fetch; a <code>Kustomization</code> says <em>which path</em> to apply and reconcile.</p>
+<pre><code>apiVersion: source.toolkit.fluxcd.io/v1
+kind: GitRepository
+metadata:
+  name: app-config
+  namespace: flux-system
+spec:
+  interval: 1m
+  url: https://github.com/my-org/app-config
+  ref: { branch: main }
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: apps-production
+  namespace: flux-system
+spec:
+  interval: 5m
+  sourceRef: { kind: GitRepository, name: app-config }
+  path: ./apps/production
+  prune: true          # delete resources removed from Git
+  wait: true</code></pre>
+<blockquote class="tip"><code>prune: true</code> makes deletion GitOps-native: remove a manifest from Git and Flux removes it from the cluster. The trade-off is that a bad path change can prune more than you meant — scope your Kustomization paths carefully.</blockquote>
+
+<h3>Helm via Flux</h3>
+<p>Flux deploys Helm charts declaratively through a <code>HelmRelease</code> — the helm-controller runs the equivalent of <code>helm upgrade --install</code> for you, with auto-rollback on a failed upgrade.</p>
+<pre><code>apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: podinfo
+  namespace: default
+spec:
+  interval: 5m
+  chart:
+    spec:
+      chart: podinfo
+      version: "6.5.4"            # pin exact; edit + commit to upgrade
+      sourceRef: { kind: HelmRepository, name: podinfo, namespace: flux-system }
+  upgrade:
+    remediation: { retries: 3 }   # auto-rollback a bad upgrade
+  values:
+    replicaCount: 2
+    ingress:
+      enabled: true
+      hosts:
+        - host: podinfo.example.com</code></pre>
+<pre><code># Watch Flux reconcile
+flux get kustomizations
+flux get helmreleases
+# -&gt; NAME      REVISION    SUSPENDED  READY  MESSAGE
+# -&gt; podinfo   6.5.4       False      True   Release reconciliation succeeded
+flux reconcile kustomization apps-production --with-source   # force an immediate sync</code></pre>
+
+<h2>End-to-end GitOps workflow</h2>
+<p><span class="level advanced">Advanced</span> Here is the whole thing tied together across two repos — an <strong>app repo</strong> (source code) and a <strong>config repo</strong> (manifests / desired state).</p>
+<ol>
+  <li><strong>One-time: provision the platform.</strong> Terraform creates the VPC, the cluster, IAM, and the S3+DynamoDB state backend — its config lives in Git and runs through a plan-on-PR / apply-on-merge Actions workflow.</li>
+  <li><strong>One-time: bootstrap Flux.</strong> <code>flux bootstrap github</code> installs the toolkit and points a <code>GitRepository</code> + <code>Kustomization</code> at the config repo.</li>
+  <li><strong>A developer pushes app code</strong> to the app repo's <code>main</code>.</li>
+  <li><strong>Actions runs CI</strong> — lint, test, build the image, push it tagged with <code>${{ github.sha }}</code>.</li>
+  <li><strong>The manifest is updated</strong> — either Actions commits the new tag into the config repo, or Flux image-automation writes it back. Either way the change is a commit in the config repo.</li>
+  <li><strong>Flux reconciles</strong> — source-controller sees the new commit (interval or webhook), the kustomize/helm controller applies it, Kubernetes rolls out the new image.</li>
+  <li><strong>Rollback = git revert.</strong> If the release is bad, revert the commit in the config repo and push; Flux rolls the cluster back — no special tooling, fully audited.</li>
+</ol>
+<blockquote class="tip">Notice where the boundary sits: CI never touches the cluster, and the cluster never trusts CI. The only thing crossing between them is a commit in the config repo. That single seam is what gives GitOps its auditability and blast-radius control.</blockquote>
+
+<h3>A Terraform plan-on-PR, apply-on-merge gate</h3>
+<pre><code>on:
+  pull_request:  { paths: ['infra/**'] }
+  push:          { branches: [main], paths: ['infra/**'] }
+
+jobs:
+  plan:
+    if: github.event_name == 'pull_request'
+    steps:
+      - run: terraform init
+      - run: terraform fmt -check
+      - run: terraform validate
+      - run: terraform plan -no-color       # reviewers see the proposed change
+
+  apply:
+    if: github.ref == 'refs/heads/main' &amp;&amp; github.event_name == 'push'
+    environment: production                 # requires approval + holds prod secrets
+    steps:
+      - run: terraform init
+      - run: terraform apply -auto-approve</code></pre>
+<blockquote class="warn">Destructive: <code>terraform apply -auto-approve</code> in CI applies whatever merges to <code>main</code> with no human at the keyboard. Protect that path — require PR review, run <code>plan</code> on the PR, and put <code>apply</code> behind a protected environment with required reviewers. The plan you approve on the PR is your last human checkpoint.</blockquote>
+
+<h2>Best practices</h2>
+<p><span class="level advanced">Advanced</span> The patterns that keep a GitOps setup maintainable as it grows.</p>
+<ul>
+  <li><strong>Separate app repo and config repo.</strong> An image bump is a config-repo commit, not churn in the app repo's history; CI and CD get clean ownership boundaries.</li>
+  <li><strong>Environment overlays with Kustomize.</strong> Keep a <code>base/</code> and thin <code>overlays/staging</code>, <code>overlays/production</code> that patch it, instead of copy-pasting manifests per environment.</li>
+  <li><strong>PR-based promotion.</strong> Promote a tag from staging to production by opening a PR against the production overlay — a reviewed, audited gate, with rollback still just <code>git revert</code>.</li>
+  <li><strong>Least privilege.</strong> Flux gets read-only Git access; CI gets registry push but no cluster credentials; use short-lived OIDC-federated cloud creds in Actions.</li>
+</ul>
+<blockquote class="warn">Never commit a plaintext Secret, a <code>.tfvars</code> with credentials, or a raw kubeconfig. Once it is in Git history it is effectively permanent — rotate the credential rather than trying to scrub the repo. For secrets in GitOps use SOPS (encrypt the values; Flux decrypts at apply) or Sealed Secrets (only the cluster can decrypt).</blockquote>
+
+<h2>Common mistakes</h2>
+<blockquote class="warn"><strong>Common mistakes</strong>
+<ul>
+  <li><strong>Giving CI cluster credentials.</strong> That is the push anti-pattern GitOps avoids — a leaked workflow secret becomes a cluster breach. Let an in-cluster agent pull instead.</li>
+  <li><strong>Deploying off <code>:latest</code>.</strong> You cannot roll back to a specific image. Tag with the commit SHA and reference that in Git.</li>
+  <li><strong>Committing secrets.</strong> Plaintext Secrets or secret tfvars in Git are permanent; use SOPS/Sealed Secrets and rotate anything leaked.</li>
+  <li><strong>Editing live resources by hand.</strong> Flux reverts the drift on the next reconcile; make the change in Git or it will not stick.</li>
+  <li><strong>Unscoped <code>prune: true</code>.</strong> A careless path change can delete more than intended — scope Kustomization paths tightly.</li>
+  <li><strong>Auto-apply with no human gate.</strong> <code>terraform apply -auto-approve</code> on merge needs PR review + a protected environment, or a bad merge ships straight to prod.</li>
+</ul></blockquote>
+
+<h2>Exercises</h2>
+<ul>
+  <li>Write a GitHub Actions workflow that builds an image and pushes it to GHCR tagged with <code>${{ github.sha }}</code>.</li>
+  <li>Explain, in two or three sentences each, the security and drift differences between push-based CD and pull-based GitOps.</li>
+  <li>On a kind cluster, <code>flux bootstrap</code> against a test repo, add a <code>GitRepository</code> + <code>Kustomization</code>, and watch a committed manifest appear in the cluster.</li>
+  <li>Deploy an app via a Flux <code>HelmRelease</code>, change a value in Git, and confirm the release upgrades on the next reconcile.</li>
+  <li>Make a bad change, then <code>git revert</code> it, and verify Flux rolls the cluster back without any <code>kubectl</code>.</li>
+</ul>
+
+<h2>Mini-project: a full GitOps pipeline</h2>
+<p>Set up two repos — an app repo and a config repo — and a kind (or cloud) cluster. In the app repo, a GitHub Actions workflow lints, tests, builds a SHA-tagged image, and pushes it to GHCR. Bootstrap Flux against the config repo, where a <code>base/</code> plus <code>overlays/staging</code> and <code>overlays/production</code> (Kustomize) describe the deployment, and image-automation bumps the tag back into Git. Promote a release from staging to production via a reviewed PR against the production overlay, store a secret with SOPS, and finally break a release and roll it back with a single <code>git revert</code> — proving the whole loop is auditable and self-healing with CI never holding cluster credentials.</p>

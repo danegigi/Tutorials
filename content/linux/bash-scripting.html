@@ -1,0 +1,167 @@
+<p class="lead">A shell script is just a file of the same commands you type at the prompt, saved so you can run them again and share them. The step up from one-liner to robust script is small but important: a shebang, careful quoting, a few control structures, and the safety line <code>set -euo pipefail</code> that turns silent failures into loud ones. This lesson builds up to a real, re-runnable backup script you would trust on a server.</p>
+
+<h2>The shebang and running a script</h2>
+<p><span class="level beginner">Beginner</span> The first line, the <em>shebang</em>, tells the system which interpreter to use. Then make the file executable and run it.</p>
+<pre><code>cat &gt; hello.sh &lt;&lt;'EOF'
+#!/usr/bin/env bash
+echo "Hello from $(hostname)"
+EOF
+chmod +x hello.sh
+./hello.sh
+# -> Hello from web-01</code></pre>
+<blockquote class="tip">Use <code>#!/usr/bin/env bash</code> rather than <code>#!/bin/bash</code>: it finds bash via <code>PATH</code>, which matters on systems (like some BSDs or Nix) where bash is not in <code>/bin</code>. Use <code>#!/bin/sh</code> only if you are deliberately writing portable POSIX shell without bash features.</blockquote>
+
+<h2>Variables and quoting</h2>
+<p><span class="level beginner">Beginner</span> Assign with <strong>no spaces</strong> around <code>=</code>. Expand with <code>$name</code> or <code>${name}</code>. The single most common bug in shell scripts is forgetting to quote expansions.</p>
+<pre><code>name="Ada Lovelace"       # no spaces around =
+echo "$name"              # QUOTED: prints the whole value
+# -> Ada Lovelace
+echo $name                # UNQUOTED: word-split into two arguments
+# -> Ada Lovelace    (looks the same here, but breaks with globs/extra spaces)
+
+dir="/var/log/my app"
+ls "$dir"                 # correct: one argument
+ls $dir                   # WRONG: ls gets '/var/log/my' and 'app' separately
+
+# Command substitution captures a command's output
+today="$(date +%F)"
+echo "today is $today"
+# -> today is 2026-10-08
+
+# Default values and required values
+port="${PORT:-8080}"      # use $PORT, or 8080 if unset/empty
+file="${1:?usage: backup.sh FILE}"   # error out if $1 is missing</code></pre>
+<blockquote class="warn"><strong>Common mistake:</strong> unquoted variables. <code>rm -rf $dir/*</code> with <code>$dir</code> empty becomes <code>rm -rf /*</code> — catastrophic. Quoting (<code>"$dir"</code>) and <code>set -u</code> (error on unset variables) together prevent the whole class. Treat every <code>$var</code> as if it might contain spaces or be empty, because one day it will.</blockquote>
+
+<h2>Conditionals: if and [[ ]]</h2>
+<p><span class="level intermediate">Intermediate</span> Use <code>[[ ... ]]</code> (bash's test construct) over the older <code>[ ... ]</code> — it is safer with unquoted variables and supports <code>&amp;&amp;</code>, <code>||</code>, and pattern matching.</p>
+<pre><code>if [[ -f "$file" ]]; then
+  echo "$file exists"
+elif [[ -d "$file" ]]; then
+  echo "$file is a directory"
+else
+  echo "$file not found"
+fi
+
+# Numeric vs string comparison
+count=5
+[[ $count -gt 3 ]] &amp;&amp; echo "more than three"      # -gt -lt -eq -ge for numbers
+[[ "$env" == prod ]] &amp;&amp; echo "production"          # == != for strings
+[[ "$name" == A* ]] &amp;&amp; echo "starts with A"        # glob pattern match</code></pre>
+<table>
+  <thead><tr><th>Test</th><th>True when</th></tr></thead>
+  <tbody>
+    <tr><td><code>-f path</code></td><td>path is a regular file.</td></tr>
+    <tr><td><code>-d path</code></td><td>path is a directory.</td></tr>
+    <tr><td><code>-e path</code></td><td>path exists (any type).</td></tr>
+    <tr><td><code>-z str</code> / <code>-n str</code></td><td>string is empty / non-empty.</td></tr>
+    <tr><td><code>a -gt b</code></td><td>number a greater than b (<code>-lt -eq -ge -le -ne</code> too).</td></tr>
+  </tbody>
+</table>
+
+<h2>Loops</h2>
+<pre><code># for over a list / glob (quote the loop variable!)
+for f in /var/log/*.log; do
+  echo "rotating $f"
+done
+
+# C-style for with a counter
+for ((i=1; i&lt;=3; i++)); do echo "attempt $i"; done
+# -> attempt 1 / attempt 2 / attempt 3
+
+# while, reading a file line by line (the safe idiom)
+while IFS= read -r line; do
+  echo "got: $line"
+done &lt; input.txt
+
+# until: loop until a condition becomes true (e.g. wait for a service)
+until curl -sf http://localhost:8080/health &gt;/dev/null; do
+  echo "waiting for app..."; sleep 1
+done</code></pre>
+
+<h2>Functions, arguments, and exit codes</h2>
+<p><span class="level intermediate">Intermediate</span> Positional arguments are <code>$1</code>, <code>$2</code>, &hellip;; <code>$@</code> is all of them, <code>$#</code> is the count. Every command returns an <em>exit code</em>: <code>0</code> means success, non-zero means failure — this is what <code>if</code> and <code>&amp;&amp;</code> actually test.</p>
+<pre><code>log() { echo "[$(date +%T)] $*"; }     # $* / $@ = all args
+
+greet() {
+  local who="${1:-world}"              # 'local' keeps it scoped to the function
+  echo "hello, $who"
+  return 0                             # explicit exit code
+}
+
+greet Ada
+# -> hello, Ada
+log "starting with $# args: $@"
+
+# Exit codes drive control flow
+if grep -q ERROR app.log; then
+  log "errors found"; exit 1           # non-zero = this script failed
+fi
+echo "last command exit code: $?"      # $? holds the previous exit code</code></pre>
+
+<h2>set -euo pipefail: the safety line</h2>
+<p><span class="level intermediate">Intermediate</span> Put this near the top of every non-trivial script. It converts the three silent-failure traps that bite everyone into immediate, visible errors.</p>
+<table>
+  <thead><tr><th>Option</th><th>Effect</th></tr></thead>
+  <tbody>
+    <tr><td><code>set -e</code></td><td>Exit immediately if any command fails (non-zero), instead of plowing on.</td></tr>
+    <tr><td><code>set -u</code></td><td>Error on use of an <em>unset</em> variable — catches typos and empty paths.</td></tr>
+    <tr><td><code>set -o pipefail</code></td><td>A pipeline fails if <em>any</em> stage fails, not just the last — <code>false | true</code> now fails.</td></tr>
+  </tbody>
+</table>
+<pre><code>#!/usr/bin/env bash
+set -euo pipefail
+IFS=$'\n\t'                 # safer word-splitting (newlines/tabs only, not spaces)
+
+# With -e, this script stops the moment tar fails — you never run the next line
+# against a half-made archive. Without it, failures pass silently.
+trap 'echo "FAILED at line $LINENO" &gt;&amp;2' ERR   # print where it died</code></pre>
+<blockquote class="warn">Even with <code>set -e</code>, a command whose failure you expect (like <code>grep</code> finding nothing) will abort the script. Guard those explicitly: <code>grep X file || true</code>, or test in an <code>if</code>. And remember <code>set -e</code> does not fire inside <code>&amp;&amp;</code>/<code>||</code> chains or on the left of a pipe without <code>pipefail</code> — which is exactly why you want all three options together.</blockquote>
+
+<h2>Exercises</h2>
+<ul>
+  <li>Write a script that takes a filename as <code>$1</code>, errors with a usage message if none is given (<code>${1:?...}</code>), and prints whether it exists.</li>
+  <li>Loop over every <code>.txt</code> file in a directory and print its line count, quoting the loop variable correctly.</li>
+  <li>Write a function that retries a command up to 3 times with a 2-second sleep between attempts, returning the command's exit code.</li>
+  <li>Add <code>set -euo pipefail</code> and an <code>ERR</code> trap to a script, then deliberately reference an unset variable and watch it fail loudly with the line number.</li>
+</ul>
+
+<h2>Mini-project: a real backup script</h2>
+<p>Write a production-shaped backup script: strict mode, argument validation, logging, a retention policy, and a clear success/failure exit code — everything a cron job or systemd timer would invoke.</p>
+<pre><code>#!/usr/bin/env bash
+set -euo pipefail
+IFS=$'\n\t'
+
+# --- config (overridable via environment) ---
+SRC="${1:?usage: backup.sh SOURCE_DIR [DEST_DIR]}"
+DEST="${2:-/var/backups}"
+KEEP_DAYS="${KEEP_DAYS:-7}"
+STAMP="$(date +%Y%m%d-%H%M%S)"
+ARCHIVE="$DEST/$(basename "$SRC")-$STAMP.tar.gz"
+
+log()  { echo "[$(date +%T)] $*"; }
+die()  { echo "[$(date +%T)] ERROR: $*" &gt;&amp;2; exit 1; }
+trap 'die "aborted at line $LINENO"' ERR
+
+# --- preconditions ---
+[[ -d "$SRC" ]]  || die "source '$SRC' is not a directory"
+mkdir -p "$DEST"
+
+# --- do the work ---
+log "backing up $SRC -> $ARCHIVE"
+tar czf "$ARCHIVE" -C "$(dirname "$SRC")" "$(basename "$SRC")"
+size="$(du -h "$ARCHIVE" | cut -f1)"
+log "created $ARCHIVE ($size)"
+
+# --- retention ---
+deleted="$(find "$DEST" -name '*.tar.gz' -mtime +"$KEEP_DAYS" -print -delete | wc -l)"
+log "pruned $deleted archive(s) older than $KEEP_DAYS days"
+log "backup OK"</code></pre>
+<pre><code>./backup.sh /var/www/site
+# -> [10:40:02] backing up /var/www/site -> /var/backups/site-20261008-104002.tar.gz
+# -> [10:40:03] created /var/backups/site-20261008-104002.tar.gz (4.1M)
+# -> [10:40:03] pruned 1 archive(s) older than 7 days
+# -> [10:40:03] backup OK
+echo $?
+# -> 0        (success — a monitoring tool or cron can rely on this)</code></pre>
+<p>Run it with a missing argument and it exits non-zero with a usage message; run it against a bad path and the <code>ERR</code> trap reports the exact line. That combination of strict mode, validation, logging, and a meaningful exit code is what separates a throwaway snippet from a script you can schedule and forget.</p>

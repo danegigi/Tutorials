@@ -1,0 +1,89 @@
+<p class="lead">Go talks to SQL databases through <code>database/sql</code> — a driver-agnostic interface with connection pooling built in. Learn safe queries, the pool knobs that matter, and when a typed ORM like Ent earns its keep.</p>
+
+<h2>Connecting</h2>
+<pre><code>import (
+	"database/sql"
+	_ "github.com/mattn/go-sqlite3"   // blank import registers the driver
+)
+
+db, err := sql.Open("sqlite3", "app.db")
+if err != nil { log.Fatal(err) }
+defer db.Close()
+
+if err := db.Ping(); err != nil {    // Open is lazy — Ping actually connects
+	log.Fatal(err)
+}</code></pre>
+<blockquote class="tip"><code>sql.DB</code> is a <em>pool</em>, not a single connection. Create one per database for the lifetime of your program and share it — do not open a new one per request.</blockquote>
+
+<h2>Querying safely</h2>
+<pre><code>// Single row
+var name string
+err := db.QueryRow("SELECT name FROM users WHERE id = ?", id).Scan(&amp;name)
+if err == sql.ErrNoRows {
+	// not found
+}
+
+// Many rows
+rows, err := db.Query("SELECT id, name FROM users WHERE active = ?", true)
+if err != nil { return err }
+defer rows.Close()                   // ALWAYS — leaks a connection otherwise
+
+for rows.Next() {
+	var u User
+	if err := rows.Scan(&amp;u.ID, &amp;u.Name); err != nil { return err }
+	users = append(users, u)
+}
+return rows.Err()                    // check for mid-iteration errors</code></pre>
+<blockquote class="warn"><strong>Never build SQL with string concatenation.</strong> <code>"... WHERE name = '" + input + "'"</code> is a SQL-injection hole. Always use placeholders (<code>?</code> for SQLite/MySQL, <code>$1</code> for Postgres) and pass values as arguments — the driver escapes them.</blockquote>
+
+<h2>Writes and results</h2>
+<pre><code>res, err := db.Exec("INSERT INTO users(name, email) VALUES(?, ?)", name, email)
+if err != nil { return err }
+id, _ := res.LastInsertId()
+n, _ := res.RowsAffected()</code></pre>
+
+<h2>Transactions</h2>
+<pre><code>tx, err := db.Begin()
+if err != nil { return err }
+defer tx.Rollback()                  // no-op if already committed
+
+if _, err := tx.Exec("UPDATE accounts SET bal = bal - ? WHERE id = ?", amt, from); err != nil {
+	return err
+}
+if _, err := tx.Exec("UPDATE accounts SET bal = bal + ? WHERE id = ?", amt, to); err != nil {
+	return err
+}
+return tx.Commit()</code></pre>
+
+<h2>Pool configuration</h2>
+<p><span class="level intermediate">Intermediate</span> The defaults are rarely right for production:</p>
+<pre><code>db.SetMaxOpenConns(25)                 // cap concurrent connections
+db.SetMaxIdleConns(25)                 // keep warm connections ready
+db.SetConnMaxLifetime(5 * time.Minute) // recycle to survive DB restarts/LB</code></pre>
+<blockquote class="warn"><strong>Common mistake:</strong> leaving <code>MaxOpenConns</code> unbounded (the default). Under load Go will open thousands of connections and exhaust the database's own connection limit. Set it to something your DB can handle.</blockquote>
+
+<h2>When to use an ORM: Ent</h2>
+<p><span class="level advanced">Advanced</span> For large schemas with lots of relations, a code-generating ORM like <a href="https://entgo.io/" target="_blank" rel="noopener">Ent</a> gives you a typed query builder and migrations. You define the schema in Go, run codegen, and get compile-checked queries:</p>
+<pre><code>// schema/user.go — declarative
+func (User) Fields() []ent.Field {
+	return []ent.Field{
+		field.String("name"),
+		field.String("email").Unique(),
+	}
+}
+// go generate ./ent  → generated client
+
+// Typed queries, no raw SQL strings
+u, err := client.User.Create().SetName("Ada").SetEmail("ada@x.com").Save(ctx)
+users, err := client.User.Query().Where(user.NameHasPrefix("A")).All(ctx)</code></pre>
+<p>The trade-off: a build step and generated code in your repo, in exchange for eliminating a whole class of hand-written-SQL bugs. For small apps, plain <code>database/sql</code> (optionally with <code>sqlx</code> for struct scanning) is simpler.</p>
+
+<h2>Exercises</h2>
+<ul>
+  <li>Create a SQLite <code>users</code> table, insert three rows with placeholders, and query them back into a <code>[]User</code>.</li>
+  <li>Wrap two writes in a transaction and prove a mid-transaction error rolls both back.</li>
+  <li>Set <code>MaxOpenConns(2)</code>, fire 10 concurrent queries, and observe them queueing.</li>
+</ul>
+
+<h2>Mini-project: persist the TODO API</h2>
+<p>Replace the in-memory map from the HTTP lesson with a SQLite-backed store: a <code>Store</code> struct holding <code>*sql.DB</code> with <code>List/Get/Create/Update/Delete</code> methods using placeholders throughout. Add a transaction for a "mark all complete" endpoint, and configure the pool. Now your API survives restarts.</p>

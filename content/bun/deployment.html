@@ -1,0 +1,152 @@
+<p class="lead">The last step: shipping a Bun app to production — environment configuration, end-to-end tests with Playwright under Bun, the official <code>oven/bun</code> Docker image, and the hardening (non-root, health checks, graceful shutdown, pinned versions) that keeps a deploy reliable.</p>
+
+<h2>Environment configuration</h2>
+<p><span class="level beginner">Beginner</span> Production config comes from real environment variables (highest priority), with committed defaults in <code>.env</code> and per-environment overrides. Validate required secrets at startup so a misconfigured deploy fails loudly instead of serving broken.</p>
+<pre><code>// src/config.ts
+function required(key: string): string {
+  const v = Bun.env[key];
+  if (!v) throw new Error(`FATAL: missing env ${key}`);
+  return v;
+}
+
+export const config = {
+  env:         Bun.env.NODE_ENV ?? "development",
+  port:        Number(Bun.env.PORT ?? 3000),
+  databaseUrl: required("DATABASE_URL"),
+  accessSecret: required("ACCESS_SECRET"),
+};</code></pre>
+<pre><code># run a specific env file in prod
+bun --env-file=.env.production run src/index.ts
+NODE_ENV=production bun run src/index.ts</code></pre>
+<blockquote class="warn"><strong>Common mistake:</strong> baking secrets into the image or committing <code>.env.production</code>. Secrets belong in the orchestrator's secret store (or <code>--env-file</code> at run time), never in the Docker layers or git. Keep <code>.env.local</code> and <code>.env.production</code> gitignored, and pass secrets with <code>docker run --env-file</code> or your platform's secret manager.</blockquote>
+
+<h2>Playwright E2E under Bun</h2>
+<p><span class="level intermediate">Intermediate</span> Playwright drives a real browser against your running app. Pin it and install a browser:</p>
+<pre><code>bun add -d @playwright/test@1.48.0
+bunx playwright install chromium</code></pre>
+<pre><code>// e2e/login.spec.ts
+import { test, expect } from "@playwright/test";
+
+test("user can log in", async ({ page }) =&gt; {
+  await page.goto("http://localhost:3000/login");
+  await page.fill('input[name="email"]', "alice@example.com");
+  await page.fill('input[name="password"]', "secret");
+  await page.click('button[type="submit"]');
+  await expect(page.locator("h1")).toHaveText("Welcome, Alice");
+});</code></pre>
+<pre><code>// playwright.config.ts — start the Bun server automatically for the suite
+import { defineConfig } from "@playwright/test";
+
+export default defineConfig({
+  testDir: "./e2e",
+  webServer: {
+    command: "bun run src/index.ts",
+    url: "http://localhost:3000",
+    reuseExistingServer: !process.env.CI,   // reuse a dev server locally, fresh in CI
+  },
+});</code></pre>
+<pre><code>bunx playwright test            # run the E2E suite
+bunx playwright test --ui       # interactive debugging UI</code></pre>
+<blockquote class="tip">Playwright runs its own test runner, not <code>bun test</code>. Keep unit/integration tests on <code>bun test</code> (fast, in-process) and reserve Playwright for genuine browser-level flows. The <code>webServer</code> block means CI doesn't need a separate "start the server" step — Playwright boots it, waits for the URL, and tears it down.</blockquote>
+
+<h2>The official oven/bun Docker image</h2>
+<p>A production-grade, multi-stage image: deps are cached in their own layer, the runtime image runs as the non-root <code>bun</code> user, and a health check lets the orchestrator restart an unhealthy container.</p>
+<pre><code># Dockerfile
+FROM oven/bun:1.4.2 AS deps
+WORKDIR /app
+COPY package.json bun.lockb ./
+RUN bun install --frozen-lockfile --production   # skip devDependencies, fail on drift
+
+FROM oven/bun:1.4.2 AS release
+WORKDIR /app
+COPY --from=deps /app/node_modules ./node_modules
+COPY . .
+ENV NODE_ENV=production
+EXPOSE 3000
+USER bun                                          # drop root
+HEALTHCHECK --interval=30s --timeout=3s \
+  CMD bun --eval "fetch('http://localhost:3000/health').then(r =&gt; process.exit(r.ok ? 0 : 1)).catch(() =&gt; process.exit(1))"
+CMD ["bun", "run", "src/index.ts"]</code></pre>
+<pre><code>docker build -t my-bun-app .
+docker run -p 3000:3000 --env-file .env.production my-bun-app</code></pre>
+
+<h2>Production hardening checklist</h2>
+<table>
+  <thead><tr><th>Concern</th><th>Do this</th></tr></thead>
+  <tbody>
+    <tr><td>Reproducibility</td><td>Pin Bun everywhere: <code>setup-bun</code>, Docker tag, <code>engines</code></td></tr>
+    <tr><td>Deterministic installs</td><td><code>bun install --frozen-lockfile --production</code></td></tr>
+    <tr><td>Least privilege</td><td><code>USER bun</code> in the image — never run as root</td></tr>
+    <tr><td>Liveness</td><td>A <code>/health</code> route + Docker <code>HEALTHCHECK</code></td></tr>
+    <tr><td>Zero-downtime deploys</td><td>Handle <code>SIGTERM</code> and drain in-flight requests</td></tr>
+    <tr><td>Secrets</td><td>Env vars / secret store, never in the image or git</td></tr>
+    <tr><td>Observability</td><td>Structured logs to stdout; let the platform collect them</td></tr>
+  </tbody>
+</table>
+
+<h3>Graceful shutdown</h3>
+<p>A rolling deploy sends <code>SIGTERM</code>. Stop accepting new connections, finish what's in flight, then exit — otherwise you drop live requests on every deploy:</p>
+<pre><code>const server = Bun.serve({ port: config.port, fetch: handler });
+
+process.on("SIGTERM", async () =&gt; {
+  console.log("draining…");
+  await server.stop();        // stop accepting, let in-flight requests finish
+  process.exit(0);
+});</code></pre>
+
+<h2>Deploying as a standalone binary</h2>
+<p>For a CLI or single service, the simplest deploy is often no runtime at all — a compiled binary (see the Bundling lesson):</p>
+<pre><code>bun build ./src/index.ts --compile --minify --sourcemap --outfile server
+# copy ONE file to the host and run it — no Bun install, no node_modules
+./server</code></pre>
+
+<h2>Common mistakes</h2>
+<blockquote class="warn"><strong>Common mistake:</strong> version drift between CI, the image, and local dev — one uses Bun 1.4.2, another "latest", and a bug appears only in production. Pin the exact version in all three places. Two more: running the container as root (set <code>USER bun</code>), and shipping without a <code>SIGTERM</code> handler so every rolling deploy drops in-flight requests. Pair the <code>HEALTHCHECK</code> with graceful shutdown so the orchestrator both detects an unhealthy container <em>and</em> drains a terminating one.</blockquote>
+
+<h2>Exercises</h2>
+<ul>
+  <li>Add a <code>required()</code>-based config module and confirm the app refuses to start when a secret is missing.</li>
+  <li>Write a Playwright test with a <code>webServer</code> block that boots your Bun server, and run it with <code>bunx playwright test</code>.</li>
+  <li>Build the multi-stage Docker image, run it with <code>--env-file</code>, and confirm <code>docker inspect</code> shows the health status going <em>healthy</em>.</li>
+  <li>Add a <code>SIGTERM</code> handler, start the server, send it <code>SIGTERM</code> mid-request, and verify the in-flight request completes before exit.</li>
+</ul>
+
+<h2>Mini-project: a full CI/CD release pipeline</h2>
+<p>Wire the whole lifecycle into one GitHub Actions workflow: type-check, unit + integration tests, E2E, and — on a version tag — cross-compile standalone binaries and attach them to the release. This is the end-to-end shape of shipping a Bun app.</p>
+<pre><code># .github/workflows/release.yml
+name: release
+on:
+  push:
+    tags: ["v*"]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with: { bun-version: 1.4.2 }        # pinned — matches Docker + engines
+      - run: bun install --frozen-lockfile
+      - run: bunx tsc --noEmit               # type-check (Bun doesn't check at runtime)
+      - run: bun test --coverage             # unit + integration
+      - run: bunx playwright install --with-deps chromium
+      - run: bunx playwright test            # E2E against the booted server
+
+  build:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with: { bun-version: 1.4.2 }
+      - run: bun install --frozen-lockfile
+      - name: Cross-compile standalone binaries
+        run: |
+          bun build ./src/index.ts --compile --minify --sourcemap \
+            --target=bun-linux-x64    --outfile dist/myapp-linux-x64
+          bun build ./src/index.ts --compile --minify --sourcemap \
+            --target=bun-darwin-arm64 --outfile dist/myapp-macos-arm64
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*</code></pre>
+<p>The ordering is the point: the <code>build</code> job <code>needs: test</code>, so binaries are only cut after type-check, unit, integration, and E2E all pass. The pinned <code>bun-version</code> in both jobs matches the Docker tag and <code>engines</code> field, closing the drift gap. Add a parallel <code>docker/build-push-action</code> step if you deploy the image instead of (or alongside) the binaries, and pair the deployed container's <code>HEALTHCHECK</code> with the <code>SIGTERM</code> drain so rolling updates never drop a request. That is a Bun app shipped end to end.</p>

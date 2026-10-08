@@ -1,0 +1,47 @@
+<p class="lead">DevOps is a way of working, not a tool you install. It closes the gap between writing software and running it by shortening feedback loops, sharing ownership, and automating everything repeatable. The tools in the rest of this section only matter in service of that.</p>
+
+<h2>The core idea: shorten the feedback loop</h2>
+<p><span class="level beginner">Beginner</span> Every delay between making a change and learning whether it worked is waste and risk. DevOps attacks those delays: fast builds, automated tests, quick deploys, good observability. The faster you learn, the smaller and safer each change can be.</p>
+<blockquote class="tip">Small, frequent changes are <em>less</em> risky than large infrequent ones — each has a tiny blast radius and is easy to roll back. "Deploy more often to deploy more safely" sounds paradoxical until you internalize that big-bang releases are where incidents hide.</blockquote>
+
+<h2>Shared ownership: "you build it, you run it"</h2>
+<p>The anti-pattern DevOps replaces: developers "throw code over the wall" to a separate ops team who get paged when it breaks but can't fix the code. When the people who write a service also operate it, incentives align — they feel the pain of flaky deploys and bad logging, so they fix it.</p>
+
+<h2>The CALMS lens</h2>
+<table>
+  <thead><tr><th>Letter</th><th>Pillar</th><th>In practice</th></tr></thead>
+  <tbody>
+    <tr><td>C</td><td>Culture</td><td>Blameless, collaborative; dev and ops share goals.</td></tr>
+    <tr><td>A</td><td>Automation</td><td>Build, test, deploy, provision — scripted, not manual.</td></tr>
+    <tr><td>L</td><td>Lean</td><td>Small batches, limit work-in-progress, remove waste.</td></tr>
+    <tr><td>M</td><td>Measurement</td><td>Instrument everything; decide with data.</td></tr>
+    <tr><td>S</td><td>Sharing</td><td>Open knowledge, runbooks, postmortems.</td></tr>
+  </tbody>
+</table>
+
+<h2>Measuring what matters: the DORA metrics</h2>
+<p><span class="level intermediate">Intermediate</span> The DORA research program found four metrics that distinguish high-performing teams:</p>
+<table>
+  <thead><tr><th>Metric</th><th>Question</th><th>Elite ballpark</th></tr></thead>
+  <tbody>
+    <tr><td>Deployment frequency</td><td>How often do you ship?</td><td>On demand (many/day)</td></tr>
+    <tr><td>Lead time for changes</td><td>Commit → production?</td><td>&lt; 1 day</td></tr>
+    <tr><td>Change failure rate</td><td>% of deploys causing a problem?</td><td>0–15%</td></tr>
+    <tr><td>Time to restore</td><td>Incident → recovery?</td><td>&lt; 1 hour</td></tr>
+  </tbody>
+</table>
+<p>Notice the balance: the first two reward speed, the last two reward stability. High performers get <em>both</em> — speed and stability are not a trade-off, they reinforce each other through automation and small batches.</p>
+<blockquote class="warn"><strong>Common mistake:</strong> gaming the metrics. Chasing "deploys per day" by splitting one release into ten does nothing; optimizing lead time by skipping tests spikes your change-failure rate. The metrics are a thermometer, not a target — improve the <em>system</em> (CI, test coverage, deploy automation) and the numbers follow.</blockquote>
+
+<h2>Everything-as-code</h2>
+<p>The through-line of modern DevOps is putting everything in version control: application code, infrastructure (Terraform), configuration, pipelines (GitHub Actions YAML), and even the desired cluster state (GitOps). If it's in Git, it's reviewable, auditable, reproducible, and revertible. The rest of this section is largely "how to express X as code".</p>
+
+<h2>Exercises</h2>
+<ul>
+  <li>Estimate the four DORA metrics for a project you know. Which is weakest, and what single automation would most improve it?</li>
+  <li>Identify one manual, repeated task in your workflow and sketch how you'd script it.</li>
+  <li>Write a one-paragraph "you build it, you run it" statement for a service: who's on call, where are the runbooks, what are the alerts?</li>
+</ul>
+
+<h2>Mini-project: a DevOps maturity assessment</h2>
+<p>For a real or hypothetical project, write a short assessment against CALMS and the four DORA metrics: where it is today, the single biggest bottleneck in its path from commit to production, and a concrete 3-step plan (e.g. "add CI tests → automate deploy → add deploy-frequency dashboard") to tighten the feedback loop. This frames every tool you'll adopt in the following lessons.</p>

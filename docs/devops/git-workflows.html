@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en" data-base="../">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0d1117">
+<meta name="description" content="Dev Tutorials — Golang, Bun, Web Development, Linux and DevOps, offline-ready.">
+<title>Git Workflows — DevOps</title>
+<link rel="manifest" href="../manifest.webmanifest">
+<link rel="icon" href="../icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="../icon-192.png">
+<link rel="stylesheet" href="../app.css">
+<script>/* set theme before paint to avoid flash */(function(){try{var t=localStorage.getItem('tut.theme');document.documentElement.setAttribute('data-theme',t||'dark');}catch(e){document.documentElement.setAttribute('data-theme','dark');}})();</script>
+
+</head>
+<body class="lesson">
+<header class="nav">
+  <a class="brand" href="../index.html">📚 Dev Tutorials</a>
+  <span class="crumb">Git Workflows — DevOps</span>
+  <span class="spacer"></span>
+  <a class="navbtn" href="../search.html">🔎 Search</a>
+  <button class="navbtn" id="install-btn" type="button">⬇️ Install</button>
+  <button class="navbtn" id="theme-btn" type="button" aria-label="Toggle theme">🌙 Dark</button>
+</header>
+<main class="wrap lesson-body">
+  <h1 class="page-title">Git Workflows</h1>
+  <div class="lesson-tools" data-lesson-id="devops/git-workflows">
+    <button id="done-btn" type="button" aria-pressed="false">○ Mark complete</button>
+    <button id="mark-btn" type="button" aria-pressed="false">☆ Bookmark</button>
+    <a class="navbtn" href="index.html" style="margin-left:auto">All DevOps lessons →</a>
+  </div>
+<nav class="toc" aria-label="On this page"><strong>On this page</strong><ul>
+<li class="lvl2"><a href="#the-commands-you-actually-use">The commands you actually use</a></li>
+<li class="lvl2"><a href="#branching-strategies">Branching strategies</a></li>
+<li class="lvl2"><a href="#pull-requests-and-review">Pull requests and review</a></li>
+<li class="lvl2"><a href="#rebase-vs-merge">Rebase vs merge</a></li>
+<li class="lvl2"><a href="#undoing-safely">Undoing safely</a></li>
+<li class="lvl2"><a href="#hooks-and-automation">Hooks and automation</a></li>
+<li class="lvl2"><a href="#exercises">Exercises</a></li>
+<li class="lvl2"><a href="#mini-project-a-team-workflow-doc">Mini-project: a team workflow doc</a></li>
+</ul></nav>
+<p class="lead">Git is the backbone of every DevOps workflow — the source of truth for code, infrastructure, and pipelines. Beyond the basic commands, what matters is a <em>branching strategy</em> that lets a team ship continuously, review changes, and roll back safely.</p>
+
+<h2 id="the-commands-you-actually-use">The commands you actually use</h2>
+<pre><code>git status                       # what's changed
+git add -p                       # stage hunks interactively (review as you stage)
+git commit -m "fix: handle nil user"
+git switch -c feat/rate-limit    # create + switch to a branch
+git push -u origin feat/rate-limit
+git pull --rebase                # update, replaying your commits on top (linear history)
+git log --oneline --graph --all  # see the shape of history</code></pre>
+<blockquote class="tip">Write commit messages in the imperative mood ("add X", not "added X") and keep the subject under ~50 chars with detail in the body. <a href="https://www.conventionalcommits.org/" target="_blank" rel="noopener">Conventional Commits</a> (<code>feat:</code>, <code>fix:</code>, <code>chore:</code>) make history scannable and can drive automated changelogs/versioning.</blockquote>
+
+<h2 id="branching-strategies">Branching strategies</h2>
+<p><span class="level intermediate">Intermediate</span> Two dominant models:</p>
+<table>
+  <thead><tr><th></th><th>Trunk-based</th><th>GitFlow</th></tr></thead>
+  <tbody>
+    <tr><td>Branches</td><td>Short-lived feature branches off <code>main</code>; merge daily</td><td>Long-lived <code>develop</code>, <code>release/*</code>, <code>hotfix/*</code></td></tr>
+    <tr><td>Suits</td><td>Continuous delivery, feature flags</td><td>Scheduled releases, versioned products</td></tr>
+    <tr><td>Risk</td><td>Needs strong CI + flags</td><td>Painful merges, slow integration</td></tr>
+  </tbody>
+</table>
+<p>Most modern teams doing continuous delivery use <strong>trunk-based</strong>: branch, open a PR within a day or two, merge to <code>main</code>, deploy. Long-lived branches drift and produce agonizing merges — the longer a branch lives, the more it hurts.</p>
+
+<h2 id="pull-requests-and-review">Pull requests and review</h2>
+<pre><code>gh pr create --title "Add upload rate limiting" --body "…"
+gh pr status
+gh pr merge --squash   # squash the branch into one tidy commit on main</code></pre>
+<p>A PR is where code review, CI, and discussion converge. Keep them small (a reviewer can hold ~400 lines in their head, not 4000), with a description saying <em>what</em> changed, <em>why</em>, and <em>how it was tested</em>. Require green CI and at least one approval before merge via branch protection.</p>
+
+<h2 id="rebase-vs-merge">Rebase vs merge</h2>
+<pre><code># Rebase your feature branch onto the latest main (linear history)
+git switch feat/x
+git fetch origin
+git rebase origin/main
+# resolve conflicts, then:
+git push --force-with-lease     # safe force-push: fails if someone else pushed</code></pre>
+<blockquote class="warn"><strong>Golden rule:</strong> never rebase (or force-push) a branch others are working on — it rewrites history out from under them. Rebase your <em>own</em> unshared feature branch to keep it current; use plain <code>merge</code> for shared/long-lived branches. And prefer <code>--force-with-lease</code> over <code>--force</code>: it refuses to clobber work you haven't seen.</blockquote>
+
+<h2 id="undoing-safely">Undoing safely</h2>
+<pre><code>git revert &lt;sha&gt;          # NEW commit that undoes a bad one — safe on shared history
+git reset --soft HEAD~1   # undo last commit, keep changes staged (local only)
+git restore --staged file # unstage
+git reflog                # your safety net: find "lost" commits after a bad reset</code></pre>
+<blockquote class="warn"><code>git reset --hard</code> and <code>git clean -f</code> permanently discard uncommitted work — there is no undo. On a <em>shared</em> branch, use <code>git revert</code> (which adds a new undo commit) rather than rewriting history. <code>git reflog</code> can rescue commits lost to a bad reset, but not uncommitted changes.</blockquote>
+
+<h2 id="hooks-and-automation">Hooks and automation</h2>
+<p><span class="level intermediate">Intermediate</span> Git hooks run scripts on events; teams use them (via tools like pre-commit or husky) to format, lint, and run fast tests before a commit or push — catching problems before CI even starts.</p>
+
+<h2 id="exercises">Exercises</h2>
+<ul>
+  <li>Make a feature branch, commit with a Conventional Commit message, open a PR with <code>gh</code>, and squash-merge it.</li>
+  <li>Rebase a feature branch onto an updated <code>main</code>, resolve a conflict, and push with <code>--force-with-lease</code>.</li>
+  <li>Make a bad commit on <code>main</code>, then <code>git revert</code> it; explain why revert (not reset) is correct here.</li>
+</ul>
+
+<h2 id="mini-project-a-team-workflow-doc">Mini-project: a team workflow doc</h2>
+<p>Write a <code>CONTRIBUTING.md</code> defining your team's Git workflow: trunk-based with short feature branches, Conventional Commits, PRs with required green CI + one review via branch protection, squash-merge, and the rebase/force-with-lease rules. Add a pre-commit hook config that formats and lints. This is the exact artifact every well-run repo has.</p>
+
+<section class="further"><h2 id="further-reading">Further reading</h2>
+<p>Official documentation for the tools and APIs covered on this page:</p>
+<ul class="further-list"><li><a href="https://git-scm.com/book/en/v2" target="_blank" rel="noopener">Pro Git (book) ↗</a></li>
+<li><a href="https://trunkbaseddevelopment.com/" target="_blank" rel="noopener">Trunk-based development ↗</a></li></ul></section>
+  <nav class="pager">
+<a class="prev" href="devops-mindset.html"><small>Previous</small>🔁 The DevOps Mindset</a>
+<a class="next" href="cicd-concepts.html"><small>Next</small>🔁 CI/CD Concepts</a>
+  </nav>
+</main>
+<button type="button" class="fab top" id="fab-top" aria-label="Back to top">↑ Top</button>
+<div class="banner" id="update-banner" role="status">A new version is available.<button type="button">Reload</button></div>
+<div class="banner" id="offline-banner" role="status">You're offline — showing cached lessons.</div>
+<script src="../app.js" defer></script>
+</body>
+</html>

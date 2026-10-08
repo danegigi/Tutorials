@@ -1,0 +1,142 @@
+<p class="lead">Bun runs TypeScript and JSX natively with zero configuration — no <code>tsc</code> build, no <code>ts-node</code>/<code>tsx</code> shim — by stripping types at load time. Type <em>checking</em> is a separate, explicit step. This lesson covers running TS, configuring <code>tsconfig.json</code>, path mapping, and type-checking with <code>bunx tsc --noEmit</code>.</p>
+
+<h2>Zero-config execution</h2>
+<p><span class="level beginner">Beginner</span> Point Bun at a <code>.ts</code> or <code>.tsx</code> file and it runs. There is no compile step and no output directory.</p>
+<pre><code>// greet.ts
+interface User { name: string; age: number }
+const greet = (u: User): string =&gt; `Hi ${u.name} (${u.age})`;
+console.log(greet({ name: "Ada", age: 36 }));</code></pre>
+<pre><code>bun greet.ts
+# Hi Ada (36)</code></pre>
+<p>JSX works the same — name the file <code>.tsx</code> and Bun transpiles it:</p>
+<pre><code>// view.tsx
+const App = () =&gt; &lt;h1&gt;Hello&lt;/h1&gt;;
+console.log(App());   // Bun uses the automatic JSX runtime by default</code></pre>
+
+<h2>The critical distinction: run ≠ type-check</h2>
+<p>Bun <strong>strips</strong> types to run fast — it does not verify them. This file runs without complaint even though it has a type error:</p>
+<pre><code>// buggy.ts
+const n: number = "not a number";   // type error...
+console.log(n.toUpperCase());        // ...and a logic error</code></pre>
+<pre><code>bun buggy.ts
+# NOT A NUMBER   &lt;- Bun ran it; the type error was never checked</code></pre>
+<blockquote class="warn"><strong>Common mistake:</strong> assuming "it ran under Bun, so the types are fine." Bun never type-checks during <code>bun run</code>. You must run <code>bunx tsc --noEmit</code> (in your editor, a pre-commit hook, and CI) to catch type errors. Treat <code>bun run</code> as execution and <code>tsc --noEmit</code> as verification — they are two different jobs.</blockquote>
+
+<h2>tsconfig.json for Bun</h2>
+<p><span class="level intermediate">Intermediate</span> <code>bun init</code> generates a tsconfig tuned for Bun. The settings that matter:</p>
+<pre><code>// tsconfig.json
+{
+  "compilerOptions": {
+    "lib": ["ESNext"],
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleResolution": "bundler",        // Bun resolves like a bundler
+    "allowImportingTsExtensions": true,   // import "./x.ts" explicitly if you like
+    "verbatimModuleSyntax": true,
+    "noEmit": true,                        // Bun runs TS; tsc only checks
+    "strict": true,                        // turn on all strictness
+    "skipLibCheck": true,
+    "types": ["bun-types"]                 // Bun.* globals are typed
+  }
+}</code></pre>
+<table>
+  <thead><tr><th>Setting</th><th>Why Bun wants it</th></tr></thead>
+  <tbody>
+    <tr><td><code>"moduleResolution": "bundler"</code></td><td>Matches how Bun resolves imports (extensionless, package <code>exports</code>)</td></tr>
+    <tr><td><code>"noEmit": true</code></td><td>Bun executes TS directly, so <code>tsc</code> should only check, never emit JS</td></tr>
+    <tr><td><code>"types": ["bun-types"]</code></td><td>Gives <code>Bun.*</code>, <code>Bun.file</code>, <code>import.meta.dir</code> etc. their types</td></tr>
+    <tr><td><code>"strict": true</code></td><td>You get no runtime type safety from Bun — strict static checking is your net</td></tr>
+  </tbody>
+</table>
+
+<h2>Path mapping</h2>
+<p>Define import aliases in <code>tsconfig.json</code> and Bun honors them at runtime (as does <code>tsc</code> for checking) — no extra bundler config, no <code>tsconfig-paths</code> package:</p>
+<pre><code>// tsconfig.json
+{
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["src/*"],
+      "@db/*": ["src/db/*"],
+      "@config": ["src/config.ts"]
+    }
+  }
+}</code></pre>
+<pre><code>// anywhere in src — Bun resolves these aliases natively
+import { db } from "@db/index";
+import { PORT } from "@config";
+import { OrdersRepo } from "@/orders.repo";</code></pre>
+<blockquote class="tip">Bun reads <code>paths</code> directly — you do <em>not</em> need <code>tsconfig-paths</code>, a webpack alias config, or a resolver plugin. Keep aliases shallow and consistent (<code>@/</code> → <code>src/</code> is a common convention) so a new reader can find a file from its import.</blockquote>
+
+<h2>Type-checking with tsc --noEmit</h2>
+<p>Install TypeScript as a dev dependency and run the checker. <code>--noEmit</code> means "report errors but write no files" — exactly what you want, since Bun does the running.</p>
+<pre><code>bun add -d typescript
+bunx tsc --noEmit            # check the whole project, emit nothing
+bunx tsc --noEmit --watch    # re-check on save during development</code></pre>
+<pre><code>// package.json — wire it into scripts
+{
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "check": "tsc --noEmit &amp;&amp; bun test"
+  }
+}</code></pre>
+<pre><code>bun run typecheck
+# src/buggy.ts(2,7): error TS2322: Type 'string' is not assignable to type 'number'.</code></pre>
+
+<h2>Typing Bun's own APIs</h2>
+<p>With <code>bun-types</code> in your <code>types</code> array, the <code>Bun</code> namespace is fully typed. Hover-documentation and autocomplete work for everything:</p>
+<pre><code>const file = Bun.file("data.json");   // file: BunFile
+const data = await file.json();        // data: any — annotate it yourself
+const server = Bun.serve({ fetch: (req: Request) =&gt; new Response("ok") });
+
+// Infer row types from a query result shape, or declare them
+type Order = { id: number; total: number };
+const rows = db.query("SELECT id, total FROM orders").all() as Order[];</code></pre>
+
+<h2>Common mistakes</h2>
+<blockquote class="warn"><strong>Common mistake:</strong> three recurring traps. (1) Shipping without a type-check step and discovering type errors only at runtime — add <code>tsc --noEmit</code> to CI. (2) Installing <code>ts-node</code>/<code>tsx</code> out of habit — they're pure overhead on Bun; delete them. (3) Setting <code>"noEmit": false</code> and letting <code>tsc</code> litter the repo with <code>.js</code> files that Bun never uses — keep <code>noEmit: true</code> and let Bun run the TS directly.</blockquote>
+
+<h2>Exercises</h2>
+<ul>
+  <li>Write a <code>.ts</code> file with an obvious type error, run it with <code>bun</code> (it succeeds), then run <code>bunx tsc --noEmit</code> and read the error it catches.</li>
+  <li>Add a <code>paths</code> alias <code>@/*</code> → <code>src/*</code> and import a module through it from both runtime (<code>bun run</code>) and the checker (<code>tsc --noEmit</code>).</li>
+  <li>Add a <code>typecheck</code> script and a <code>check</code> script that chains type-check + tests; run <code>bun run check</code>.</li>
+  <li>Confirm <code>bun-types</code> is giving you editor autocomplete on <code>Bun.file(...)</code> — hover the return type.</li>
+</ul>
+
+<h2>Mini-project: a typed config loader with a verified build gate</h2>
+<p>Build a strongly-typed config module behind a path alias, then prove the two-stage workflow: Bun <em>runs</em> it, <code>tsc</code> <em>guards</em> it. Set up the alias and a strict config, then a loader that would fail type-check if misused.</p>
+<pre><code>// tsconfig.json (excerpt)
+{ "compilerOptions": {
+    "strict": true, "noEmit": true, "moduleResolution": "bundler",
+    "baseUrl": ".", "paths": { "@config": ["src/config.ts"] },
+    "types": ["bun-types"]
+} }</code></pre>
+<pre><code>// src/config.ts
+const LEVELS = ["debug", "info", "warn", "error"] as const;
+type Level = (typeof LEVELS)[number];
+
+function level(raw: string | undefined): Level {
+  return (LEVELS as readonly string[]).includes(raw ?? "")
+    ? (raw as Level)
+    : "info";
+}
+
+export const config = {
+  port: Number(Bun.env.PORT ?? 3000),
+  logLevel: level(Bun.env.LOG_LEVEL),      // narrowed to the Level union
+} as const;
+
+export type Config = typeof config;         // exported, inferred — no hand-written interface</code></pre>
+<pre><code>// src/index.ts
+import { config, type Config } from "@config";
+
+function start(c: Config) {
+  // This line is a COMPILE error if you typo the union — tsc catches it:
+  // if (c.logLevel === "verbose") {}   // TS2367: no overlap with Level
+  console.log(`starting on :${c.port} @ ${c.logLevel}`);
+}
+start(config);</code></pre>
+<pre><code>bun run src/index.ts         # runs immediately — alias resolves, types stripped
+bunx tsc --noEmit            # gate: 0 errors == safe to commit</code></pre>
+<p>Now uncomment the <code>"verbose"</code> line: <code>bun run</code> still executes (types stripped), but <code>bunx tsc --noEmit</code> fails with TS2367. That failure in CI is what stops a type bug from reaching production — the division of labor at the heart of TypeScript on Bun.</p>

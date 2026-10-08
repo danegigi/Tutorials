@@ -1,0 +1,178 @@
+<p class="lead">Bun has a built-in, Jest-compatible test runner — no Jest, Vitest, or Mocha to install. Name files <code>*.test.ts</code> (or <code>.spec.ts</code>) and run <code>bun test</code>. This lesson covers matchers, mocks and spies, snapshots, lifecycle hooks, coverage, and DOM testing.</p>
+
+<h2>Your first test</h2>
+<p><span class="level beginner">Beginner</span> Import from <code>bun:test</code> and write <code>test</code>/<code>describe</code>/<code>expect</code> exactly as you would in Jest.</p>
+<pre><code>// math.test.ts
+import { test, expect, describe } from "bun:test";
+
+test("adds numbers", () =&gt; {
+  expect(2 + 2).toBe(4);
+});
+
+describe("strings", () =&gt; {
+  test("uppercases", () =&gt; {
+    expect("bun".toUpperCase()).toBe("BUN");
+  });
+});</code></pre>
+<pre><code>bun test               # run every *.test.ts / *.spec.ts
+bun test math          # only files matching "math"
+bun test --watch       # re-run on change
+bun test -t "uppercases"   # only tests whose name matches the pattern</code></pre>
+<pre><code># bun test v1.4.2
+# math.test.ts:
+# ✓ adds numbers [0.12ms]
+# ✓ strings &gt; uppercases [0.08ms]
+#  2 pass  0 fail  2 expect() calls</code></pre>
+
+<h2>Matchers</h2>
+<pre><code>expect(value).toBe(4);                 // === (Object.is)
+expect(obj).toEqual({ a: 1 });         // deep equality
+expect(obj).toMatchObject({ a: 1 });   // subset match
+expect(arr).toContain("x");
+expect(fn).toThrow("boom");
+expect(str).toMatch(/regex/);
+expect(value).toBeDefined();
+expect(value).toBeNull();
+expect(n).toBeGreaterThan(3);
+
+// async
+await expect(Promise.resolve(42)).resolves.toBe(42);
+await expect(Promise.reject(new Error("x"))).rejects.toThrow("x");</code></pre>
+
+<h2>Lifecycle hooks</h2>
+<pre><code>import { beforeAll, afterAll, beforeEach, afterEach } from "bun:test";
+
+beforeAll(() =&gt; { /* once, before all tests in the file */ });
+afterAll(()  =&gt; { /* once, after all */ });
+beforeEach(() =&gt; { /* before each test — great for a fresh fixture */ });
+afterEach(()  =&gt; { /* after each test — teardown */ });</code></pre>
+<p>Use <code>beforeEach</code> to build a clean fixture per test (a fresh in-memory DB, a reset counter) so tests never leak state into each other — the single biggest cause of flaky suites.</p>
+
+<h2>Mocks &amp; spies</h2>
+<p><span class="level intermediate">Intermediate</span></p>
+<pre><code>import { mock, spyOn, test, expect } from "bun:test";
+
+// A mock function with an implementation
+const fn = mock((x: number) =&gt; x * 2);
+fn(21);
+expect(fn).toHaveBeenCalledTimes(1);
+expect(fn).toHaveBeenCalledWith(21);
+expect(fn.mock.results[0].value).toBe(42);
+
+// Spy on an existing method (records calls, keeps real behavior unless you override)
+const obj = { greet: (n: string) =&gt; `hi ${n}` };
+const spy = spyOn(obj, "greet");
+obj.greet("Ada");
+expect(spy).toHaveBeenCalledWith("Ada");
+
+// Replace a whole module
+mock.module("./config", () =&gt; ({ default: { env: "test" } }));</code></pre>
+<blockquote class="tip">Mock the boundary, not your own code. Replace third-party I/O you don't control — a payment gateway, an email sender, the system clock — with <code>mock()</code>/<code>spyOn()</code>. Do <strong>not</strong> mock your own database or router; test those for real against an in-memory instance (shown below), or you end up testing your mocks instead of your app.</blockquote>
+
+<h2>Snapshots</h2>
+<pre><code>test("renders", () =&gt; {
+  const output = render({ title: "Bun" });
+  expect(output).toMatchSnapshot();      // writes __snapshots__ on first run
+});
+
+// Inline snapshot — stored in the test file itself
+expect({ ok: true }).toMatchInlineSnapshot(`{ "ok": true }`);</code></pre>
+<pre><code>bun test --update-snapshots      # accept new/changed snapshots</code></pre>
+<p>Snapshots are great for serializable output (rendered HTML, a config object). Review every snapshot change in code review — a diff you blindly accept defeats the purpose.</p>
+
+<h2>Skip, only, todo, parametrized</h2>
+<pre><code>test.skip("not yet", () =&gt; {});
+test.only("focus on this one", () =&gt; {});   // runs ONLY this in the file
+test.todo("write me later");
+
+// Parametrized — one case per row
+test.each([[1, 1], [2, 4], [3, 9]])("square(%i) = %i", (n, sq) =&gt; {
+  expect(n * n).toBe(sq);
+});</code></pre>
+
+<h2>Coverage</h2>
+<pre><code>bun test --coverage
+# -----------|---------|---------|-------------------
+# File       | % Funcs | % Lines | Uncovered Line #s
+# -----------|---------|---------|-------------------
+# All files  |   92.31 |   88.46 |
+#  app.ts    |  100.00 |   95.00 | 42
+# -----------|---------|---------|-------------------</code></pre>
+<pre><code># bunfig.toml — enforce a floor and pre-load setup
+[test]
+coverage = true
+coverageThreshold = 0.8          # fail if below 80%
+preload = ["./test/setup.ts"]</code></pre>
+
+<h2>DOM testing</h2>
+<p>Bun can run <code>@testing-library</code> / <code>happy-dom</code> for component tests. Register the DOM in a preload file so <code>document</code> exists before tests load:</p>
+<pre><code>bun add -d @happy-dom/global-registrator @testing-library/dom</code></pre>
+<pre><code>// test/setup.ts  (preloaded via bunfig.toml)
+import { GlobalRegistrator } from "@happy-dom/global-registrator";
+GlobalRegistrator.register();      // installs document/window globals</code></pre>
+<pre><code>// button.test.ts
+import { test, expect } from "bun:test";
+import { getByRole } from "@testing-library/dom";
+
+test("button renders its label", () =&gt; {
+  document.body.innerHTML = `&lt;button&gt;Save&lt;/button&gt;`;
+  const btn = getByRole(document.body, "button");
+  expect(btn.textContent).toBe("Save");
+});</code></pre>
+
+<h2>Common mistakes</h2>
+<blockquote class="warn"><strong>Common mistake:</strong> leaving <code>test.only</code> in a committed file — it silently skips every other test in that file, so CI goes green while most tests never run. Grep for <code>.only</code> in a pre-commit hook. Two more: sharing mutable state between tests (set up a fresh fixture in <code>beforeEach</code> instead), and blindly running <code>--update-snapshots</code> to make a red test green — that just records the broken output as the new "correct" baseline. Read the snapshot diff first.</blockquote>
+
+<h2>Exercises</h2>
+<ul>
+  <li>Write a <code>describe</code> block with three <code>test.each</code> rows exercising a <code>slugify</code> function.</li>
+  <li>Use <code>spyOn</code> to assert a function called <code>Date.now</code> exactly once, then restore it.</li>
+  <li>Add <code>--coverage</code> with an 80% threshold and intentionally leave one branch untested to see the failure.</li>
+  <li>Set up <code>happy-dom</code> in a preload and test that a rendered form has an input with <code>name="email"</code>.</li>
+</ul>
+
+<h2>Mini-project: integration-test an API route against a real in-memory DB</h2>
+<p>The highest-value test is one that exercises the full request→handler→database path with no mocking of your own code. Use a fresh <code>:memory:</code> SQLite per test for perfect isolation and Hono's <code>app.request()</code> harness (no network, no open port).</p>
+<pre><code>// orders.test.ts
+import { test, expect, beforeEach, afterEach } from "bun:test";
+import { Database } from "bun:sqlite";
+import { makeApp } from "../src/app";          // (db) =&gt; Hono app
+
+let db: Database;
+let app: ReturnType&lt;typeof makeApp&gt;;
+
+beforeEach(() =&gt; {
+  db = new Database(":memory:");               // fresh DB per test
+  db.run("CREATE TABLE orders (id INTEGER PRIMARY KEY, total INTEGER)");
+  app = makeApp(db);
+});
+afterEach(() =&gt; db.close());
+
+test("POST /orders creates an order", async () =&gt; {
+  const res = await app.request("/orders", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ total: 99 }),
+  });
+  expect(res.status).toBe(201);
+  expect(await res.json()).toMatchObject({ id: 1, total: 99 });
+
+  // Assert the side effect actually hit the database
+  const row = db.query("SELECT total FROM orders WHERE id = 1").get();
+  expect(row).toEqual({ total: 99 });
+});
+
+test("GET /orders/:id returns 404 for a missing order", async () =&gt; {
+  const res = await app.request("/orders/999");
+  expect(res.status).toBe(404);
+});
+
+test("POST /orders rejects a negative total", async () =&gt; {
+  const res = await app.request("/orders", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ total: -5 }),
+  });
+  expect(res.status).toBe(400);
+});</code></pre>
+<p>Why this is the pattern to copy: <code>app.request(...)</code> hits the real router (routing bugs, status codes, body parsing are all exercised), the per-test <code>:memory:</code> DB gives total isolation with zero teardown cost, and you assert both the <em>response</em> and the <em>side effect</em>. Reserve <code>mock()</code> for the genuine third-party edges your test can't reach — never for your own database.</p>

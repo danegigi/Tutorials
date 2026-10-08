@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en" data-base="../">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0d1117">
+<meta name="description" content="Dev Tutorials — Golang, Bun, Web Development, Linux and DevOps, offline-ready.">
+<title>Go Setup &amp; Tooling — Golang</title>
+<link rel="manifest" href="../manifest.webmanifest">
+<link rel="icon" href="../icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="../icon-192.png">
+<link rel="stylesheet" href="../app.css">
+<script>/* set theme before paint to avoid flash */(function(){try{var t=localStorage.getItem('tut.theme');document.documentElement.setAttribute('data-theme',t||'dark');}catch(e){document.documentElement.setAttribute('data-theme','dark');}})();</script>
+
+</head>
+<body class="lesson">
+<header class="nav">
+  <a class="brand" href="../index.html">📚 Dev Tutorials</a>
+  <span class="crumb">Go Setup &amp; Tooling — Golang</span>
+  <span class="spacer"></span>
+  <a class="navbtn" href="../search.html">🔎 Search</a>
+  <button class="navbtn" id="install-btn" type="button">⬇️ Install</button>
+  <button class="navbtn" id="theme-btn" type="button" aria-label="Toggle theme">🌙 Dark</button>
+</header>
+<main class="wrap lesson-body">
+  <h1 class="page-title">Go Setup &amp; Tooling</h1>
+  <div class="lesson-tools" data-lesson-id="golang/setup-and-tooling">
+    <button id="done-btn" type="button" aria-pressed="false">○ Mark complete</button>
+    <button id="mark-btn" type="button" aria-pressed="false">☆ Bookmark</button>
+    <a class="navbtn" href="index.html" style="margin-left:auto">All Golang lessons →</a>
+  </div>
+<nav class="toc" aria-label="On this page"><strong>On this page</strong><ul>
+<li class="lvl2"><a href="#install-go">Install Go</a></li>
+<li class="lvl2"><a href="#the-go-command-does-everything">The go command does everything</a></li>
+<li class="lvl2"><a href="#your-first-program">Your first program</a></li>
+<li class="lvl2"><a href="#formatting-and-vetting-are-not-optional">Formatting and vetting are not optional</a></li>
+<li class="lvl3"><a href="#goimports-formatting-import-management">goimports: formatting + import management</a></li>
+<li class="lvl2"><a href="#environment-gopath-is-mostly-history">Environment: GOPATH is (mostly) history</a></li>
+<li class="lvl2"><a href="#exercises">Exercises</a></li>
+<li class="lvl2"><a href="#mini-project-a-reproducible-dev-setup">Mini-project: a reproducible dev setup</a></li>
+</ul></nav>
+<p class="lead">Install Go, learn the one command you'll use for everything (<code>go</code>), and wire up the formatting and vetting tools that keep Go code uniform across every project and team.</p>
+
+<h2 id="install-go">Install Go</h2>
+<p><span class="level beginner">Beginner</span> Download the installer for your OS from the official site, or use a package manager. Verify the install prints a version:</p>
+<pre><code># macOS (Homebrew)
+brew install go
+
+# Debian/Ubuntu — prefer the official tarball over apt for an up-to-date Go
+curl -LO https://go.dev/dl/go1.23.0.linux-amd64.tar.gz
+sudo rm -rf /usr/local/go &amp;&amp; sudo tar -C /usr/local -xzf go1.23.0.linux-amd64.tar.gz
+export PATH=$PATH:/usr/local/go/bin   # add to ~/.profile to persist
+
+# Verify
+go version
+# → go version go1.23.0 darwin/arm64</code></pre>
+<blockquote class="tip">Go releases every ~6 months and keeps strong backward compatibility (the "Go 1 compatibility promise"). Staying on a recent version is low-risk and gets you new stdlib and tooling.</blockquote>
+
+<h2 id="the-go-command-does-everything">The <code>go</code> command does everything</h2>
+<p>Unlike ecosystems with a dozen separate tools, Go ships one command. The subcommands you'll use daily:</p>
+<table>
+  <thead><tr><th>Command</th><th>What it does</th></tr></thead>
+  <tbody>
+    <tr><td><code>go run .</code></td><td>Compile and run the current package in one step (no binary left behind).</td></tr>
+    <tr><td><code>go build</code></td><td>Compile to a binary in the current directory.</td></tr>
+    <tr><td><code>go test ./...</code></td><td>Run every test in the module.</td></tr>
+    <tr><td><code>go fmt ./...</code></td><td>Rewrite source in the canonical format.</td></tr>
+    <tr><td><code>go vet ./...</code></td><td>Report suspicious constructs the compiler accepts but are likely bugs.</td></tr>
+    <tr><td><code>go mod tidy</code></td><td>Add missing and remove unused module dependencies.</td></tr>
+    <tr><td><code>go install pkg@latest</code></td><td>Build and install a command into <code>$GOBIN</code>.</td></tr>
+    <tr><td><code>go doc fmt.Println</code></td><td>Print documentation for a symbol, offline.</td></tr>
+  </tbody>
+</table>
+
+<h2 id="your-first-program">Your first program</h2>
+<pre><code>mkdir hello &amp;&amp; cd hello
+go mod init example.com/hello     # creates go.mod
+cat &gt; main.go &lt;&lt;'EOF'
+package main
+
+import "fmt"
+
+func main() {
+	fmt.Println("Hello, Go!")
+}
+EOF
+go run .
+# → Hello, Go!</code></pre>
+<p>Every executable lives in <code>package main</code> and starts at <code>func main()</code>. The module path (<code>example.com/hello</code>) is the import prefix for your own packages — it does not need to be a real URL unless you publish the module.</p>
+
+<h2 id="formatting-and-vetting-are-not-optional">Formatting and vetting are not optional</h2>
+<p><span class="level beginner">Beginner</span> Go has exactly one canonical format, enforced by <code>gofmt</code>. There are no style debates: tabs for indentation, specific brace placement, aligned struct fields. Your editor should format on save.</p>
+<pre><code>gofmt -l .        # list files that are NOT formatted (empty = all good)
+gofmt -w .        # rewrite them in place
+go vet ./...      # static analysis: printf format mismatches, unreachable code, etc.</code></pre>
+<blockquote class="warn"><strong>Common mistake:</strong> committing unformatted code. CI pipelines routinely fail on <code>gofmt -l .</code> returning any file. Set your editor to run <code>gofmt</code> (or <code>goimports</code>, which also fixes imports) on save and this never bites you.</blockquote>
+
+<h3 id="goimports-formatting-import-management">goimports: formatting + import management</h3>
+<pre><code>go install golang.org/x/tools/cmd/goimports@latest
+goimports -w .    # formats AND adds/removes import lines to match usage</code></pre>
+
+<h2 id="environment-gopath-is-mostly-history">Environment: GOPATH is (mostly) history</h2>
+<p>Before Go 1.11 all code had to live under a single <code>$GOPATH/src</code> tree. With modules (the default since Go 1.16) your project lives anywhere. The variables still worth knowing:</p>
+<table>
+  <thead><tr><th>Variable</th><th>Meaning</th></tr></thead>
+  <tbody>
+    <tr><td><code>GOPATH</code></td><td>Where the module cache and installed binaries live (default <code>~/go</code>).</td></tr>
+    <tr><td><code>GOBIN</code></td><td>Where <code>go install</code> puts binaries (default <code>$GOPATH/bin</code> — add it to <code>PATH</code>).</td></tr>
+    <tr><td><code>GOOS</code> / <code>GOARCH</code></td><td>Target OS/arch for cross-compilation (see Deployment).</td></tr>
+    <tr><td><code>GOFLAGS</code></td><td>Default flags for every <code>go</code> command, e.g. <code>-mod=readonly</code>.</td></tr>
+  </tbody>
+</table>
+<pre><code>go env            # print the whole resolved environment
+go env GOPATH     # just one value
+go env -w GOBIN=$HOME/.local/bin   # persist a setting</code></pre>
+
+<h2 id="exercises">Exercises</h2>
+<ul>
+  <li>Run <code>go env GOVERSION GOOS GOARCH</code> and note your toolchain and target.</li>
+  <li>Intentionally mis-indent <code>main.go</code>, then fix it with <code>gofmt -w .</code> and watch the diff.</li>
+  <li>Add a line <code>fmt.Printf("%d\n", "oops")</code> and run <code>go vet ./...</code> — read the format-mismatch warning it produces.</li>
+</ul>
+
+<h2 id="mini-project-a-reproducible-dev-setup">Mini-project: a reproducible dev setup</h2>
+<p>Create a <code>Makefile</code> that standardizes the common tasks so every contributor runs the same checks:</p>
+<pre><code># Makefile
+.PHONY: fmt vet test run
+fmt:  ; gofmt -w . &amp;&amp; goimports -w .
+vet:  ; go vet ./...
+test: ; go test ./...
+run:  ; go run .
+check: fmt vet test   # run before every commit</code></pre>
+<p>Now <code>make check</code> formats, vets, and tests in one step — the foundation every later Go lesson builds on.</p>
+
+<section class="further"><h2 id="further-reading">Further reading</h2>
+<p>Official documentation for the tools and APIs covered on this page:</p>
+<ul class="further-list"><li><a href="https://go.dev/doc/install" target="_blank" rel="noopener">Download &amp; install ↗</a></li>
+<li><a href="https://pkg.go.dev/cmd/go" target="_blank" rel="noopener">Go command reference ↗</a></li>
+<li><a href="https://go.dev/doc/effective_go" target="_blank" rel="noopener">Effective Go ↗</a></li></ul></section>
+  <nav class="pager">
+<a class="prev" href="index.html"><small>Section</small>🐹 Golang</a>
+<a class="next" href="modules-and-packages.html"><small>Next</small>🐹 Modules &amp; Packages</a>
+  </nav>
+</main>
+<button type="button" class="fab top" id="fab-top" aria-label="Back to top">↑ Top</button>
+<div class="banner" id="update-banner" role="status">A new version is available.<button type="button">Reload</button></div>
+<div class="banner" id="offline-banner" role="status">You're offline — showing cached lessons.</div>
+<script src="../app.js" defer></script>
+</body>
+</html>

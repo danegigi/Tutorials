@@ -1,0 +1,86 @@
+<p class="lead">HTTP is the protocol every web app speaks. Understand the request/response cycle, methods and status codes, headers, REST conventions, and how to call APIs from the browser with <code>fetch</code> — including the CORS rules that trip everyone up.</p>
+
+<h2>The request/response model</h2>
+<p><span class="level beginner">Beginner</span> A client sends a request; a server returns a response. Both have a start line, headers, and an optional body.</p>
+<pre><code>GET /api/users/42 HTTP/1.1        ← request line (method, path, version)
+Host: example.com                  ← headers
+Accept: application/json
+
+HTTP/1.1 200 OK                    ← status line
+Content-Type: application/json     ← headers
+Content-Length: 48
+
+{"id":42,"name":"Ada"}             ← body</code></pre>
+
+<h2>Methods</h2>
+<table>
+  <thead><tr><th>Method</th><th>Use</th><th>Safe?</th><th>Idempotent?</th></tr></thead>
+  <tbody>
+    <tr><td><code>GET</code></td><td>Read a resource</td><td>Yes</td><td>Yes</td></tr>
+    <tr><td><code>POST</code></td><td>Create / trigger an action</td><td>No</td><td>No</td></tr>
+    <tr><td><code>PUT</code></td><td>Replace a resource</td><td>No</td><td>Yes</td></tr>
+    <tr><td><code>PATCH</code></td><td>Partially update</td><td>No</td><td>No</td></tr>
+    <tr><td><code>DELETE</code></td><td>Remove a resource</td><td>No</td><td>Yes</td></tr>
+  </tbody>
+</table>
+<p><strong>Safe</strong> = no side effects. <strong>Idempotent</strong> = repeating it has the same effect as doing it once (matters for retries).</p>
+
+<h2>Status codes</h2>
+<table>
+  <thead><tr><th>Range</th><th>Meaning</th><th>Common</th></tr></thead>
+  <tbody>
+    <tr><td>2xx</td><td>Success</td><td>200 OK, 201 Created, 204 No Content</td></tr>
+    <tr><td>3xx</td><td>Redirect</td><td>301 Moved, 304 Not Modified</td></tr>
+    <tr><td>4xx</td><td>Client error</td><td>400 Bad Request, 401 Unauthorized, 403 Forbidden, 404 Not Found, 429 Too Many Requests</td></tr>
+    <tr><td>5xx</td><td>Server error</td><td>500 Internal, 502 Bad Gateway, 503 Unavailable</td></tr>
+  </tbody>
+</table>
+<blockquote class="warn"><strong>401 vs 403:</strong> 401 means "I don't know who you are" (authenticate). 403 means "I know who you are, and you can't do this" (authorized but forbidden). Mixing them up is a classic API bug.</blockquote>
+
+<h2>REST conventions</h2>
+<pre><code>GET    /articles         → list
+POST   /articles         → create
+GET    /articles/42      → read one
+PUT    /articles/42      → replace
+PATCH  /articles/42      → update fields
+DELETE /articles/42      → delete
+GET    /articles/42/comments   → nested collection</code></pre>
+<p>Nouns, not verbs, in paths; the method is the verb. Use query strings for filtering/paging: <code>/articles?tag=go&amp;page=2&amp;limit=20</code>.</p>
+
+<h2>Calling APIs with fetch</h2>
+<pre><code>// GET + JSON
+const res = await fetch("/api/users/42", { headers: { Accept: "application/json" } });
+if (!res.ok) throw new Error(`HTTP ${res.status}`);   // fetch does NOT throw on 4xx/5xx
+const user = await res.json();
+
+// POST JSON
+const created = await fetch("/api/users", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ name: "Bo" }),
+});
+
+// Form upload (multipart) — do NOT set Content-Type; the browser adds the boundary
+const fd = new FormData();
+fd.append("file", fileInput.files[0]);
+await fetch("/api/upload", { method: "POST", body: fd });</code></pre>
+<blockquote class="warn"><strong>Common mistake:</strong> assuming <code>fetch</code> rejects on a 404 or 500. It only rejects on <em>network</em> failure. You must check <code>res.ok</code> (or <code>res.status</code>) yourself — forgetting this means error responses get parsed as if they were success.</blockquote>
+
+<h2>CORS</h2>
+<p><span class="level intermediate">Intermediate</span> By default, a page can't read responses from a different origin. The <em>server</em> must opt in with headers; the browser enforces it.</p>
+<pre><code>// Server response that allows a cross-origin page to read it:
+Access-Control-Allow-Origin: https://app.example.com
+Access-Control-Allow-Methods: GET, POST, PUT, DELETE
+Access-Control-Allow-Headers: Content-Type, Authorization
+Access-Control-Allow-Credentials: true   // needed to send cookies</code></pre>
+<blockquote class="warn">A "CORS error" in the console is almost never fixable in the frontend — it's a missing/incorrect header on the <em>server</em>. Non-simple requests also trigger a <code>preflight</code> <code>OPTIONS</code> call the server must answer. Don't chase it in client code.</blockquote>
+
+<h2>Exercises</h2>
+<ul>
+  <li>Use <code>curl -i</code> to inspect the status line and headers of three different sites.</li>
+  <li>Write a <code>fetch</code> wrapper that throws on <code>!res.ok</code> with the status and response body in the message.</li>
+  <li>Explain when you'd return 400 vs 401 vs 403 vs 404 for a failed "update article" request.</li>
+</ul>
+
+<h2>Mini-project: a REST client module</h2>
+<p>Build a small <code>http.js</code> with <code>get/post/put/del</code> helpers that set JSON headers, check <code>res.ok</code>, parse the body, and surface errors uniformly. Point it at a public API (e.g. <a href="https://jsonplaceholder.typicode.com/" target="_blank" rel="noopener">JSONPlaceholder</a>), list posts, create one, and handle a deliberately-wrong URL's 404.</p>

@@ -1,0 +1,74 @@
+<p class="lead">A Progressive Web App is an ordinary website that, with three additions — a manifest, a service worker, and HTTPS — becomes installable, works offline, and behaves like a native app. This very tutorial is a PWA; its source is the running example throughout this section.</p>
+
+<h2>What makes a site a PWA</h2>
+<p><span class="level beginner">Beginner</span> Three installability requirements the browser checks:</p>
+<ol>
+  <li>A <strong>web app manifest</strong> with a name, icons (192 &amp; 512px), <code>start_url</code>, and a <code>display</code> mode.</li>
+  <li>A registered <strong>service worker</strong> with a <code>fetch</code> handler (so it can work offline).</li>
+  <li>Served over <strong>HTTPS</strong> (or <code>localhost</code> for development).</li>
+</ol>
+<p>Meet those and browsers offer an "Install" option; the app then launches in its own window, with an icon, no browser chrome, and offline capability.</p>
+
+<h2>Project anatomy</h2>
+<pre><code>/
+├── index.html              ← app shell
+├── app.css, app.js         ← static assets
+├── manifest.webmanifest    ← install metadata
+├── sw.js                   ← service worker (MUST be at the scope root)
+├── offline.html            ← fallback when a page isn't cached
+└── icon-192.png, icon-512.png, icon.svg</code></pre>
+<blockquote class="warn"><strong>Scope matters:</strong> a service worker can only control pages at or below its own URL path. Put <code>sw.js</code> at the site root (<code>/sw.js</code>) so it controls everything. A worker at <code>/js/sw.js</code> only controls <code>/js/*</code> — a common "why isn't offline working" bug.</blockquote>
+
+<h2>Linking the manifest</h2>
+<pre><code>&lt;!-- in &lt;head&gt; of every page --&gt;
+&lt;link rel="manifest" href="/manifest.webmanifest"&gt;
+&lt;meta name="theme-color" content="#0d1117"&gt;
+&lt;link rel="icon" href="/icon.svg" type="image/svg+xml"&gt;
+&lt;link rel="apple-touch-icon" href="/icon-192.png"&gt;</code></pre>
+
+<h2>Registering the service worker</h2>
+<pre><code>if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () =&gt; {
+    navigator.serviceWorker.register("/sw.js")
+      .then((reg) =&gt; console.log("SW scope:", reg.scope))
+      .catch((err) =&gt; console.error("SW failed:", err));
+  });
+}</code></pre>
+<p>(The manifest and worker get full lessons next; this is the wiring that makes a plain site a PWA.)</p>
+
+<h2>The install prompt</h2>
+<p><span class="level intermediate">Intermediate</span> Browsers fire <code>beforeinstallprompt</code> when the criteria are met. Capture it to show your own install button instead of relying on the browser's menu:</p>
+<pre><code>let deferred = null;
+const btn = document.querySelector("#install");
+
+window.addEventListener("beforeinstallprompt", (e) =&gt; {
+  e.preventDefault();          // stop the mini-infobar
+  deferred = e;
+  btn.hidden = false;          // reveal YOUR install button
+});
+
+btn.addEventListener("click", async () =&gt; {
+  deferred.prompt();
+  await deferred.userChoice;   // {outcome: "accepted" | "dismissed"}
+  deferred = null;
+  btn.hidden = true;
+});
+
+window.addEventListener("appinstalled", () =&gt; { btn.hidden = true; });</code></pre>
+<blockquote class="tip">iOS Safari doesn't fire <code>beforeinstallprompt</code>; users install via Share → "Add to Home Screen". Detect standalone mode with <code>window.matchMedia("(display-mode: standalone)").matches</code> to tailor the UI once installed.</blockquote>
+
+<h2>Auditing with Lighthouse</h2>
+<pre><code># Chrome DevTools → Lighthouse → "Progressive Web App" category
+# or CLI:
+npx lighthouse https://your-site --only-categories=pwa --view</code></pre>
+<p>Lighthouse checks installability, offline start, correct manifest, HTTPS, and viewport. Aim to clear every PWA item; the a11y/perf/best-practices categories are worth running too.</p>
+
+<h2>Exercises</h2>
+<ul>
+  <li>Add a manifest + a trivial service worker to a plain HTML page and confirm Chrome shows "Install".</li>
+  <li>Wire a custom install button via <code>beforeinstallprompt</code> and hide it after <code>appinstalled</code>.</li>
+  <li>Run a Lighthouse PWA audit and resolve every failing item.</li>
+</ul>
+
+<h2>Mini-project: make an existing page installable</h2>
+<p>Take any static page you have, add <code>manifest.webmanifest</code> (name, icons, <code>start_url</code>, <code>display: standalone</code>), register a service worker that at minimum pre-caches the shell, serve it over HTTPS (or localhost), and get a green Lighthouse PWA audit. The next two lessons deepen the manifest and the worker — this is the end-to-end skeleton.</p>

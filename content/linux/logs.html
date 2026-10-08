@@ -1,0 +1,142 @@
+<p class="lead">When something breaks, the logs almost always already contain the answer — the skill is knowing where they live and how to filter the noise down to the one line that matters. On a modern Linux system that means two places: the systemd journal (queried with <code>journalctl</code>) and plain text files under <code>/var/log</code>. This lesson covers following logs live, scoping them to one service and time window, grepping for patterns, and keeping them from filling the disk with <code>logrotate</code>.</p>
+
+<h2>Two homes for logs</h2>
+<p><span class="level beginner">Beginner</span> Services started by systemd send their stdout/stderr to the <strong>journal</strong>, a structured binary store you read with <code>journalctl</code>. Many traditional daemons also (or instead) write plain-text files under <code>/var/log</code>. You will use both.</p>
+<pre><code>ls /var/log
+# -> auth.log  nginx  syslog  dpkg.log  journal
+
+ls /var/log/nginx
+# -> access.log  error.log</code></pre>
+
+<h2>journalctl: the systemd journal</h2>
+<p><span class="level intermediate">Intermediate</span> The flags you reach for constantly are <code>-u</code> (one unit), <code>-f</code> (follow live), and <code>--since</code> (a time window).</p>
+<table>
+  <thead><tr><th>Command</th><th>Shows</th></tr></thead>
+  <tbody>
+    <tr><td><code>journalctl -u nginx</code></td><td>All log lines for the <code>nginx</code> service.</td></tr>
+    <tr><td><code>journalctl -u nginx -f</code></td><td>Follow that service live (like <code>tail -f</code>).</td></tr>
+    <tr><td><code>journalctl -u nginx --since "1 hour ago"</code></td><td>Only the last hour.</td></tr>
+    <tr><td><code>journalctl -u nginx -p err</code></td><td>Only priority <code>err</code> and worse.</td></tr>
+    <tr><td><code>journalctl -b</code></td><td>Everything since the last boot; <code>-b -1</code> for the previous boot.</td></tr>
+    <tr><td><code>journalctl -k</code></td><td>Kernel messages (the <code>dmesg</code> equivalent).</td></tr>
+    <tr><td><code>journalctl -n 50</code></td><td>The last 50 lines across everything.</td></tr>
+  </tbody>
+</table>
+<pre><code>sudo journalctl -u nginx --since "2026-10-08 09:00" --until "2026-10-08 10:00"
+# -> Oct 08 09:14:02 web-01 nginx[814]: 203.0.113.9 - GET /api 200
+# -> Oct 08 09:51:18 web-01 nginx[814]: 203.0.113.9 - GET /x 404
+
+# Follow a service AND filter to errors as they stream
+sudo journalctl -u myapp -f -p warning
+# -> Oct 08 10:02:11 web-01 myapp[5120]: WARN db pool exhausted
+# -> ... (new matching lines appear live; Ctrl-C to stop)
+
+# Combine with grep when a priority filter is too coarse
+sudo journalctl -u myapp --since today | grep -i timeout</code></pre>
+<p>Priority levels, highest to lowest severity, accepted by <code>-p</code>: <code>emerg</code>, <code>alert</code>, <code>crit</code>, <code>err</code>, <code>warning</code>, <code>notice</code>, <code>info</code>, <code>debug</code>. <code>-p err</code> means &ldquo;err and anything more severe.&rdquo;</p>
+<blockquote class="tip">The journal can grow large. Check its disk use with <code>journalctl --disk-usage</code> and cap it with <code>sudo journalctl --vacuum-time=7d</code> (keep a week) or <code>--vacuum-size=500M</code>. A persistent cap belongs in <code>/etc/systemd/journald.conf</code> (<code>SystemMaxUse=500M</code>).</blockquote>
+
+<h2>Plain-text logs under /var/log</h2>
+<p><span class="level beginner">Beginner</span> For file-based logs, the trio is <code>tail -f</code> to watch, <code>less</code> to browse, and <code>grep</code> to search.</p>
+<pre><code># Watch a growing log live
+tail -f /var/log/nginx/access.log
+# -> 203.0.113.9 - GET /api HTTP/1.1 200
+# -> ... (new lines as requests arrive)
+
+# Follow two files at once, labelled
+tail -f /var/log/nginx/access.log /var/log/nginx/error.log
+
+# Last 100 lines, then page through
+tail -n 100 /var/log/syslog | less
+
+# Follow AND filter in real time
+tail -f /var/log/myapp.log | grep --line-buffered ERROR</code></pre>
+<blockquote class="warn"><strong>Common mistake:</strong> piping <code>tail -f</code> into <code>grep</code> and seeing <em>nothing</em> appear even though matching lines are being written. <code>grep</code> buffers its output when it is not writing to a terminal, so matches sit in a buffer instead of printing. Add <code>--line-buffered</code> to <code>grep</code> (as above) so each matching line prints immediately.</blockquote>
+
+<h2>Searching logs with grep</h2>
+<p><span class="level intermediate">Intermediate</span> A few <code>grep</code> flags turn a wall of log into an answer:</p>
+<table>
+  <thead><tr><th>Flag</th><th>Meaning</th></tr></thead>
+  <tbody>
+    <tr><td><code>-i</code></td><td>Case-insensitive (<code>ERROR</code> matches <code>error</code>).</td></tr>
+    <tr><td><code>-v</code></td><td>Invert — lines that do <em>not</em> match (drop noise).</td></tr>
+    <tr><td><code>-c</code></td><td>Count matching lines instead of printing them.</td></tr>
+    <tr><td><code>-n</code></td><td>Show line numbers.</td></tr>
+    <tr><td><code>-E</code></td><td>Extended regex (alternation <code>a|b</code>, <code>+</code>, grouping).</td></tr>
+    <tr><td><code>-A/-B/-C N</code></td><td>N lines of context After / Before / around a match.</td></tr>
+  </tbody>
+</table>
+<pre><code># Count 500s in today's access log
+grep -c " 500 " /var/log/nginx/access.log
+# -> 42
+
+# Errors OR warnings, with 3 lines of context, case-insensitive
+grep -iE -C3 "error|warn|fatal" /var/log/myapp.log
+
+# Everything EXCEPT noisy health-check lines
+grep -v "/healthz" /var/log/nginx/access.log | tail
+
+# Which client IPs hit a 404 the most?
+grep " 404 " /var/log/nginx/access.log | awk '{print $1}' | sort | uniq -c | sort -rn | head
+# ->  58 203.0.113.44
+# ->  12 198.51.100.7</code></pre>
+
+<h2>logrotate: keeping logs from eating the disk</h2>
+<p><span class="level intermediate">Intermediate</span> Left alone, a busy log file grows without limit until the disk is full. <code>logrotate</code> (run daily by cron/systemd) rotates logs: it renames the current file, starts a fresh one, compresses old ones, and deletes those past a retention limit. Each package drops a config in <code>/etc/logrotate.d/</code>.</p>
+<pre><code>cat /etc/logrotate.d/nginx
+# -> /var/log/nginx/*.log {
+# ->     daily
+# ->     rotate 14          # keep 14 old files
+# ->     compress           # gzip rotated files
+# ->     delaycompress
+# ->     missingok
+# ->     notifempty
+# ->     postrotate
+# ->         systemctl reload nginx &gt;/dev/null 2&gt;&amp;1 || true
+# ->     endscript
+# -> }
+
+ls /var/log/nginx
+# -> access.log  access.log.1  access.log.2.gz  access.log.3.gz
+#    (current)   (yesterday)   (older, compressed)
+
+sudo logrotate -d /etc/logrotate.d/nginx   # -d = debug: show what WOULD happen
+sudo logrotate -f /etc/logrotate.d/nginx   # -f = force a rotation now</code></pre>
+<blockquote class="tip">The <code>postrotate</code> block matters: an app that keeps its log file open by file descriptor will keep writing to the <em>renamed</em> old file after rotation unless it is told to reopen. That is why the nginx config reloads the service — so it opens the fresh <code>access.log</code>.</blockquote>
+
+<h2>Exercises</h2>
+<ul>
+  <li>Show the last 20 journal lines for the <code>ssh</code> (or <code>sshd</code>) service from the current boot only.</li>
+  <li>Follow a service's journal live and filter to warnings and errors in one command.</li>
+  <li>Count how many lines in a log contain the word <code>error</code> case-insensitively, then show three of them with surrounding context.</li>
+  <li>Check your journal's current disk usage and work out the command to trim it to the last 3 days.</li>
+</ul>
+
+<h2>Mini-project: a &ldquo;what went wrong in the last hour&rdquo; report</h2>
+<p>Write a one-shot script that gathers the recent errors across the system into a single readable report — the first thing you would run after an alert fires.</p>
+<pre><code>#!/usr/bin/env bash
+set -uo pipefail
+echo "=== Report generated $(date -Iseconds) ==="
+
+echo; echo "--- systemd errors (last hour) ---"
+journalctl --since "1 hour ago" -p err --no-pager | tail -30
+
+echo; echo "--- failed/degraded units ---"
+systemctl --failed --no-legend
+
+echo; echo "--- nginx 5xx (last hour, if present) ---"
+if [ -f /var/log/nginx/access.log ]; then
+  awk -v t="$(date -d '1 hour ago' '+%d/%b/%Y:%H')" \
+    '$0 ~ t && $9 ~ /^5/ {print}' /var/log/nginx/access.log | tail -20
+fi
+
+echo; echo "--- disk usage (is /var full?) ---"
+df -h / /var 2&gt;/dev/null</code></pre>
+<pre><code>sudo ./incident-report.sh | tee /tmp/incident-$(date +%s).txt
+# -> === Report generated 2026-10-08T10:05:00+00:00 ===
+# -> --- systemd errors (last hour) ---
+# -> Oct 08 09:51 web-01 myapp[5120]: ERROR db connection refused
+# -> --- failed/degraded units ---
+# -> myapp.service loaded failed failed Widget daemon
+# -> ...</code></pre>
+<p>In one pass you get the systemd errors, any failed services, recent HTTP 5xx responses, and whether the disk is full — the four questions that explain the large majority of &ldquo;the service is down&rdquo; incidents, pulled straight from the logs that already recorded them.</p>

@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en" data-base="../">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0d1117">
+<meta name="description" content="Dev Tutorials — Golang, Bun, Web Development, Linux and DevOps, offline-ready.">
+<title>Linux</title>
+<link rel="manifest" href="../manifest.webmanifest">
+<link rel="icon" href="../icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="../icon-192.png">
+<link rel="stylesheet" href="../app.css">
+<script>/* set theme before paint to avoid flash */(function(){try{var t=localStorage.getItem('tut.theme');document.documentElement.setAttribute('data-theme',t||'dark');}catch(e){document.documentElement.setAttribute('data-theme','dark');}})();</script>
+
+</head>
+<body>
+<header class="nav">
+  <a class="brand" href="../index.html">📚 Dev Tutorials</a>
+  <span class="crumb">Linux</span>
+  <span class="spacer"></span>
+  <a class="navbtn" href="../search.html">🔎 Search</a>
+  <button class="navbtn" id="install-btn" type="button">⬇️ Install</button>
+  <button class="navbtn" id="theme-btn" type="button" aria-label="Toggle theme">🌙 Dark</button>
+</header>
+<main class="wrap">
+  <h1 class="page-title">🐧 Linux</h1>
+  <p class="section-tagline">The command line that runs every server: shell, permissions, processes, networking, scripting.</p>
+  <div class="progress-overall" data-progress-ids="linux/shell-basics,linux/filesystem-layout,linux/permissions,linux/users-and-groups,linux/processes-and-services,linux/package-managers,linux/environment-variables,linux/networking-commands,linux/ssh,linux/logs,linux/cron-and-systemd-timers,linux/bash-scripting,linux/troubleshooting" style="margin:0 0 10px">
+    <div class="bar"><span></span></div>
+    <div class="label">0 / 13 done</div>
+  </div>
+  <ul class="lesson-list">
+    <li><a href="shell-basics.html" data-id="linux/shell-basics">
+      <span class="num">01</span>
+      <span class="body"><span class="ttl">Shell Basics</span><br><span class="desc">Navigating the filesystem, creating &amp; moving files, viewing content, wildcards, and redirection.</span></span>
+      <span class="state"></span>
+    </a></li>
+    <li><a href="filesystem-layout.html" data-id="linux/filesystem-layout">
+      <span class="num">02</span>
+      <span class="body"><span class="ttl">Filesystem Layout</span><br><span class="desc">The FHS: / , /etc, /var, /usr, /home, /tmp, /proc — where things live and why.</span></span>
+      <span class="state"></span>
+    </a></li>
+    <li><a href="permissions.html" data-id="linux/permissions">
+      <span class="num">03</span>
+      <span class="body"><span class="ttl">Permissions</span><br><span class="desc">rwx bits, octal notation, chmod/chown, umask, setuid/setgid, and the sticky bit.</span></span>
+      <span class="state"></span>
+    </a></li>
+    <li><a href="users-and-groups.html" data-id="linux/users-and-groups">
+      <span class="num">04</span>
+      <span class="body"><span class="ttl">Users &amp; Groups</span><br><span class="desc">/etc/passwd &amp; /etc/group, useradd/usermod, sudo, and the principle of least privilege.</span></span>
+      <span class="state"></span>
+    </a></li>
+    <li><a href="processes-and-services.html" data-id="linux/processes-and-services">
+      <span class="num">05</span>
+      <span class="body"><span class="ttl">Processes &amp; Services</span><br><span class="desc">ps, top/htop, signals &amp; kill, jobs &amp; background, and managing services with systemctl.</span></span>
+      <span class="state"></span>
+    </a></li>
+    <li><a href="package-managers.html" data-id="linux/package-managers">
+      <span class="num">06</span>
+      <span class="body"><span class="ttl">Package Managers</span><br><span class="desc">apt, dnf/yum, and pacman: install, update, search, remove, and repositories.</span></span>
+      <span class="state"></span>
+    </a></li>
+    <li><a href="environment-variables.html" data-id="linux/environment-variables">
+      <span class="num">07</span>
+      <span class="body"><span class="ttl">Environment Variables</span><br><span class="desc">export, PATH, shell startup files, per-process env, and persisting configuration.</span></span>
+      <span class="state"></span>
+    </a></li>
+    <li><a href="networking-commands.html" data-id="linux/networking-commands">
+      <span class="num">08</span>
+      <span class="body"><span class="ttl">Networking Commands</span><br><span class="desc">ip/ifconfig, ping, curl &amp; wget, ss/netstat, dig/nslookup, and reading /etc/hosts.</span></span>
+      <span class="state"></span>
+    </a></li>
+    <li><a href="ssh.html" data-id="linux/ssh">
+      <span class="num">09</span>
+      <span class="body"><span class="ttl">SSH</span><br><span class="desc">Key pairs, ssh-keygen, authorized_keys, config, agent forwarding, tunnels, and scp/rsync.</span></span>
+      <span class="state"></span>
+    </a></li>
+    <li><a href="logs.html" data-id="linux/logs">
+      <span class="num">10</span>
+      <span class="body"><span class="ttl">Logs</span><br><span class="desc">journalctl, /var/log, tail -f, grep patterns, and log rotation with logrotate.</span></span>
+      <span class="state"></span>
+    </a></li>
+    <li><a href="cron-and-systemd-timers.html" data-id="linux/cron-and-systemd-timers">
+      <span class="num">11</span>
+      <span class="body"><span class="ttl">Cron &amp; systemd Timers</span><br><span class="desc">crontab syntax, @reboot, and the modern alternative: systemd service + timer units.</span></span>
+      <span class="state"></span>
+    </a></li>
+    <li><a href="bash-scripting.html" data-id="linux/bash-scripting">
+      <span class="num">12</span>
+      <span class="body"><span class="ttl">Bash Scripting Basics</span><br><span class="desc">Shebangs, variables &amp; quoting, conditionals, loops, functions, arguments, and set -euo pipefail.</span></span>
+      <span class="state"></span>
+    </a></li>
+    <li><a href="troubleshooting.html" data-id="linux/troubleshooting">
+      <span class="num">13</span>
+      <span class="body"><span class="ttl">Troubleshooting Workflow</span><br><span class="desc">A systematic method: is it up? reachable? resourced? logged? — plus the tools to answer each.</span></span>
+      <span class="state"></span>
+    </a></li>
+  </ul>
+</main>
+<button type="button" class="fab top" id="fab-top" aria-label="Back to top">↑ Top</button>
+<div class="banner" id="update-banner" role="status">A new version is available.<button type="button">Reload</button></div>
+<div class="banner" id="offline-banner" role="status">You're offline — showing cached lessons.</div>
+<script src="../app.js" defer></script>
+</body>
+</html>

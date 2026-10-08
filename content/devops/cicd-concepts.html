@@ -1,0 +1,58 @@
+<p class="lead">CI/CD is the automation that carries code from a commit to production. The three terms get blurred — continuous integration, continuous delivery, and continuous deployment are distinct stages, and knowing the difference tells you what to automate next.</p>
+
+<h2>The three C's, precisely</h2>
+<table>
+  <thead><tr><th>Term</th><th>What's automated</th><th>Human gate?</th></tr></thead>
+  <tbody>
+    <tr><td><strong>Continuous Integration</strong></td><td>Every push is built &amp; tested, merged to a shared branch often</td><td>—</td></tr>
+    <tr><td><strong>Continuous Delivery</strong></td><td>Every passing build is <em>deployable</em> and pushed to staging automatically</td><td>Yes — a human clicks "deploy to prod"</td></tr>
+    <tr><td><strong>Continuous Deployment</strong></td><td>Every passing build goes to production automatically</td><td>No — fully automated</td></tr>
+  </tbody>
+</table>
+<p><span class="level beginner">Beginner</span> CI is the foundation everyone needs. Delivery vs deployment differ only by whether a human approves the final production step. Many teams do CD-to-staging + one-click prod (delivery); mature teams with strong tests and monitoring go all the way to continuous deployment.</p>
+
+<h2>Anatomy of a pipeline</h2>
+<pre><code>push/PR → ┌─────────┐  ┌──────┐  ┌───────┐  ┌─────────┐  ┌────────┐
+          │  build  │→ │ test │→ │ scan  │→ │ package │→ │ deploy │
+          └─────────┘  └──────┘  └───────┘  └─────────┘  └────────┘
+             compile    unit +    lint,      build the    staging →
+             deps       integ.    SAST, deps  artifact/     (gate) →
+                                   vuln scan   image         prod</code></pre>
+<p>Each stage is a gate: if it fails, the pipeline stops and nothing downstream runs. The ordering puts fast, cheap checks first (lint, unit tests) so failures surface in seconds, not after a slow build.</p>
+
+<h2>Artifacts and immutability</h2>
+<p><span class="level intermediate">Intermediate</span> A pipeline produces an <strong>artifact</strong> — a container image, a binary, a bundle — built <em>once</em> and promoted unchanged through environments. The same image you tested in staging is the one that runs in prod.</p>
+<blockquote class="warn"><strong>Common mistake:</strong> rebuilding the artifact for each environment ("build for staging", then "build for prod"). Now staging and prod are different binaries and you've tested the wrong thing. Build once, tag it (ideally with the commit SHA), and promote that exact artifact. Config differs per environment; the artifact does not.</blockquote>
+
+<h2>Environments and promotion</h2>
+<pre><code>dev  →  staging  →  production
+       (auto)      (gated / auto)
+
+# Config injected per environment (not baked into the artifact):
+#   DATABASE_URL, API keys, feature flags → from env / secrets store</code></pre>
+
+<h2>What belongs in CI</h2>
+<ul>
+  <li><strong>Build</strong> — compile, resolve dependencies (with caching so it's fast).</li>
+  <li><strong>Test</strong> — unit first (seconds), then integration, then slower E2E.</li>
+  <li><strong>Quality gates</strong> — formatting, linting, type-checking.</li>
+  <li><strong>Security</strong> — dependency vulnerability scan, static analysis (SAST), image scan.</li>
+  <li><strong>Package</strong> — build the immutable artifact and push to a registry.</li>
+</ul>
+<blockquote class="tip">Keep CI <em>fast</em> — a pipeline that takes 40 minutes gets bypassed and resented. Cache dependencies, parallelize test suites, run only affected tests where possible, and fail fast on the cheapest checks. Aim for under ~10 minutes to green.</blockquote>
+
+<h2>Pipeline as code</h2>
+<p>Modern CI config lives in the repo (GitHub Actions YAML, GitLab CI, etc.) — versioned, reviewed, and changed via PR like any other code. The next lesson implements a real pipeline in GitHub Actions.</p>
+
+<h2>Rollbacks</h2>
+<p>CD is only safe if rolling back is trivial. Because artifacts are immutable and tagged, rollback is "redeploy the previous image tag" — fast and predictable. If rolling back is scary, you don't really have continuous delivery.</p>
+
+<h2>Exercises</h2>
+<ul>
+  <li>Classify three real projects you know as doing CI only, continuous delivery, or continuous deployment — and justify it.</li>
+  <li>Draw the stages of a pipeline for a web app and mark which ones should fail fastest.</li>
+  <li>Explain, with the "build once" principle, why rebuilding per environment is a bug.</li>
+</ul>
+
+<h2>Mini-project: design a pipeline</h2>
+<p>For an app from the Go or Bun section, design (on paper or as a diagram) a full CI/CD pipeline: ordered stages with their gates, where the immutable artifact is built and tagged with the commit SHA, how it's promoted dev→staging→prod, where config/secrets are injected, and the exact rollback step. The next lesson turns this design into runnable GitHub Actions YAML.</p>

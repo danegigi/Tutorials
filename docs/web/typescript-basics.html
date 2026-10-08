@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en" data-base="../">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0d1117">
+<meta name="description" content="Dev Tutorials — Golang, Bun, Web Development, Linux and DevOps, offline-ready.">
+<title>TypeScript Basics — Web Development</title>
+<link rel="manifest" href="../manifest.webmanifest">
+<link rel="icon" href="../icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="../icon-192.png">
+<link rel="stylesheet" href="../app.css">
+<script>/* set theme before paint to avoid flash */(function(){try{var t=localStorage.getItem('tut.theme');document.documentElement.setAttribute('data-theme',t||'dark');}catch(e){document.documentElement.setAttribute('data-theme','dark');}})();</script>
+
+</head>
+<body class="lesson">
+<header class="nav">
+  <a class="brand" href="../index.html">📚 Dev Tutorials</a>
+  <span class="crumb">TypeScript Basics — Web Development</span>
+  <span class="spacer"></span>
+  <a class="navbtn" href="../search.html">🔎 Search</a>
+  <button class="navbtn" id="install-btn" type="button">⬇️ Install</button>
+  <button class="navbtn" id="theme-btn" type="button" aria-label="Toggle theme">🌙 Dark</button>
+</header>
+<main class="wrap lesson-body">
+  <h1 class="page-title">TypeScript Basics</h1>
+  <div class="lesson-tools" data-lesson-id="web/typescript-basics">
+    <button id="done-btn" type="button" aria-pressed="false">○ Mark complete</button>
+    <button id="mark-btn" type="button" aria-pressed="false">☆ Bookmark</button>
+    <a class="navbtn" href="index.html" style="margin-left:auto">All Web Development lessons →</a>
+  </div>
+<nav class="toc" aria-label="On this page"><strong>On this page</strong><ul>
+<li class="lvl2"><a href="#types-and-inference">Types and inference</a></li>
+<li class="lvl2"><a href="#interfaces-and-type-aliases">Interfaces and type aliases</a></li>
+<li class="lvl2"><a href="#unions-and-narrowing">Unions and narrowing</a></li>
+<li class="lvl2"><a href="#generics">Generics</a></li>
+<li class="lvl2"><a href="#utility-types">Utility types</a></li>
+<li class="lvl2"><a href="#compiler-configuration">Compiler configuration</a></li>
+<li class="lvl2"><a href="#exercises">Exercises</a></li>
+<li class="lvl2"><a href="#mini-project-a-typed-api-client">Mini-project: a typed API client</a></li>
+</ul></nav>
+<p class="lead">TypeScript is JavaScript with a static type layer that's erased at build time. It catches bugs before you run the code and makes editors far smarter. Learn types, interfaces, unions and narrowing, generics, and the compiler settings that matter.</p>
+
+<h2 id="types-and-inference">Types and inference</h2>
+<pre><code>let count: number = 0;
+let name = "Ada";          // inferred as string — annotation unnecessary
+const ids: number[] = [1, 2, 3];
+let pair: [string, number] = ["a", 1];   // tuple
+
+function greet(who: string): string {
+  return `Hi ${who}`;
+}
+
+// Let inference work; annotate function params and public APIs.</code></pre>
+<blockquote class="tip">Annotate function <em>parameters</em> and return types of exported functions; let TypeScript <em>infer</em> local variables. Over-annotating locals is noise — the compiler already knows.</blockquote>
+
+<h2 id="interfaces-and-type-aliases">Interfaces and type aliases</h2>
+<pre><code>interface User {
+  id: number;
+  name: string;
+  email?: string;          // optional
+  readonly createdAt: Date; // can't reassign after construction
+}
+
+type Point = { x: number; y: number };   // alias — equivalent for objects
+
+const u: User = { id: 1, name: "Ada", createdAt: new Date() };</code></pre>
+<p>Rule of thumb: <code>interface</code> for object/class shapes (it can be extended and merged); <code>type</code> for unions, tuples, and function types.</p>
+
+<h2 id="unions-and-narrowing">Unions and narrowing</h2>
+<p><span class="level intermediate">Intermediate</span> A union says "one of these"; narrowing is how you safely access the specific one:</p>
+<pre><code>type Status = "idle" | "loading" | "error";   // literal union
+
+function render(s: Status) {
+  if (s === "error") { /* ... */ }   // narrowed to "error" here
+}
+
+function area(shape: { kind: "circle"; r: number } | { kind: "rect"; w: number; h: number }) {
+  switch (shape.kind) {              // discriminated union
+    case "circle": return Math.PI * shape.r ** 2;
+    case "rect":   return shape.w * shape.h;
+  }
+}
+
+// Narrowing with typeof / in / instanceof
+function len(x: string | string[]) {
+  return typeof x === "string" ? x.length : x.length;
+}</code></pre>
+<blockquote class="warn"><strong>Common mistake:</strong> reaching for <code>any</code> or the <code>as</code> cast to silence an error. <code>any</code> turns off type-checking for that value and infects everything it touches; <code>as</code> lies to the compiler. Prefer <code>unknown</code> + narrowing, or fix the underlying type. Reserve <code>as</code> for genuinely external, untyped data.</blockquote>
+
+<h2 id="generics">Generics</h2>
+<pre><code>function first&lt;T&gt;(arr: T[]): T | undefined {
+  return arr[0];
+}
+first([1, 2, 3]);        // T = number → number | undefined
+first(["a", "b"]);       // T = string
+
+interface ApiResponse&lt;T&gt; {
+  data: T;
+  error: string | null;
+}
+const res: ApiResponse&lt;User[]&gt; = { data: [], error: null };
+
+// Constraints
+function longest&lt;T extends { length: number }&gt;(a: T, b: T): T {
+  return a.length &gt;= b.length ? a : b;
+}</code></pre>
+
+<h2 id="utility-types">Utility types</h2>
+<pre><code>Partial&lt;User&gt;         // all fields optional
+Required&lt;User&gt;        // all required
+Pick&lt;User, "id" | "name"&gt;
+Omit&lt;User, "email"&gt;
+Record&lt;string, number&gt; // { [k: string]: number }
+ReturnType&lt;typeof greet&gt; // string</code></pre>
+
+<h2 id="compiler-configuration">Compiler configuration</h2>
+<pre><code>// tsconfig.json
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,            // ← the single most important flag
+    "noUncheckedIndexedAccess": true,
+    "skipLibCheck": true
+  }
+}</code></pre>
+<pre><code>tsc --noEmit        # type-check only (bundlers/Bun do the transpiling)</code></pre>
+<blockquote class="tip">Turn on <code>"strict": true</code> from day one. Adding it to an existing codebase later surfaces hundreds of errors at once; starting strict means you never accumulate the debt.</blockquote>
+
+<h2 id="exercises">Exercises</h2>
+<ul>
+  <li>Model a <code>Result&lt;T&gt;</code> discriminated union (<code>{ok:true,value:T} | {ok:false,error:string}</code>) and narrow it.</li>
+  <li>Write a generic <code>groupBy&lt;T&gt;(items: T[], key: (t:T)=&gt;string): Record&lt;string, T[]&gt;</code>.</li>
+  <li>Take a function that uses <code>any</code>, replace it with <code>unknown</code> + narrowing, and watch the errors it now catches.</li>
+</ul>
+
+<h2 id="mini-project-a-typed-api-client">Mini-project: a typed API client</h2>
+<p>Build a <code>typed fetch</code> wrapper: <code>api&lt;T&gt;(path: string): Promise&lt;Result&lt;T&gt;&gt;</code> returning a discriminated union instead of throwing. Define <code>User</code> and <code>Todo</code> interfaces, call <code>api&lt;User[]&gt;("/users")</code>, and let the compiler enforce that you handle both the success and error branches. Run <code>tsc --noEmit --strict</code> clean.</p>
+
+<section class="further"><h2 id="further-reading">Further reading</h2>
+<p>Official documentation for the tools and APIs covered on this page:</p>
+<ul class="further-list"><li><a href="https://www.typescriptlang.org/docs/handbook/intro.html" target="_blank" rel="noopener">TypeScript handbook ↗</a></li>
+<li><a href="https://www.typescriptlang.org/docs/handbook/typescript-in-5-minutes.html" target="_blank" rel="noopener">TS for JS programmers ↗</a></li></ul></section>
+  <nav class="pager">
+<a class="prev" href="javascript-fundamentals.html"><small>Previous</small>🌐 JavaScript Fundamentals</a>
+<a class="next" href="http-and-apis.html"><small>Next</small>🌐 HTTP &amp; APIs</a>
+  </nav>
+</main>
+<button type="button" class="fab top" id="fab-top" aria-label="Back to top">↑ Top</button>
+<div class="banner" id="update-banner" role="status">A new version is available.<button type="button">Reload</button></div>
+<div class="banner" id="offline-banner" role="status">You're offline — showing cached lessons.</div>
+<script src="../app.js" defer></script>
+</body>
+</html>

@@ -1,0 +1,229 @@
+<p class="lead">Bun ships a fast native HTTP server, WebSockets with built-in pub/sub, and raw TCP — no framework required. This lesson builds up from <code>Bun.serve</code> routing to real-time messaging, then adds a Hono app with JWT auth stored in HttpOnly cookies for the full web-app shape.</p>
+
+<h2>Bun.serve — routing</h2>
+<p><span class="level beginner">Beginner</span> The modern API uses a <code>routes</code> object with path params and per-method handlers. <code>req.params</code> holds matched segments; a top-level <code>fetch</code> is the fallback.</p>
+<pre><code>const server = Bun.serve({
+  port: 3000,
+  routes: {
+    "/": () =&gt; new Response("Hello, Bun!"),
+
+    "/users/:id": (req) =&gt; Response.json({ id: req.params.id }),
+
+    "/api/echo": {
+      POST: async (req) =&gt; Response.json(await req.json()),
+    },
+
+    // multiple methods on one path
+    "/api/orders/:id": {
+      GET:    (req) =&gt; Response.json({ id: req.params.id, status: "ok" }),
+      DELETE: (req) =&gt; new Response(null, { status: 204 }),
+    },
+  },
+  fetch() {                                   // unmatched routes
+    return new Response("Not found", { status: 404 });
+  },
+});
+
+console.log(`Listening on ${server.url}`);    // http://localhost:3000</code></pre>
+
+<h2>Serving files &amp; streaming</h2>
+<pre><code>Bun.serve({
+  routes: {
+    // serve straight from disk — uses sendfile under the hood
+    "/logo.png": () =&gt; new Response(Bun.file("./assets/logo.png")),
+
+    // stream a response without buffering it all in memory
+    "/stream": () =&gt; new Response(
+      new ReadableStream({
+        start(c) { c.enqueue("chunk 1\n"); c.enqueue("chunk 2\n"); c.close(); },
+      }),
+      { headers: { "Content-Type": "text/plain" } },
+    ),
+  },
+});</code></pre>
+
+<h2>WebSockets + pub/sub</h2>
+<p><span class="level intermediate">Intermediate</span> Call <code>server.upgrade(req)</code> and return without a <code>Response</code> to hand the connection to the <code>websocket</code> handlers. Bun's built-in <code>subscribe</code>/<code>publish</code> is topic-based pub/sub — a chat room in a few lines, no Redis, no socket.io.</p>
+<pre><code>const server = Bun.serve({
+  port: 3001,
+  fetch(req, server) {
+    // pass per-connection data to the socket
+    const user = new URL(req.url).searchParams.get("user") ?? "anon";
+    if (server.upgrade(req, { data: { user } })) return;   // upgraded
+    return new Response("Use a WebSocket client");
+  },
+  websocket: {
+    open(ws) {
+      ws.subscribe("room");                       // join the topic
+      server.publish("room", `${ws.data.user} joined`);
+    },
+    message(ws, msg) {
+      server.publish("room", `${ws.data.user}: ${msg}`);   // broadcast to the topic
+    },
+    close(ws) {
+      ws.unsubscribe("room");
+      server.publish("room", `${ws.data.user} left`);
+    },
+  },
+});</code></pre>
+<p>A browser client:</p>
+<pre><code>const ws = new WebSocket("ws://localhost:3001/?user=ada");
+ws.onmessage = (e) =&gt; console.log(e.data);
+ws.onopen = () =&gt; ws.send("hello room");</code></pre>
+<blockquote class="tip"><code>ws.publish(topic, msg)</code> broadcasts to everyone <em>except</em> the sender; <code>server.publish(topic, msg)</code> includes the sender. Choose based on whether the author should see their own message echoed. Backpressure is handled for you — <code>ws.send</code> returns the bytes queued; don't resend on a partial write.</blockquote>
+
+<h2>Raw TCP</h2>
+<p>For protocols below HTTP (a line-based service, a proxy, a game server), <code>Bun.listen</code> and <code>Bun.connect</code> give you raw sockets:</p>
+<pre><code>// Echo server
+Bun.listen({
+  hostname: "localhost",
+  port: 8080,
+  socket: {
+    open(socket) { socket.write("hi\n"); },
+    data(socket, data) { socket.write(data); },   // echo back
+    close() { console.log("client gone"); },
+  },
+});
+
+// Client
+const client = await Bun.connect({
+  hostname: "localhost", port: 8080,
+  socket: { data(socket, data) { console.log("got", data.toString()); } },
+});</code></pre>
+
+<h2>A Hono app with JWT auth</h2>
+<p><span class="level advanced">Advanced</span> Hono is a tiny third-party router that runs on <code>Bun.serve</code> (pin it: <code>bun add hono@4.6.3</code>). The auth pattern: a <strong>short-lived access token</strong> (~15 min) the client sends per request, and a <strong>long-lived refresh token</strong> (~7 days) in an <code>HttpOnly; Secure; SameSite</code> cookie JavaScript can't read — so an XSS can't steal it. <code>/refresh</code> rotates the pair.</p>
+<pre><code>import { Hono } from "hono";
+import { sign, verify } from "hono/jwt";
+import { setCookie, getCookie, deleteCookie } from "hono/cookie";
+
+const app = new Hono();
+const ACCESS_SECRET  = Bun.env.ACCESS_SECRET!;
+const REFRESH_SECRET = Bun.env.REFRESH_SECRET!;
+
+const now = () =&gt; Math.floor(Date.now() / 1000);
+const accessToken  = (sub: string) =&gt; sign({ sub, exp: now() + 60 * 15 }, ACCESS_SECRET);
+const refreshToken = (sub: string) =&gt; sign({ sub, exp: now() + 60 * 60 * 24 * 7 }, REFRESH_SECRET);
+
+function setRefreshCookie(c: any, token: string) {
+  setCookie(c, "refresh_token", token, {
+    httpOnly: true,          // JS can't read it -&gt; XSS can't exfiltrate it
+    secure: true,            // HTTPS only
+    sameSite: "Strict",      // not sent on cross-site requests -&gt; CSRF mitigation
+    path: "/refresh",        // only sent to the refresh endpoint
+    maxAge: 60 * 60 * 24 * 7,
+  });
+}
+
+// LOGIN — verify credentials (argon2id), issue both tokens
+app.post("/login", async (c) =&gt; {
+  const { email, password } = await c.req.json();
+  const user = await findUser(email);
+  if (!user || !(await Bun.password.verify(password, user.passwordHash))) {
+    return c.json({ error: "invalid credentials" }, 401);
+  }
+  setRefreshCookie(c, await refreshToken(user.id));
+  return c.json({ accessToken: await accessToken(user.id) });
+});
+
+// REFRESH — verify the cookie, rotate the pair
+app.post("/refresh", async (c) =&gt; {
+  const token = getCookie(c, "refresh_token");
+  if (!token) return c.json({ error: "no refresh token" }, 401);
+  try {
+    const payload = await verify(token, REFRESH_SECRET);
+    setRefreshCookie(c, await refreshToken(payload.sub as string));   // rotate
+    return c.json({ accessToken: await accessToken(payload.sub as string) });
+  } catch {
+    return c.json({ error: "invalid refresh token" }, 401);
+  }
+});
+
+// LOGOUT — clear the cookie
+app.post("/logout", (c) =&gt; {
+  deleteCookie(c, "refresh_token", { path: "/refresh" });
+  return c.json({ ok: true });
+});
+
+// Auth middleware for protected routes — validate the access token
+async function requireAuth(c: any, next: any) {
+  const token = (c.req.header("Authorization") ?? "").replace(/^Bearer /, "");
+  try {
+    c.set("userId", (await verify(token, ACCESS_SECRET)).sub);
+    await next();
+  } catch {
+    return c.json({ error: "unauthorized" }, 401);
+  }
+}
+
+app.get("/me", requireAuth, (c) =&gt; c.json({ userId: c.get("userId") }));
+
+export default app;      // Bun auto-serves a default export with a fetch handler</code></pre>
+<pre><code>bun --hot server.ts      # http://localhost:3000</code></pre>
+
+<h2>Request logging &amp; error handling middleware</h2>
+<pre><code>app.use("*", async (c, next) =&gt; {
+  const t = Bun.nanoseconds();
+  await next();
+  c.header("X-Response-Time", `${((Bun.nanoseconds() - t) / 1e6).toFixed(2)}ms`);
+});
+
+app.onError((err, c) =&gt; {
+  console.error(err);
+  return c.json({ error: "internal" }, 500);
+});</code></pre>
+
+<h2>Common mistakes</h2>
+<blockquote class="warn"><strong>Common mistake:</strong> storing the access token (or the refresh token) in <code>localStorage</code>. Anything in <code>localStorage</code> is readable by any script on the page, so an XSS steals it instantly. Keep the refresh token in an <code>HttpOnly</code> cookie (unreadable by JS) and the short-lived access token in memory only. Two more traps: returning a <code>Response</code> after <code>server.upgrade(req)</code> succeeds (don't — return nothing so Bun completes the upgrade), and trusting <code>X-Forwarded-For</code> for the client IP without a known proxy in front (it's spoofable; only trust it from your own load balancer, otherwise use <code>server.requestIP(req)</code>).</blockquote>
+
+<h2>Exercises</h2>
+<ul>
+  <li>Build a <code>Bun.serve</code> with routes <code>GET /ping</code>, <code>GET /users/:id</code>, and <code>POST /echo</code>; hit each with <code>curl</code>.</li>
+  <li>Write a WebSocket chat where two browser tabs exchange messages via <code>subscribe</code>/<code>publish</code> on one topic.</li>
+  <li>Add <code>requireAuth</code> middleware to a Hono route and confirm a request with no <code>Authorization</code> header gets 401.</li>
+  <li>Implement <code>/refresh</code> rotation and verify logging out (clearing the cookie) makes the next <code>/refresh</code> fail.</li>
+</ul>
+
+<h2>Mini-project: a real-time orders API with auth and live updates</h2>
+<p>Combine everything: a JSON API protected by JWT, plus a WebSocket channel that pushes new orders to connected dashboards in real time, with graceful shutdown for container deploys.</p>
+<pre><code>// server.ts  —  run with: bun --hot server.ts
+type Order = { id: string; total: number; status: string };
+const orders: Order[] = [];
+const SECRET = Bun.env.ACCESS_SECRET ?? "dev-secret";
+
+const server = Bun.serve({
+  port: Number(Bun.env.PORT ?? 3000),
+
+  routes: {
+    // Create an order (would require auth in prod — simplified here)
+    "/api/orders": {
+      POST: async (req) =&gt; {
+        const body = await req.json();
+        const order: Order = { id: crypto.randomUUID(), total: body.total, status: "pending" };
+        orders.push(order);
+        server.publish("orders", JSON.stringify({ type: "new", order }));  // live push
+        return Response.json(order, { status: 201 });
+      },
+      GET: () =&gt; Response.json(orders),
+    },
+  },
+
+  // WebSocket endpoint: a dashboard subscribes to the "orders" topic
+  fetch(req, server) {
+    if (new URL(req.url).pathname === "/live" &amp;&amp; server.upgrade(req)) return;
+    return new Response("not found", { status: 404 });
+  },
+  websocket: {
+    open(ws) { ws.subscribe("orders"); ws.send(JSON.stringify({ type: "snapshot", orders })); },
+    close(ws) { ws.unsubscribe("orders"); },
+    message() {},   // dashboards only listen
+  },
+
+  error(err) { console.error(err); return Response.json({ error: "internal" }, { status: 500 }); },
+});
+
+// Graceful shutdown — drain in-flight requests before exiting (what k8s sends)
+process.on("SIGTERM", async () =&gt; { await server.stop(); process.exit(0); });
+
+console.log(`orders API on ${server.url}  (WS at /live)`);</code></pre>
+<p>Test it: <code>POST /api/orders</code> with a JSON body, and watch a WebSocket client connected to <code>/live</code> receive the <code>new</code> event instantly. The <code>snapshot</code> on connect gives a late joiner the current state; the <code>SIGTERM</code> handler lets a rolling deploy finish in-flight work instead of dropping it. Harden it by putting the <code>requireAuth</code> middleware from above in front of the write route and authenticating the WebSocket upgrade with the access token.</p>

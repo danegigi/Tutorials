@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en" data-base="../">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0d1117">
+<meta name="description" content="Dev Tutorials — Golang, Bun, Web Development, Linux and DevOps, offline-ready.">
+<title>HTMX — Web Development</title>
+<link rel="manifest" href="../manifest.webmanifest">
+<link rel="icon" href="../icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="../icon-192.png">
+<link rel="stylesheet" href="../app.css">
+<script>/* set theme before paint to avoid flash */(function(){try{var t=localStorage.getItem('tut.theme');document.documentElement.setAttribute('data-theme',t||'dark');}catch(e){document.documentElement.setAttribute('data-theme','dark');}})();</script>
+
+</head>
+<body class="lesson">
+<header class="nav">
+  <a class="brand" href="../index.html">📚 Dev Tutorials</a>
+  <span class="crumb">HTMX — Web Development</span>
+  <span class="spacer"></span>
+  <a class="navbtn" href="../search.html">🔎 Search</a>
+  <button class="navbtn" id="install-btn" type="button">⬇️ Install</button>
+  <button class="navbtn" id="theme-btn" type="button" aria-label="Toggle theme">🌙 Dark</button>
+</header>
+<main class="wrap lesson-body">
+  <h1 class="page-title">HTMX</h1>
+  <div class="lesson-tools" data-lesson-id="web/htmx">
+    <button id="done-btn" type="button" aria-pressed="false">○ Mark complete</button>
+    <button id="mark-btn" type="button" aria-pressed="false">☆ Bookmark</button>
+    <a class="navbtn" href="index.html" style="margin-left:auto">All Web Development lessons →</a>
+  </div>
+<nav class="toc" aria-label="On this page"><strong>On this page</strong><ul>
+<li class="lvl2"><a href="#setup">Setup</a></li>
+<li class="lvl2"><a href="#the-core-idea">The core idea</a></li>
+<li class="lvl2"><a href="#live-search-the-canonical-example">Live search (the canonical example)</a></li>
+<li class="lvl2"><a href="#forms-and-swapping-yourself-out">Forms and swapping yourself out</a></li>
+<li class="lvl2"><a href="#out-of-band-swaps">Out-of-band swaps</a></li>
+<li class="lvl2"><a href="#why-htmx">Why HTMX</a></li>
+<li class="lvl2"><a href="#exercises">Exercises</a></li>
+<li class="lvl2"><a href="#mini-project-an-htmx-todo-list">Mini-project: an HTMX todo list</a></li>
+</ul></nav>
+<p class="lead">HTMX lets you build dynamic, interactive UIs by adding attributes to HTML — the server returns HTML fragments, and HTMX swaps them into the page. No JSON API, no client-side framework, no build step. It's the "hypermedia" approach to interactivity.</p>
+
+<h2 id="setup">Setup</h2>
+<pre><code>&lt;script src="https://unpkg.com/htmx.org@2.0.3"&gt;&lt;/script&gt;
+&lt;!-- or vendor it locally for offline/production --&gt;</code></pre>
+
+<h2 id="the-core-idea">The core idea</h2>
+<p><span class="level beginner">Beginner</span> An element declares <em>what</em> request to make, <em>when</em>, and <em>where to put the response</em>. The server replies with an HTML fragment, which HTMX swaps into the DOM.</p>
+<pre><code>&lt;button hx-get="/clicked" hx-target="#result" hx-swap="innerHTML"&gt;
+  Click me
+&lt;/button&gt;
+&lt;div id="result"&gt;&lt;/div&gt;
+
+&lt;!-- Server responds to GET /clicked with:  --&gt;
+&lt;p&gt;You clicked at 14:32&lt;/p&gt;
+&lt;!-- …which replaces the contents of #result --&gt;</code></pre>
+<table>
+  <thead><tr><th>Attribute</th><th>Meaning</th></tr></thead>
+  <tbody>
+    <tr><td><code>hx-get/post/put/patch/delete</code></td><td>Issue that HTTP request to the URL.</td></tr>
+    <tr><td><code>hx-trigger</code></td><td>What fires it: <code>click</code> (default for buttons), <code>keyup changed delay:300ms</code>, <code>load</code>, <code>revealed</code>, <code>every 2s</code>.</td></tr>
+    <tr><td><code>hx-target</code></td><td>CSS selector for where the response goes (default: the element itself).</td></tr>
+    <tr><td><code>hx-swap</code></td><td>How to insert: <code>innerHTML</code> (default), <code>outerHTML</code>, <code>beforeend</code>, <code>delete</code>.</td></tr>
+  </tbody>
+</table>
+
+<h2 id="live-search-the-canonical-example">Live search (the canonical example)</h2>
+<pre><code>&lt;input type="search" name="q"
+       hx-get="/search"
+       hx-trigger="input changed delay:300ms, search"
+       hx-target="#results"
+       hx-indicator="#spinner"&gt;
+&lt;span id="spinner" class="htmx-indicator"&gt;Searching…&lt;/span&gt;
+&lt;ul id="results"&gt;&lt;/ul&gt;
+
+&lt;!-- Server returns just the &lt;li&gt; rows for the query --&gt;</code></pre>
+<p>The <code>name="q"</code> value is sent automatically as a query param. <code>delay:300ms</code> debounces; <code>hx-indicator</code> shows a loading element while the request is in flight.</p>
+
+<h2 id="forms-and-swapping-yourself-out">Forms and swapping yourself out</h2>
+<pre><code>&lt;form hx-post="/todos" hx-target="#list" hx-swap="beforeend"
+      hx-on::after-request="this.reset()"&gt;
+  &lt;input name="text" required&gt;
+  &lt;button&gt;Add&lt;/button&gt;
+&lt;/form&gt;
+&lt;ul id="list"&gt;&lt;/ul&gt;
+
+&lt;!-- Delete a row, removing itself from the DOM --&gt;
+&lt;li&gt;
+  Buy milk
+  &lt;button hx-delete="/todos/42" hx-target="closest li" hx-swap="outerHTML swap:200ms"&gt;✕&lt;/button&gt;
+&lt;/li&gt;</code></pre>
+
+<h2 id="out-of-band-swaps">Out-of-band swaps</h2>
+<p><span class="level intermediate">Intermediate</span> One response can update several parts of the page — the targeted element plus any fragment marked <code>hx-swap-oob</code>:</p>
+<pre><code>&lt;!-- Response to POST /cart/add --&gt;
+&lt;div id="added-row"&gt;Added to cart&lt;/div&gt;
+&lt;span id="cart-count" hx-swap-oob="true"&gt;3&lt;/span&gt;   &lt;!-- updates the header badge too --&gt;</code></pre>
+
+<h2 id="why-htmx">Why HTMX</h2>
+<blockquote class="tip">HTMX shines when your backend already renders HTML (Go templates, templ, Rails, Django, PHP). You keep rendering on the server, send fragments, and get SPA-like interactivity without a JSON API or a JS framework. It's less suited to highly client-stateful apps (rich offline editors, canvas tools) where state genuinely lives in the browser.</blockquote>
+<blockquote class="warn"><strong>Common mistakes:</strong> (1) returning a full HTML page from an HTMX endpoint — return only the fragment to swap. (2) forgetting that swapped-in content needs its own HTMX attributes to be interactive (they are processed automatically on swap, but inline <code>&lt;script&gt;</code> in a fragment won't re-run unless you account for it). (3) using HTMX for client-only interactions (toggling a class) where plain CSS/JS is simpler.</blockquote>
+
+<h2 id="exercises">Exercises</h2>
+<ul>
+  <li>Build a counter button that GETs <code>/inc</code> and swaps the new count into a <code>&lt;span&gt;</code>.</li>
+  <li>Add a debounced live-search input returning <code>&lt;li&gt;</code> rows with a loading indicator.</li>
+  <li>Add a delete button that removes its own row with an <code>outerHTML</code> swap and a fade transition.</li>
+</ul>
+
+<h2 id="mini-project-an-htmx-todo-list">Mini-project: an HTMX todo list</h2>
+<p>Pair HTMX with a small server (the Go or Bun HTTP lesson gives you one): <code>POST /todos</code> appends a rendered <code>&lt;li&gt;</code>, <code>DELETE /todos/:id</code> removes a row, and a cart-style count updates out-of-band. The whole UI is server-rendered HTML with zero custom JavaScript — the hypermedia model end to end.</p>
+
+<section class="further"><h2 id="further-reading">Further reading</h2>
+<p>Official documentation for the tools and APIs covered on this page:</p>
+<ul class="further-list"><li><a href="https://htmx.org/docs/" target="_blank" rel="noopener">htmx docs ↗</a></li>
+<li><a href="https://hypermedia.systems/" target="_blank" rel="noopener">Hypermedia Systems (book) ↗</a></li></ul></section>
+  <nav class="pager">
+<a class="prev" href="web-app-manifests.html"><small>Previous</small>🌐 Web App Manifests</a>
+<a class="next" href="datastar.html"><small>Next</small>🌐 Datastar</a>
+  </nav>
+</main>
+<button type="button" class="fab top" id="fab-top" aria-label="Back to top">↑ Top</button>
+<div class="banner" id="update-banner" role="status">A new version is available.<button type="button">Reload</button></div>
+<div class="banner" id="offline-banner" role="status">You're offline — showing cached lessons.</div>
+<script src="../app.js" defer></script>
+</body>
+</html>

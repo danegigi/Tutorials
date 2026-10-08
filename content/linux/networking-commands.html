@@ -1,0 +1,152 @@
+<p class="lead">When a service is unreachable, the question is always &ldquo;where in the chain does it break?&rdquo; — the interface, the route, DNS, the port, or the application. Linux gives you a focused tool for each link. This lesson covers checking your own addresses (<code>ip</code>), reachability (<code>ping</code>, <code>traceroute</code>), DNS resolution (<code>dig</code>, <code>nslookup</code>, <code>host</code>, <code>/etc/hosts</code>), what is listening locally (<code>ss</code>, <code>netstat</code>), and making HTTP requests from the command line (<code>curl</code>, <code>wget</code>).</p>
+
+<h2>Your own addresses and routes</h2>
+<p><span class="level beginner">Beginner</span> The modern tool is <code>ip</code> (from the <code>iproute2</code> suite); the older <code>ifconfig</code> still appears on many systems but is deprecated.</p>
+<pre><code>ip addr                   # every interface and its IP(s); 'ip a' for short
+# -> 1: lo: &lt;LOOPBACK,UP&gt; inet 127.0.0.1/8 scope host lo
+# -> 2: eth0: &lt;BROADCAST,UP&gt; inet 203.0.113.10/24 scope global eth0
+
+ip route                  # the routing table — where does traffic go?
+# -> default via 203.0.113.1 dev eth0        (the gateway)
+# -> 203.0.113.0/24 dev eth0 proto kernel scope link
+
+ip -br addr               # brief, one line per interface
+# -> lo    UNKNOWN  127.0.0.1/8
+# -> eth0  UP       203.0.113.10/24
+
+# The old equivalents, for reference:
+ifconfig                  # ip addr
+route -n                  # ip route</code></pre>
+
+<h2>Reachability: ping and traceroute</h2>
+<p><span class="level beginner">Beginner</span> <code>ping</code> sends ICMP echo requests — the simplest &ldquo;is this host alive and reachable?&rdquo; test. <code>traceroute</code> shows every router (hop) the packets pass through, revealing <em>where</em> a path breaks.</p>
+<pre><code>ping -c 4 example.com     # -c 4 = send 4 packets then stop
+# -> 64 bytes from 93.184.216.34: icmp_seq=1 ttl=56 time=11.4 ms
+# -> ...
+# -> 4 packets transmitted, 4 received, 0% packet loss
+
+traceroute example.com    # the hop-by-hop path (mtr is a nicer live version)
+# -> 1  203.0.113.1   0.4 ms      (your gateway)
+# -> 2  10.0.0.1      4.1 ms
+# -> ...
+# -> 9  93.184.216.34 11.5 ms     (destination)</code></pre>
+<blockquote class="tip">Many servers and firewalls block ICMP, so a failing <code>ping</code> does <em>not</em> always mean the host is down — the HTTP port may be perfectly reachable. Treat ping as one signal, not a verdict; confirm with a port check or a <code>curl</code>.</blockquote>
+
+<h2>DNS: turning names into addresses</h2>
+<p><span class="level intermediate">Intermediate</span> Before any connection, the name (<code>example.com</code>) must resolve to an IP. <code>dig</code> is the detailed tool; <code>host</code> and <code>nslookup</code> are quicker.</p>
+<pre><code>dig example.com +short            # just the answer
+# -> 93.184.216.34
+
+dig example.com A                 # full A-record query with timing
+# -> ;; ANSWER SECTION:
+# -> example.com.  3600  IN  A  93.184.216.34
+
+dig MX example.com +short         # mail servers
+dig @1.1.1.1 example.com +short   # ask a SPECIFIC resolver (Cloudflare)
+
+host example.com
+# -> example.com has address 93.184.216.34
+
+nslookup example.com              # interactive-style lookup</code></pre>
+<p>Resolution order is set in <code>/etc/nsswitch.conf</code>, but the key file to know is <code>/etc/hosts</code>, which is checked <strong>before</strong> DNS — a local override:</p>
+<pre><code>cat /etc/hosts
+# -> 127.0.0.1   localhost
+# -> 203.0.113.10 web-01
+
+# Point a name at a specific IP locally (needs sudo), e.g. for testing
+echo "127.0.0.1 myapp.local" | sudo tee -a /etc/hosts
+ping -c1 myapp.local
+# -> 64 bytes from 127.0.0.1 ...</code></pre>
+<blockquote class="warn"><strong>Common mistake:</strong> blaming the application for a &ldquo;site not loading&rdquo; when the real problem is DNS — a stale cache, a wrong record, or a leftover <code>/etc/hosts</code> entry pointing a production hostname at <code>127.0.0.1</code> from an old test. Always resolve the name first (<code>dig +short</code>) and confirm it is the IP you expect before touching anything else.</blockquote>
+
+<h2>What is listening locally</h2>
+<p><span class="level intermediate">Intermediate</span> <code>ss</code> (socket statistics) is the modern replacement for <code>netstat</code>. The flag combination you want is <code>-tulpn</code>: <strong>t</strong>cp, <strong>u</strong>dp, <strong>l</strong>istening, <strong>p</strong>rocess (needs sudo), <strong>n</strong>umeric (no name lookups).</p>
+<pre><code>sudo ss -tulpn
+# -> Netid State  Local Address:Port  Process
+# -> tcp   LISTEN 0.0.0.0:22          users:(("sshd",pid=812))
+# -> tcp   LISTEN 0.0.0.0:80          users:(("nginx",pid=814))
+# -> tcp   LISTEN 127.0.0.1:5432      users:(("postgres",pid=901))
+
+# Is anything on port 8080?
+sudo ss -tulpn | grep :8080
+# -> (empty = nothing is listening there)
+
+# Established connections (not just listeners)
+ss -tn state established
+
+# The old equivalent:
+sudo netstat -tulpn</code></pre>
+<blockquote class="tip">Note the <em>bind address</em>: <code>0.0.0.0:80</code> listens on every interface (reachable from outside), while <code>127.0.0.1:5432</code> listens only on loopback (local-only — the safe default for a database). An app that &ldquo;works locally but not remotely&rdquo; is very often bound to <code>127.0.0.1</code> when it needs <code>0.0.0.0</code>.</blockquote>
+
+<h2>Making HTTP requests: curl and wget</h2>
+<p><span class="level beginner">Beginner</span> <code>curl</code> is the Swiss-army knife for talking to HTTP APIs; <code>wget</code> shines at downloading files (and recursive mirroring).</p>
+<pre><code>curl https://api.example.com/health        # GET, print the body
+curl -I https://example.com                # headers only (HEAD)
+# -> HTTP/2 200
+# -> content-type: text/html
+
+curl -fsSL https://example.com/script.sh   # fail on error, silent, follow redirects
+curl -s -o /dev/null -w "%{http_code}\n" https://example.com   # just the status
+# -> 200
+
+# POST JSON to an API
+curl -X POST https://api.example.com/users \
+  -H "Content-Type: application/json" \
+  -d '{"name":"ada"}'
+
+# Download a file
+wget https://example.com/release.tar.gz
+wget -qO- https://example.com/health       # print to stdout, quiet (like curl)</code></pre>
+<table>
+  <thead><tr><th>curl flag</th><th>Meaning</th></tr></thead>
+  <tbody>
+    <tr><td><code>-I</code></td><td>HEAD request — headers only.</td></tr>
+    <tr><td><code>-f</code></td><td>Fail (non-zero exit) on an HTTP error instead of printing the error page.</td></tr>
+    <tr><td><code>-s</code> / <code>-S</code></td><td>Silent (no progress meter) / but still show errors.</td></tr>
+    <tr><td><code>-L</code></td><td>Follow redirects.</td></tr>
+    <tr><td><code>-H</code></td><td>Add a request header.</td></tr>
+    <tr><td><code>-d</code></td><td>Send a request body (implies POST).</td></tr>
+    <tr><td><code>-w "%{http_code}"</code></td><td>Print selected response info (here, the status code).</td></tr>
+  </tbody>
+</table>
+
+<h2>Exercises</h2>
+<ul>
+  <li>Find your machine's primary IP address and default gateway using only <code>ip</code>.</li>
+  <li>Resolve a domain with <code>dig +short</code>, then resolve it again against a specific public resolver (<code>@1.1.1.1</code>) and confirm the answers match.</li>
+  <li>List every listening TCP port on your machine with the owning process, and identify which are bound to loopback only.</li>
+  <li>Use a single <code>curl</code> command that prints <em>only</em> the HTTP status code of a URL.</li>
+</ul>
+
+<h2>Mini-project: a connectivity probe script</h2>
+<p>Write a script that walks the chain — DNS, reachability, port, HTTP — for a host and port, printing a clear verdict at each step. This is the manual version of a health check and is invaluable when debugging a down service.</p>
+<pre><code>#!/usr/bin/env bash
+set -uo pipefail
+host="${1:?usage: probe.sh HOST [PORT]}"
+port="${2:-443}"
+
+echo "== DNS =="
+ip=$(dig +short "$host" | head -1)
+[ -n "$ip" ] &amp;&amp; echo "resolves to $ip" || { echo "DNS FAILED"; exit 1; }
+
+echo "== Reachability =="
+ping -c1 -W2 "$host" &gt;/dev/null 2&gt;&amp;1 &amp;&amp; echo "ping ok" || echo "ping blocked/failed (may be fine)"
+
+echo "== Port $port =="
+if command -v nc &gt;/dev/null; then
+  nc -z -w3 "$host" "$port" &amp;&amp; echo "port $port open" || echo "port $port CLOSED"
+fi
+
+echo "== HTTP =="
+code=$(curl -s -o /dev/null -w "%{http_code}" "https://$host" || echo "000")
+echo "HTTPS status: $code"</code></pre>
+<pre><code>./probe.sh example.com 443
+# -> == DNS ==
+# -> resolves to 93.184.216.34
+# -> == Reachability ==
+# -> ping ok
+# -> == Port 443 ==
+# -> port 443 open
+# -> == HTTP ==
+# -> HTTPS status: 200</code></pre>
+<p>Run against a broken host and the script tells you exactly which link failed — DNS, routing, the port, or the app — which is the whole discipline of network troubleshooting condensed into one pass.</p>

@@ -1,0 +1,15 @@
+{
+  "name": "tutorials-pwa",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "A unified, installable, offline-capable Tutorial PWA covering Golang, Bun, Web Development, Linux, and DevOps. Static site generated from hand-authored HTML lesson fragments.",
+  "scripts": {
+    "build": "bun run scripts/build-site.js",
+    "dev": "bun run scripts/build-site.js && bun run scripts/serve.js",
+    "serve": "bun run scripts/serve.js",
+    "preview": "bun run scripts/build-site.js && bun run scripts/serve.js",
+    "check": "bun run scripts/check.js"
+  },
+  "engines": { "bun": ">=1.0.0" }
+}

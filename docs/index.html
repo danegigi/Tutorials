@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en" data-base="">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0d1117">
+<meta name="description" content="Dev Tutorials — Golang, Bun, Web Development, Linux and DevOps, offline-ready.">
+<title>Dev Tutorials</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="stylesheet" href="app.css">
+<script>/* set theme before paint to avoid flash */(function(){try{var t=localStorage.getItem('tut.theme');document.documentElement.setAttribute('data-theme',t||'dark');}catch(e){document.documentElement.setAttribute('data-theme','dark');}})();</script>
+
+</head>
+<body class="home">
+<header class="nav">
+  <a class="brand" href="index.html">📚 Dev Tutorials</a>
+  
+  <span class="spacer"></span>
+  <a class="navbtn" href="search.html">🔎 Search</a>
+  <button class="navbtn" id="install-btn" type="button">⬇️ Install</button>
+  <button class="navbtn" id="theme-btn" type="button" aria-label="Toggle theme">🌙 Dark</button>
+</header>
+<main class="wrap wrap-wide">
+  <div class="hero">
+    <div class="logo">📚</div>
+    <h1>Dev Tutorials</h1>
+    <p>A hands-on, offline-ready path through <strong>Golang</strong>, <strong>Bun</strong>, <strong>Web Development</strong>, <strong>Linux</strong>, and <strong>DevOps</strong> — 69 lessons with runnable examples, commands, expected output, common mistakes, exercises, and mini-projects.</p>
+    <div class="progress-overall" data-progress-ids="golang/setup-and-tooling,golang/modules-and-packages,golang/variables-types-functions,golang/control-flow,golang/structs-interfaces-methods,golang/error-handling,golang/concurrency,golang/http-servers-and-apis,golang/files-and-json,golang/testing,golang/database-basics,golang/cli-tools,golang/deployment-basics,bun/what-is-bun,bun/installation,bun/runtime,bun/package-management,bun/typescript,bun/building-apis,bun/file-io,bun/testing,bun/bundling,bun/databases,bun/deployment,web/html-fundamentals,web/css-fundamentals,web/javascript-fundamentals,web/typescript-basics,web/http-and-apis,web/forms-and-validation,web/accessibility,web/responsive-design,web/browser-storage,web/progressive-web-apps,web/service-workers-and-offline,web/web-app-manifests,web/htmx,web/datastar,web/authentication-concepts,web/frontend-backend-integration,linux/shell-basics,linux/filesystem-layout,linux/permissions,linux/users-and-groups,linux/processes-and-services,linux/package-managers,linux/environment-variables,linux/networking-commands,linux/ssh,linux/logs,linux/cron-and-systemd-timers,linux/bash-scripting,linux/troubleshooting,devops/devops-mindset,devops/git-workflows,devops/cicd-concepts,devops/github-actions,devops/docker,devops/docker-compose,devops/kubernetes-basics,devops/reverse-proxies,devops/tls-and-domains,devops/cloud-basics,devops/infrastructure-as-code,devops/monitoring-and-logging,devops/gitops,devops/security-basics,devops/deployment-strategies,devops/incident-response">
+      <div class="bar"><span></span></div>
+      <div class="label">0 / 69 done</div>
+    </div>
+  </div>
+  <div class="section-grid">
+  <a class="section-card" href="golang/index.html" style="--card-accent:#00add8">
+    <div class="ic">🐹</div>
+    <h2>Golang</h2>
+    <p>From setup and syntax to concurrency, HTTP services, testing, and deployment.</p>
+    <div class="meta" data-progress-ids="golang/setup-and-tooling,golang/modules-and-packages,golang/variables-types-functions,golang/control-flow,golang/structs-interfaces-methods,golang/error-handling,golang/concurrency,golang/http-servers-and-apis,golang/files-and-json,golang/testing,golang/database-basics,golang/cli-tools,golang/deployment-basics">
+      <div class="bar"><span></span></div>
+      <span class="count">13 lessons</span>
+    </div>
+  </a>
+  <a class="section-card" href="bun/index.html" style="--card-accent:#fbf0df">
+    <div class="ic">🥟</div>
+    <h2>Bun</h2>
+    <p>The all-in-one JavaScript/TypeScript runtime: install, run, bundle, test, and deploy.</p>
+    <div class="meta" data-progress-ids="bun/what-is-bun,bun/installation,bun/runtime,bun/package-management,bun/typescript,bun/building-apis,bun/file-io,bun/testing,bun/bundling,bun/databases,bun/deployment">
+      <div class="bar"><span></span></div>
+      <span class="count">11 lessons</span>
+    </div>
+  </a>
+  <a class="section-card" href="web/index.html" style="--card-accent:#f472b6">
+    <div class="ic">🌐</div>
+    <h2>Web Development</h2>
+    <p>HTML, CSS, JavaScript, TypeScript, APIs, accessibility, and modern PWAs end to end.</p>
+    <div class="meta" data-progress-ids="web/html-fundamentals,web/css-fundamentals,web/javascript-fundamentals,web/typescript-basics,web/http-and-apis,web/forms-and-validation,web/accessibility,web/responsive-design,web/browser-storage,web/progressive-web-apps,web/service-workers-and-offline,web/web-app-manifests,web/htmx,web/datastar,web/authentication-concepts,web/frontend-backend-integration">
+      <div class="bar"><span></span></div>
+      <span class="count">16 lessons</span>
+    </div>
+  </a>
+  <a class="section-card" href="linux/index.html" style="--card-accent:#f0b429">
+    <div class="ic">🐧</div>
+    <h2>Linux</h2>
+    <p>The command line that runs every server: shell, permissions, processes, networking, scripting.</p>
+    <div class="meta" data-progress-ids="linux/shell-basics,linux/filesystem-layout,linux/permissions,linux/users-and-groups,linux/processes-and-services,linux/package-managers,linux/environment-variables,linux/networking-commands,linux/ssh,linux/logs,linux/cron-and-systemd-timers,linux/bash-scripting,linux/troubleshooting">
+      <div class="bar"><span></span></div>
+      <span class="count">13 lessons</span>
+    </div>
+  </a>
+  <a class="section-card" href="devops/index.html" style="--card-accent:#38bdf8">
+    <div class="ic">🔁</div>
+    <h2>DevOps</h2>
+    <p>Ship software reliably: Git, CI/CD, containers, Kubernetes, IaC, cloud, and observability.</p>
+    <div class="meta" data-progress-ids="devops/devops-mindset,devops/git-workflows,devops/cicd-concepts,devops/github-actions,devops/docker,devops/docker-compose,devops/kubernetes-basics,devops/reverse-proxies,devops/tls-and-domains,devops/cloud-basics,devops/infrastructure-as-code,devops/monitoring-and-logging,devops/gitops,devops/security-basics,devops/deployment-strategies,devops/incident-response">
+      <div class="bar"><span></span></div>
+      <span class="count">16 lessons</span>
+    </div>
+  </a>
+  </div>
+  <p style="color:var(--muted);font-size:13px;text-align:center">Installable &middot; works offline after first visit &middot; your progress and bookmarks stay on this device.</p>
+</main>
+<button type="button" class="fab top" id="fab-top" aria-label="Back to top">↑ Top</button>
+<div class="banner" id="update-banner" role="status">A new version is available.<button type="button">Reload</button></div>
+<div class="banner" id="offline-banner" role="status">You're offline — showing cached lessons.</div>
+<script src="app.js" defer></script>
+</body>
+</html>

@@ -1,0 +1,117 @@
+<p class="lead">On Linux there are no drive letters — every file, every disk, every device hangs off one single tree that starts at <code>/</code>. The Filesystem Hierarchy Standard (FHS) is the shared agreement about what lives where, so that <code>/etc</code> means configuration on Ubuntu, Fedora, and Alpine alike. Knowing the map means you can land on an unfamiliar server and immediately know where to look for config, logs, and data.</p>
+
+<h2>Everything hangs off root</h2>
+<p><span class="level beginner">Beginner</span> <code>/</code> is the root of the tree. Additional disks, USB sticks, and network shares are <em>mounted</em> onto directories inside it rather than appearing as separate letters. <code>df -h</code> shows what is mounted where:</p>
+<pre><code>df -h
+# -> Filesystem      Size  Used Avail Use% Mounted on
+# -> /dev/root        39G   12G   26G  32% /
+# -> /dev/sdb1       100G   8G    87G   9% /data
+# -> tmpfs           2.0G     0  2.0G   0% /dev/shm</code></pre>
+<p>Read it as: the main disk is mounted at <code>/</code>, a second disk at <code>/data</code>, and a RAM-backed filesystem at <code>/dev/shm</code>. From inside the shell it is all one seamless tree.</p>
+
+<h2>The top-level directories</h2>
+<table>
+  <thead><tr><th>Path</th><th>What lives there</th></tr></thead>
+  <tbody>
+    <tr><td><code>/</code></td><td>The root. Everything else is somewhere beneath it.</td></tr>
+    <tr><td><code>/etc</code></td><td>System-wide <strong>configuration</strong> — text files. <code>/etc/ssh/sshd_config</code>, <code>/etc/hosts</code>, <code>/etc/nginx/</code>.</td></tr>
+    <tr><td><code>/var</code></td><td><strong>Variable</strong> data that changes while the system runs: logs (<code>/var/log</code>), caches, spools, databases.</td></tr>
+    <tr><td><code>/usr</code></td><td>Installed <strong>programs and libraries</strong> — <code>/usr/bin</code>, <code>/usr/lib</code>, <code>/usr/share</code>. Read-only in normal use.</td></tr>
+    <tr><td><code>/home</code></td><td>Each regular user's personal directory: <code>/home/ada</code>. Root's home is <code>/root</code>, not here.</td></tr>
+    <tr><td><code>/tmp</code></td><td>Scratch space anyone can write to. <strong>Wiped on reboot</strong> (or periodically) — never store anything you want to keep.</td></tr>
+    <tr><td><code>/proc</code></td><td>A <em>virtual</em> filesystem exposing the kernel and running processes as files. Not on disk.</td></tr>
+    <tr><td><code>/dev</code></td><td>Device nodes: disks (<code>/dev/sda</code>), terminals, and special files (<code>/dev/null</code>, <code>/dev/random</code>).</td></tr>
+    <tr><td><code>/opt</code></td><td>Self-contained third-party software that does not follow the usual split, e.g. <code>/opt/app</code>.</td></tr>
+    <tr><td><code>/bin</code>, <code>/sbin</code>, <code>/lib</code></td><td>Core commands and libraries; on modern distros these are symlinks into <code>/usr</code>.</td></tr>
+  </tbody>
+</table>
+
+<h3>/etc — where configuration lives</h3>
+<p><span class="level beginner">Beginner</span> When something is misconfigured, <code>/etc</code> is almost always where the fix is. The files are plain text you can read and edit (with <code>sudo</code>).</p>
+<pre><code>ls /etc | head
+# -> apt  cron.d  fstab  hosts  hostname  nginx  passwd  ssh  systemd
+
+cat /etc/hostname
+# -> web-01
+
+grep -v '^#' /etc/ssh/sshd_config | grep -v '^$' | head -3
+# -> Port 22
+# -> PermitRootLogin no
+# -> PasswordAuthentication no</code></pre>
+<blockquote class="tip"><code>/etc/fstab</code> declares which filesystems mount at boot, and <code>/etc/hosts</code> maps names to IPs locally (checked before DNS). Both are first stops when a disk or a hostname misbehaves.</blockquote>
+
+<h3>/var — data that grows</h3>
+<p>Anything that accumulates while the machine runs lives under <code>/var</code>. The one you will visit most is <code>/var/log</code>:</p>
+<pre><code>ls /var/log
+# -> auth.log  nginx  syslog  journal  dpkg.log
+
+du -sh /var/log/*
+# -> 12M   /var/log/nginx
+# -> 48M   /var/log/journal
+# ->  3M   /var/log/syslog</code></pre>
+<blockquote class="warn"><strong>Common mistake:</strong> a disk that fills to 100% is very often <code>/var/log</code> or <code>/var/lib/docker</code> growing unchecked — the system then fails in confusing ways (cannot write sessions, cannot start services). Diagnose with <code>df -h</code> to find the full filesystem, then <code>du -sh /var/* | sort -h</code> to find the offender. The fix is logrotate or pruning images, never deleting files blindly.</blockquote>
+
+<h3>/proc — the kernel as files</h3>
+<p><span class="level advanced">Advanced</span> <code>/proc</code> is not stored on any disk; the kernel generates it on the fly. Reading these files is how tools like <code>ps</code> and <code>top</code> actually work:</p>
+<pre><code>cat /proc/cpuinfo | grep -c ^processor
+# -> 4                      (number of CPU cores)
+
+cat /proc/meminfo | head -2
+# -> MemTotal:        4030152 kB
+# -> MemFree:          812400 kB
+
+cat /proc/loadavg
+# -> 0.14 0.09 0.05 1/312 20481    (1/5/15-min load averages)
+
+ls /proc/self/   # the directory for the process reading it right now
+# -> cmdline  cwd  environ  fd  limits  status</code></pre>
+
+<h3>/dev — devices and the useful special files</h3>
+<pre><code>command 2&gt;/dev/null        # /dev/null swallows output you do not want
+head -c 16 /dev/urandom | base64   # a source of random bytes
+# -> 3Qx9pLm2vTkY8sRa1bZc==
+
+ls -l /dev/sda*            # the first disk and its partitions
+# -> brw-rw---- 1 root disk 8, 0 Oct  8 /dev/sda
+# -> brw-rw---- 1 root disk 8, 1 Oct  8 /dev/sda1</code></pre>
+
+<h2>Where should YOUR app go?</h2>
+<p>A deployed application typically splits across the tree the FHS way:</p>
+<table>
+  <thead><tr><th>Thing</th><th>Conventional location</th></tr></thead>
+  <tbody>
+    <tr><td>The binary / code</td><td><code>/opt/myapp</code> or <code>/usr/local/bin</code></td></tr>
+    <tr><td>Config</td><td><code>/etc/myapp/config.yaml</code></td></tr>
+    <tr><td>Logs</td><td><code>/var/log/myapp/</code> (or just use <code>journald</code>)</td></tr>
+    <tr><td>Mutable data (uploads, DB)</td><td><code>/var/lib/myapp/</code></td></tr>
+    <tr><td>Runtime files (PID, sockets)</td><td><code>/run/myapp/</code></td></tr>
+  </tbody>
+</table>
+
+<h2>Exercises</h2>
+<ul>
+  <li>Run <code>df -h</code> and identify which filesystem your home directory lives on.</li>
+  <li>Find your machine's total RAM and free RAM from <code>/proc/meminfo</code> without using <code>free</code>.</li>
+  <li>Use <code>du -sh /var/* 2&gt;/dev/null | sort -h</code> to find the largest consumer under <code>/var</code>.</li>
+  <li>Read <code>/etc/hosts</code> and add an entry (with <code>sudo</code>) mapping <code>myapp.local</code> to <code>127.0.0.1</code>, then <code>ping myapp.local</code>.</li>
+</ul>
+
+<h2>Mini-project: lay out a deployment the FHS way</h2>
+<p>Place a fictional app <code>widgetd</code> across the tree following the conventions above, then confirm each piece landed where it belongs.</p>
+<pre><code>sudo mkdir -p /opt/widgetd /etc/widgetd /var/log/widgetd /var/lib/widgetd
+sudo tee /etc/widgetd/config.yaml &gt;/dev/null &lt;&lt;'EOF'
+port: 8080
+data_dir: /var/lib/widgetd
+EOF
+echo '#!/bin/sh\necho widgetd stub' | sudo tee /opt/widgetd/widgetd &gt;/dev/null
+sudo chmod +x /opt/widgetd/widgetd
+
+# Verify the layout
+find /opt/widgetd /etc/widgetd /var/log/widgetd /var/lib/widgetd
+# -> /opt/widgetd
+# -> /opt/widgetd/widgetd
+# -> /etc/widgetd
+# -> /etc/widgetd/config.yaml
+# -> /var/log/widgetd
+# -> /var/lib/widgetd</code></pre>
+<p>Now any colleague — or any monitoring tool — can find this app's config, data, and logs on the first guess, because it follows the same map every other service does.</p>

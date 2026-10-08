@@ -1,0 +1,143 @@
+<p class="lead">Bun's file API is built on the Web <code>Blob</code> interface: <code>Bun.file(path)</code> returns a lazy handle and <code>Bun.write()</code> writes almost anything to almost anywhere. This lesson covers reading, writing, incremental writers, streaming, the transparent <code>s3://</code> protocol, the <code>Bun.$</code> shell, and spawning subprocesses with <code>Bun.spawn</code>.</p>
+
+<h2>Reading files</h2>
+<p><span class="level beginner">Beginner</span> <code>Bun.file(path)</code> is lazy — nothing is read from disk until you call a method on it. The handle is a <code>Blob</code>, so it has the standard reader methods plus metadata.</p>
+<pre><code>const file = Bun.file("./data.json");   // no read yet
+
+await file.text();          // string
+await file.json();          // parsed JSON
+await file.bytes();         // Uint8Array
+await file.arrayBuffer();   // ArrayBuffer
+file.stream();              // ReadableStream (for large files)
+
+// metadata without a full read
+file.size;                  // bytes
+file.type;                  // MIME type inferred from the extension
+await file.exists();        // boolean</code></pre>
+
+<h3>Partial reads</h3>
+<pre><code>const head = Bun.file("big.log").slice(0, 1024);   // first 1 KB only
+console.log(await head.text());</code></pre>
+
+<h2>Writing files</h2>
+<p><code>Bun.write(dest, data)</code> is the universal writer. <code>dest</code> is a path, a <code>BunFile</code>, or a file descriptor; <code>data</code> is a string, bytes, a <code>Blob</code>, a <code>Response</code>, or another <code>BunFile</code>.</p>
+<pre><code>await Bun.write("out.txt", "Hello!");                       // string
+await Bun.write("copy.json", Bun.file("data.json"));         // copy a file
+await Bun.write("page.html", await fetch("https://example.com"));  // save a response
+await Bun.write("bytes.bin", new Uint8Array([1, 2, 3]));     // raw bytes</code></pre>
+<blockquote class="tip"><code>Bun.write</code> consumes a <code>Blob</code>/<code>File</code>/<code>Response</code> as a stream — it never materializes the whole payload in a JS string first. For a large upload or download, pass the <code>File</code>/<code>Response</code> straight in; do <strong>not</strong> call <code>await res.arrayBuffer()</code> and then write the buffer, which pulls everything into memory.</blockquote>
+
+<h2>Incremental writing</h2>
+<p>For streaming output or many small appends, use a writer so you aren't opening the file repeatedly:</p>
+<pre><code>const writer = Bun.file("log.txt").writer();
+writer.write("line 1\n");
+writer.write("line 2\n");
+await writer.flush();     // push buffered data to disk
+writer.write("line 3\n");
+await writer.end();       // flush and close</code></pre>
+
+<h2>Standard streams</h2>
+<pre><code>const input = await Bun.stdin.text();          // read all of stdin
+await Bun.write(Bun.stdout, "to stdout\n");
+await Bun.write(Bun.stderr, "to stderr\n");</code></pre>
+
+<h2>The s3:// protocol</h2>
+<p><span class="level intermediate">Intermediate</span> The same <code>Bun.file</code> and <code>fetch</code> APIs transparently target S3-compatible storage, so code written against local files works unchanged against the cloud:</p>
+<pre><code>// Read an S3 object with the exact same API as a local file
+const remote = Bun.file("s3://my-bucket/report.json");
+const data = await remote.json();
+
+// fetch works too
+const res = await fetch("s3://my-bucket/report.json");
+
+// Write back to S3
+await Bun.write("s3://my-bucket/out.json", JSON.stringify({ ok: true }));</code></pre>
+<p>Credentials come from <code>S3_*</code> / <code>AWS_*</code> environment variables, or an explicit <code>Bun.S3Client</code> (see the Building APIs lesson for presigned URLs and multipart uploads).</p>
+
+<h2>Bun.$ — shell scripting</h2>
+<p><code>Bun.$</code> is a cross-platform shell as a tagged template. Same behavior on macOS, Linux, and Windows (no <code>bash</code> needed), and interpolated values are escaped automatically — safe against injection.</p>
+<pre><code>import { $ } from "bun";
+
+await $`echo Hello from the shell`;                 // run, inherit stdout
+const branch = (await $`git rev-parse --abbrev-ref HEAD`.text()).trim();  // capture
+const pkg = await $`cat package.json`.json();        // parse JSON output
+
+const dir = "my files";
+await $`ls ${dir}`;                                  // runs: ls 'my files'  (escaped)
+
+await $`cat access.log | grep ERROR &gt; errors.txt`;   // pipes &amp; redirection
+
+const { exitCode, stderr } = await $`false`.nothrow();   // don't throw on non-zero</code></pre>
+<blockquote class="warn"><strong>Common mistake:</strong> building a shell command by string concatenation — <code>$(\`rm \${userInput}\`)</code> as a plain string invites injection. With <code>Bun.$</code>, interpolated values are escaped automatically, so <code>$\`ls ${dir}\`</code> is safe even when <code>dir</code> contains spaces or shell metacharacters. Never bypass that by passing a pre-built string; always let <code>${...}</code> interpolation do the escaping.</blockquote>
+
+<h2>Bun.spawn — subprocesses</h2>
+<pre><code>// Async spawn, capture stdout
+const proc = Bun.spawn(["echo", "hello"], { stdout: "pipe" });
+const out = await new Response(proc.stdout).text();
+await proc.exited;                       // wait for exit
+console.log(proc.exitCode, out);
+
+// Synchronous spawn
+const { stdout, exitCode } = Bun.spawnSync(["git", "status", "--short"]);
+console.log(exitCode, stdout.toString());
+
+// Feed stdin
+const cat = Bun.spawn(["cat"], { stdin: "pipe", stdout: "pipe" });
+cat.stdin.write("piped input\n");
+cat.stdin.end();
+console.log(await new Response(cat.stdout).text());</code></pre>
+<p>When to use which: <code>Bun.$</code> for shell-style pipelines and quick commands; <code>Bun.spawn</code> when you need fine control over stdio, environment, or a long-running child process you stream from.</p>
+
+<h2>Common mistakes</h2>
+<blockquote class="warn"><strong>Common mistake:</strong> loading a large file entirely into memory. <code>await Bun.file("huge.csv").text()</code> on a multi-GB file will exhaust RAM — use <code>.stream()</code> (or <code>.slice()</code> for a range) and process chunks instead. A second trap: assuming <code>Bun.file(path)</code> read the file — it didn't; it's lazy, and errors (missing file, permission denied) surface only when you call <code>.text()</code>/<code>.json()</code>/etc., so wrap those in <code>try/catch</code>, not the <code>Bun.file()</code> call. A third: passing an untrusted user string directly as a file path — that's an arbitrary-read primitive; validate/allow-list the path first.</blockquote>
+
+<h2>Exercises</h2>
+<ul>
+  <li>Read a JSON file with <code>Bun.file(...).json()</code>, modify a field, and write it back with <code>Bun.write</code>.</li>
+  <li>Use a writer to append 1,000 numbered lines to a log file with a single <code>flush</code>/<code>end</code>.</li>
+  <li>Use <code>Bun.$</code> to capture <code>git log --oneline -5</code> and parse it into an array of <code>{ sha, msg }</code>.</li>
+  <li>Spawn <code>sort</code> as a subprocess, feed it unsorted lines on stdin, and print the sorted stdout.</li>
+</ul>
+
+<h2>Mini-project: a streaming upload endpoint + log tailer</h2>
+<p>Two production-shaped file patterns. First, an upload endpoint that streams a multipart file straight to disk (or S3) without buffering the whole body — the right way to accept large uploads:</p>
+<pre><code>Bun.serve({
+  routes: {
+    "/upload": {
+      POST: async (req) =&gt; {
+        const form = await req.formData();
+        const file = form.get("file");
+        if (!(file instanceof File)) return Response.json({ error: "no file" }, { status: 400 });
+
+        // Guard size + type BEFORE touching disk
+        if (file.size &gt; 25 * 1024 * 1024) return Response.json({ error: "too large" }, { status: 413 });
+        const ALLOWED = ["image/png", "image/jpeg", "application/pdf"];
+        if (!ALLOWED.includes(file.type)) return Response.json({ error: "bad type" }, { status: 415 });
+
+        // Stream the Blob to disk — Bun.write consumes it without a full in-memory copy
+        const key = `uploads/${crypto.randomUUID()}-${file.name}`;
+        const bytesWritten = await Bun.write(key, file);
+        // Same call works for S3: await Bun.write(`s3://bucket/${key}`, file);
+        return Response.json({ key, bytes: bytesWritten }, { status: 201 });
+      },
+    },
+  },
+});</code></pre>
+<p>Second, a <code>tail -f</code> style follower that prints new lines as they're appended, tracking the byte offset so it never re-reads what it's seen:</p>
+<pre><code>// tail.ts  —  usage: bun tail.ts app.log
+const path = Bun.argv[2] ?? "app.log";
+let offset = (await Bun.file(path).stat()).size;   // start at end of file
+
+setInterval(async () =&gt; {
+  const file = Bun.file(path);
+  const size = (await file.stat()).size;
+  if (size &gt; offset) {
+    const chunk = await file.slice(offset, size).text();   // only the new bytes
+    process.stdout.write(chunk);
+    offset = size;
+  } else if (size &lt; offset) {
+    offset = 0;                                            // file was truncated/rotated
+  }
+}, 500);
+console.log(`following ${path}  (Ctrl-C to stop)`);</code></pre>
+<p>Together they show the core discipline of file I/O at scale: validate before you read, stream instead of buffering, and track offsets so you process each byte exactly once. Swap the local path for an <code>s3://</code> URL and the upload code runs unchanged against the cloud.</p>

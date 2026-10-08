@@ -1,0 +1,97 @@
+<p class="lead">Testing ships with the toolchain — no framework to choose. Write <code>_test.go</code> files, run <code>go test</code>, and use table-driven tests, subtests, benchmarks, and fuzzing, all from the one <code>testing</code> package.</p>
+
+<h2>Your first test</h2>
+<pre><code>// math.go
+func Add(a, b int) int { return a + b }
+
+// math_test.go  (same package, file ends in _test.go)
+package main
+
+import "testing"
+
+func TestAdd(t *testing.T) {
+	got := Add(2, 3)
+	if got != 5 {
+		t.Errorf("Add(2,3) = %d; want 5", got)
+	}
+}</code></pre>
+<pre><code>go test ./...            # run everything
+go test -v ./...         # verbose: show each test
+go test -run TestAdd     # run tests matching a regex
+# → ok  example.com/myapp  0.002s</code></pre>
+<blockquote class="tip"><code>t.Errorf</code> records a failure and continues; <code>t.Fatalf</code> records and stops the test immediately (use it when later assertions would panic, e.g. after a nil check).</blockquote>
+
+<h2>Table-driven tests</h2>
+<p><span class="level beginner">Beginner</span> The idiomatic Go pattern: one test, a table of cases, each run as a named subtest.</p>
+<pre><code>func TestSlugify(t *testing.T) {
+	cases := []struct {
+		name, in, want string
+	}{
+		{"spaces", "Hello World", "hello-world"},
+		{"punct", "A, B & C!", "a-b-c"},
+		{"empty", "", ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := Slugify(tc.in); got != tc.want {
+				t.Errorf("Slugify(%q) = %q; want %q", tc.in, got, tc.want)
+			}
+		})
+	}
+}
+// go test -run TestSlugify/punct   ← run just one case</code></pre>
+
+<h2>Coverage</h2>
+<pre><code>go test -cover ./...                       # summary percentage
+go test -coverprofile=cover.out ./...
+go tool cover -html=cover.out              # open an annotated source view</code></pre>
+
+<h2>Benchmarks</h2>
+<p><span class="level intermediate">Intermediate</span> Benchmark functions start with <code>Benchmark</code> and loop <code>b.N</code> times; the framework tunes <code>N</code> until the timing is stable.</p>
+<pre><code>func BenchmarkSlugify(b *testing.B) {
+	for i := 0; i &lt; b.N; i++ {
+		Slugify("Hello World")
+	}
+}</code></pre>
+<pre><code>go test -bench=. -benchmem ./...
+# BenchmarkSlugify-8   3185402   376 ns/op   64 B/op   2 allocs/op</code></pre>
+<blockquote class="warn"><strong>Common mistake:</strong> the compiler optimizing your benchmark away because the result is unused. Assign it to a package-level sink (<code>var sink string; sink = Slugify(...)</code>) so the work can't be eliminated.</blockquote>
+
+<h2>Fuzzing</h2>
+<p><span class="level advanced">Advanced</span> A fuzz test feeds randomized inputs to find panics and property violations:</p>
+<pre><code>func FuzzSlugify(f *testing.F) {
+	f.Add("Hello World")              // seed corpus
+	f.Fuzz(func(t *testing.T, s string) {
+		out := Slugify(s)
+		if strings.ContainsAny(out, " !&amp;") {
+			t.Errorf("slug %q still has forbidden chars", out)
+		}
+	})
+}
+// go test -fuzz=FuzzSlugify -fuzztime=30s</code></pre>
+
+<h2>Test helpers and setup</h2>
+<pre><code>func TestMain(m *testing.M) {   // once, around all tests in the package
+	setup()
+	code := m.Run()
+	teardown()
+	os.Exit(code)
+}
+
+func mustOpen(t *testing.T, p string) *os.File {
+	t.Helper()                    // report failures at the CALLER's line
+	f, err := os.Open(p)
+	if err != nil { t.Fatalf("open %s: %v", p, err) }
+	t.Cleanup(func() { f.Close() })  // runs when the test ends
+	return f
+}</code></pre>
+
+<h2>Exercises</h2>
+<ul>
+  <li>Convert three separate <code>TestAdd*</code> functions into one table-driven test with named subtests.</li>
+  <li>Benchmark two string-concatenation strategies (<code>+</code> vs <code>strings.Builder</code>) with <code>-benchmem</code> and compare allocs.</li>
+  <li>Write a fuzz test for a parser and let it run 30 seconds; fix any panic it finds.</li>
+</ul>
+
+<h2>Mini-project: test the TODO API</h2>
+<p>Take the HTTP TODO API from the HTTP lesson and test every endpoint using <code>net/http/httptest</code> — spin up the handler in-process, fire requests, and assert on status codes and JSON bodies. Add a table of cases covering success, 404, and bad-input paths, and check coverage with <code>-coverprofile</code>.</p>

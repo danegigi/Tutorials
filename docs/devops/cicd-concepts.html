@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en" data-base="../">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0d1117">
+<meta name="description" content="Dev Tutorials — Golang, Bun, Web Development, Linux and DevOps, offline-ready.">
+<title>CI/CD Concepts — DevOps</title>
+<link rel="manifest" href="../manifest.webmanifest">
+<link rel="icon" href="../icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="../icon-192.png">
+<link rel="stylesheet" href="../app.css">
+<script>/* set theme before paint to avoid flash */(function(){try{var t=localStorage.getItem('tut.theme');document.documentElement.setAttribute('data-theme',t||'dark');}catch(e){document.documentElement.setAttribute('data-theme','dark');}})();</script>
+
+</head>
+<body class="lesson">
+<header class="nav">
+  <a class="brand" href="../index.html">📚 Dev Tutorials</a>
+  <span class="crumb">CI/CD Concepts — DevOps</span>
+  <span class="spacer"></span>
+  <a class="navbtn" href="../search.html">🔎 Search</a>
+  <button class="navbtn" id="install-btn" type="button">⬇️ Install</button>
+  <button class="navbtn" id="theme-btn" type="button" aria-label="Toggle theme">🌙 Dark</button>
+</header>
+<main class="wrap lesson-body">
+  <h1 class="page-title">CI/CD Concepts</h1>
+  <div class="lesson-tools" data-lesson-id="devops/cicd-concepts">
+    <button id="done-btn" type="button" aria-pressed="false">○ Mark complete</button>
+    <button id="mark-btn" type="button" aria-pressed="false">☆ Bookmark</button>
+    <a class="navbtn" href="index.html" style="margin-left:auto">All DevOps lessons →</a>
+  </div>
+<nav class="toc" aria-label="On this page"><strong>On this page</strong><ul>
+<li class="lvl2"><a href="#the-three-cs-precisely">The three C's, precisely</a></li>
+<li class="lvl2"><a href="#anatomy-of-a-pipeline">Anatomy of a pipeline</a></li>
+<li class="lvl2"><a href="#artifacts-and-immutability">Artifacts and immutability</a></li>
+<li class="lvl2"><a href="#environments-and-promotion">Environments and promotion</a></li>
+<li class="lvl2"><a href="#what-belongs-in-ci">What belongs in CI</a></li>
+<li class="lvl2"><a href="#pipeline-as-code">Pipeline as code</a></li>
+<li class="lvl2"><a href="#rollbacks">Rollbacks</a></li>
+<li class="lvl2"><a href="#exercises">Exercises</a></li>
+<li class="lvl2"><a href="#mini-project-design-a-pipeline">Mini-project: design a pipeline</a></li>
+</ul></nav>
+<p class="lead">CI/CD is the automation that carries code from a commit to production. The three terms get blurred — continuous integration, continuous delivery, and continuous deployment are distinct stages, and knowing the difference tells you what to automate next.</p>
+
+<h2 id="the-three-cs-precisely">The three C's, precisely</h2>
+<table>
+  <thead><tr><th>Term</th><th>What's automated</th><th>Human gate?</th></tr></thead>
+  <tbody>
+    <tr><td><strong>Continuous Integration</strong></td><td>Every push is built &amp; tested, merged to a shared branch often</td><td>—</td></tr>
+    <tr><td><strong>Continuous Delivery</strong></td><td>Every passing build is <em>deployable</em> and pushed to staging automatically</td><td>Yes — a human clicks "deploy to prod"</td></tr>
+    <tr><td><strong>Continuous Deployment</strong></td><td>Every passing build goes to production automatically</td><td>No — fully automated</td></tr>
+  </tbody>
+</table>
+<p><span class="level beginner">Beginner</span> CI is the foundation everyone needs. Delivery vs deployment differ only by whether a human approves the final production step. Many teams do CD-to-staging + one-click prod (delivery); mature teams with strong tests and monitoring go all the way to continuous deployment.</p>
+
+<h2 id="anatomy-of-a-pipeline">Anatomy of a pipeline</h2>
+<pre><code>push/PR → ┌─────────┐  ┌──────┐  ┌───────┐  ┌─────────┐  ┌────────┐
+          │  build  │→ │ test │→ │ scan  │→ │ package │→ │ deploy │
+          └─────────┘  └──────┘  └───────┘  └─────────┘  └────────┘
+             compile    unit +    lint,      build the    staging →
+             deps       integ.    SAST, deps  artifact/     (gate) →
+                                   vuln scan   image         prod</code></pre>
+<p>Each stage is a gate: if it fails, the pipeline stops and nothing downstream runs. The ordering puts fast, cheap checks first (lint, unit tests) so failures surface in seconds, not after a slow build.</p>
+
+<h2 id="artifacts-and-immutability">Artifacts and immutability</h2>
+<p><span class="level intermediate">Intermediate</span> A pipeline produces an <strong>artifact</strong> — a container image, a binary, a bundle — built <em>once</em> and promoted unchanged through environments. The same image you tested in staging is the one that runs in prod.</p>
+<blockquote class="warn"><strong>Common mistake:</strong> rebuilding the artifact for each environment ("build for staging", then "build for prod"). Now staging and prod are different binaries and you've tested the wrong thing. Build once, tag it (ideally with the commit SHA), and promote that exact artifact. Config differs per environment; the artifact does not.</blockquote>
+
+<h2 id="environments-and-promotion">Environments and promotion</h2>
+<pre><code>dev  →  staging  →  production
+       (auto)      (gated / auto)
+
+# Config injected per environment (not baked into the artifact):
+#   DATABASE_URL, API keys, feature flags → from env / secrets store</code></pre>
+
+<h2 id="what-belongs-in-ci">What belongs in CI</h2>
+<ul>
+  <li><strong>Build</strong> — compile, resolve dependencies (with caching so it's fast).</li>
+  <li><strong>Test</strong> — unit first (seconds), then integration, then slower E2E.</li>
+  <li><strong>Quality gates</strong> — formatting, linting, type-checking.</li>
+  <li><strong>Security</strong> — dependency vulnerability scan, static analysis (SAST), image scan.</li>
+  <li><strong>Package</strong> — build the immutable artifact and push to a registry.</li>
+</ul>
+<blockquote class="tip">Keep CI <em>fast</em> — a pipeline that takes 40 minutes gets bypassed and resented. Cache dependencies, parallelize test suites, run only affected tests where possible, and fail fast on the cheapest checks. Aim for under ~10 minutes to green.</blockquote>
+
+<h2 id="pipeline-as-code">Pipeline as code</h2>
+<p>Modern CI config lives in the repo (GitHub Actions YAML, GitLab CI, etc.) — versioned, reviewed, and changed via PR like any other code. The next lesson implements a real pipeline in GitHub Actions.</p>
+
+<h2 id="rollbacks">Rollbacks</h2>
+<p>CD is only safe if rolling back is trivial. Because artifacts are immutable and tagged, rollback is "redeploy the previous image tag" — fast and predictable. If rolling back is scary, you don't really have continuous delivery.</p>
+
+<h2 id="exercises">Exercises</h2>
+<ul>
+  <li>Classify three real projects you know as doing CI only, continuous delivery, or continuous deployment — and justify it.</li>
+  <li>Draw the stages of a pipeline for a web app and mark which ones should fail fastest.</li>
+  <li>Explain, with the "build once" principle, why rebuilding per environment is a bug.</li>
+</ul>
+
+<h2 id="mini-project-design-a-pipeline">Mini-project: design a pipeline</h2>
+<p>For an app from the Go or Bun section, design (on paper or as a diagram) a full CI/CD pipeline: ordered stages with their gates, where the immutable artifact is built and tagged with the commit SHA, how it's promoted dev→staging→prod, where config/secrets are injected, and the exact rollback step. The next lesson turns this design into runnable GitHub Actions YAML.</p>
+
+<section class="further"><h2 id="further-reading">Further reading</h2>
+<p>Official documentation for the tools and APIs covered on this page:</p>
+<ul class="further-list"><li><a href="https://martinfowler.com/bliki/ContinuousDelivery.html" target="_blank" rel="noopener">Continuous delivery (Fowler) ↗</a></li></ul></section>
+  <nav class="pager">
+<a class="prev" href="git-workflows.html"><small>Previous</small>🔁 Git Workflows</a>
+<a class="next" href="github-actions.html"><small>Next</small>🔁 GitHub Actions</a>
+  </nav>
+</main>
+<button type="button" class="fab top" id="fab-top" aria-label="Back to top">↑ Top</button>
+<div class="banner" id="update-banner" role="status">A new version is available.<button type="button">Reload</button></div>
+<div class="banner" id="offline-banner" role="status">You're offline — showing cached lessons.</div>
+<script src="../app.js" defer></script>
+</body>
+</html>

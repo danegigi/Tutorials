@@ -1,0 +1,56 @@
+<p class="lead">Security in DevOps ("DevSecOps") means building safeguards into the pipeline rather than bolting them on at the end. The high-leverage habits: least privilege, real secrets management, scanning dependencies and images, and securing the supply chain.</p>
+
+<h2>Least privilege, everywhere</h2>
+<p><span class="level beginner">Beginner</span> Every identity — a human, a CI job, a container, a cloud role — should have the <em>minimum</em> permissions it needs and nothing more. When something is compromised, least privilege is what limits the damage.</p>
+<pre><code># Bad: a CI role with AdministratorAccess
+# Good: a role scoped to exactly the actions it performs
+{ "Effect": "Allow", "Action": ["ecr:PutImage", "ecs:UpdateService"], "Resource": "arn:...:service/myapp" }</code></pre>
+<blockquote class="tip">Containers: run as a non-root user, drop Linux capabilities, mount filesystems read-only where possible. A distroless or minimal base image has no shell and far fewer packages — less to exploit.</blockquote>
+
+<h2>Secrets management</h2>
+<p>Secrets are credentials: DB passwords, API keys, signing keys, tokens. They must never live in source control or baked into images.</p>
+<blockquote class="warn"><strong>The cardinal sins:</strong> committing a <code>.env</code> with real keys, hard-coding a password in code, printing a secret in CI logs, or baking credentials into a Docker image layer (they persist in the image history even if a later layer "removes" them). If a secret is ever committed, consider it compromised — <em>rotate it</em>, don't just delete the commit.</blockquote>
+<pre><code># Inject secrets at runtime from a manager, never from the repo:
+#   AWS Secrets Manager / SSM, HashiCorp Vault, Kubernetes Secrets,
+#   GitHub Actions Secrets, Docker/Compose secrets.
+# gitignore .env, scan the repo for leaked secrets (gitleaks, trufflehog) in CI.</code></pre>
+
+<h2>Scanning: dependencies, code, images</h2>
+<p><span class="level intermediate">Intermediate</span> Automate three scans in the pipeline:</p>
+<table>
+  <thead><tr><th>Scan</th><th>Finds</th><th>Tools</th></tr></thead>
+  <tbody>
+    <tr><td>Dependency (SCA)</td><td>Known CVEs in your libraries</td><td>Dependabot, <code>npm/bun audit</code>, Trivy, Snyk</td></tr>
+    <tr><td>Static analysis (SAST)</td><td>Vulnerable patterns in your own code</td><td>CodeQL, Semgrep, <code>gosec</code></td></tr>
+    <tr><td>Image scan</td><td>CVEs in OS packages &amp; layers</td><td>Trivy, Grype, Docker Scout</td></tr>
+    <tr><td>Secret scan</td><td>Leaked credentials in the repo</td><td>gitleaks, trufflehog</td></tr>
+  </tbody>
+</table>
+<pre><code># In CI, fail the build on high/critical findings:
+trivy image --severity HIGH,CRITICAL --exit-code 1 ghcr.io/me/app:${{ github.sha }}</code></pre>
+
+<h2>Supply-chain security</h2>
+<p><span class="level advanced">Advanced</span> Attacks increasingly target the build process, not the running app. Defenses:</p>
+<ul>
+  <li><strong>Pin dependencies</strong> to exact versions + checksums (lockfiles); pin CI actions to a commit SHA, not a tag.</li>
+  <li><strong>Watch for typosquats</strong> — a package named <code>reqwests</code> or <code>colorsama</code> is a red flag.</li>
+  <li><strong>SBOM</strong> — generate a Software Bill of Materials so you know exactly what's in a build.</li>
+  <li><strong>Sign artifacts</strong> (e.g. with cosign) and verify signatures before deploy.</li>
+</ul>
+<blockquote class="warn"><strong>Common mistake:</strong> running <code>curl … | bash</code> from an unpinned URL in a build, or using a Docker base tag like <code>:latest</code>. Both pull mutable, unverified content into your pipeline. Pin to digests (<code>image@sha256:…</code>) so a build is reproducible and can't be swapped under you.</blockquote>
+
+<h2>The web app basics still apply</h2>
+<p>HTTPS everywhere, HttpOnly+Secure+SameSite cookies, input validation and parameterized queries (no SQL injection), output encoding (no XSS), and a security headers set (CSP, HSTS). The <a href="https://owasp.org/www-project-top-ten/" target="_blank" rel="noopener">OWASP Top Ten</a> is the canonical checklist.</p>
+
+<h2>Hardening checklists</h2>
+<p>Don't invent your hardening from scratch — the <a href="https://www.cisecurity.org/cis-benchmarks" target="_blank" rel="noopener">CIS Benchmarks</a> give vetted, step-by-step hardening guides for Linux, Docker, Kubernetes, and the major clouds. Run <code>kube-bench</code>/<code>docker-bench</code> to check against them automatically.</p>
+
+<h2>Exercises</h2>
+<ul>
+  <li>Scan a container image with Trivy and triage the HIGH/CRITICAL findings.</li>
+  <li>Add gitleaks to CI and confirm it fails the build on a planted fake secret.</li>
+  <li>Rewrite an over-privileged IAM/CI role down to the exact actions it needs.</li>
+</ul>
+
+<h2>Mini-project: secure the pipeline</h2>
+<p>Harden the GitHub Actions pipeline from the earlier lesson: add dependency + image + secret scanning that fails on critical findings, pin every action and base image to a digest, inject all secrets from a manager (none in the repo), run the container as non-root with a read-only root filesystem, and generate an SBOM artifact. Verify with a scan report showing zero criticals.</p>

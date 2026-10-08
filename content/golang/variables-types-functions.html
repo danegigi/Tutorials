@@ -1,0 +1,100 @@
+<p class="lead">Go's type system is small and explicit. Learn declarations and zero values, the basic and composite types, and functions — including multiple returns and closures, two features you'll use constantly.</p>
+
+<h2>Declaring variables</h2>
+<p><span class="level beginner">Beginner</span> Three forms, from most to least explicit:</p>
+<pre><code>var count int = 10      // full form
+var count = 10          // type inferred from the value
+count := 10             // short form — only inside functions
+
+// Zero values: every type has one, so there are no "uninitialized" variables
+var n int        // 0
+var s string     // "" (empty, never nil)
+var ok bool      // false
+var p *int       // nil</code></pre>
+<blockquote class="warn"><strong>Common mistake:</strong> declaring a variable you never use. Go makes this a <em>compile error</em> ("declared and not used"), not a warning. Same for unused imports. This is deliberate — it keeps code clean — but surprises newcomers.</blockquote>
+
+<h2>Basic types</h2>
+<table>
+  <thead><tr><th>Group</th><th>Types</th></tr></thead>
+  <tbody>
+    <tr><td>Integers</td><td><code>int</code>, <code>int8/16/32/64</code>, <code>uint</code>, <code>byte</code> (=uint8), <code>rune</code> (=int32)</td></tr>
+    <tr><td>Floats</td><td><code>float32</code>, <code>float64</code> (use float64 by default)</td></tr>
+    <tr><td>Text</td><td><code>string</code> (immutable UTF-8 bytes)</td></tr>
+    <tr><td>Boolean</td><td><code>bool</code></td></tr>
+  </tbody>
+</table>
+<pre><code>// Conversions are always explicit — Go never converts silently
+var i int = 42
+var f float64 = float64(i)
+var b byte = byte(i)</code></pre>
+
+<h2>Composite types</h2>
+<pre><code>// Arrays: fixed length, value type
+var a [3]int = [3]int{1, 2, 3}
+
+// Slices: dynamic view over an array — the workhorse
+nums := []int{1, 2, 3}
+nums = append(nums, 4)        // → [1 2 3 4]
+sub := nums[1:3]              // → [2 3] (shares backing array!)
+
+// Maps: hash tables
+ages := map[string]int{"alice": 30}
+ages["bob"] = 25
+v, ok := ages["carol"]        // ok=false, v=0 (zero value)
+delete(ages, "bob")
+
+// Structs: grouped fields
+type Point struct{ X, Y int }
+p := Point{X: 1, Y: 2}</code></pre>
+<blockquote class="tip">A slice is a 3-word header (pointer, length, capacity). <code>append</code> may reallocate when capacity is exceeded; until then, slices sharing a backing array see each other's writes. When in doubt, <code>copy()</code> into a fresh slice.</blockquote>
+
+<h2>Functions</h2>
+<pre><code>func add(a, b int) int { return a + b }
+
+// Multiple return values — the idiomatic (result, error) pair
+func div(a, b int) (int, error) {
+	if b == 0 {
+		return 0, fmt.Errorf("divide by zero")
+	}
+	return a / b, nil
+}
+
+q, err := div(10, 2)
+if err != nil { /* handle */ }
+
+// Named returns + naked return (use sparingly, for short functions)
+func split(sum int) (x, y int) {
+	x = sum * 4 / 9
+	y = sum - x
+	return
+}
+
+// Variadic
+func sum(nums ...int) int {
+	t := 0
+	for _, n := range nums { t += n }
+	return t
+}
+sum(1, 2, 3)        // 6
+sum(nums...)        // spread a slice</code></pre>
+
+<h2>Closures</h2>
+<p><span class="level intermediate">Intermediate</span> Functions are values and can capture variables from their enclosing scope:</p>
+<pre><code>func counter() func() int {
+	n := 0
+	return func() int { n++; return n }  // closes over n
+}
+
+next := counter()
+fmt.Println(next(), next(), next())  // → 1 2 3</code></pre>
+<blockquote class="warn"><strong>Classic trap (pre-Go 1.22):</strong> capturing a loop variable by reference. Since Go 1.22 each iteration has its own loop variable, so <code>for i := range xs { go func(){ use(i) }() }</code> is now safe. On older Go, you had to shadow with <code>i := i</code> inside the loop.</blockquote>
+
+<h2>Exercises</h2>
+<ul>
+  <li>Write <code>func minmax(nums []int) (min, max int)</code> using named returns; handle the empty-slice case.</li>
+  <li>Demonstrate the slice-aliasing gotcha: take <code>s[1:3]</code>, mutate it, and show the original changed.</li>
+  <li>Build a memoizing closure: <code>func memoize(f func(int) int) func(int) int</code> that caches results in a map.</li>
+</ul>
+
+<h2>Mini-project: a word-frequency counter</h2>
+<p>Read text from stdin, split on whitespace, and build a <code>map[string]int</code> of counts. Then produce a <code>[]struct{Word string; N int}</code>, and print the top 10 — exercising slices, maps, structs, and functions together. (You'll sort it properly after the Control Flow and stdlib lessons.)</p>

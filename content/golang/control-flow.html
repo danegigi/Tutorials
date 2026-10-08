@@ -1,0 +1,92 @@
+<p class="lead">Go deliberately has very few control structures: one loop keyword, an <code>if</code> with an init statement, a <code>switch</code> with no fallthrough by default, and <code>defer</code> for cleanup. Fewer forms, fewer surprises.</p>
+
+<h2>if / else</h2>
+<pre><code>if x &gt; 0 {
+	fmt.Println("positive")
+} else if x &lt; 0 {
+	fmt.Println("negative")
+} else {
+	fmt.Println("zero")
+}
+
+// if with an init statement — scopes the variable to the if/else
+if v, ok := m["key"]; ok {
+	fmt.Println("found", v)
+}  // v and ok are out of scope here</code></pre>
+<blockquote class="tip">The <code>if err := doThing(); err != nil { return err }</code> pattern is everywhere in Go. The init statement keeps <code>err</code> scoped to the check, so it can't leak into the rest of the function.</blockquote>
+
+<h2>for — the only loop</h2>
+<pre><code>// Classic three-clause
+for i := 0; i &lt; 5; i++ { }
+
+// While-style
+for n &lt; 100 { n *= 2 }
+
+// Infinite (break to exit)
+for { if done() { break } }
+
+// Range over slice, map, string, channel
+for i, v := range []string{"a", "b"} { fmt.Println(i, v) }
+for key, val := range myMap { }
+for _, r := range "héllo" { }   // r is a rune (code point), not a byte
+
+// Range over an integer (Go 1.22+)
+for i := range 3 { fmt.Println(i) }  // 0 1 2</code></pre>
+<blockquote class="warn"><strong>Common mistake:</strong> ranging a string with index arithmetic expecting characters. A <code>string</code> is UTF-8 <em>bytes</em>; <code>len(s)</code> is byte length and <code>s[i]</code> is a byte. Use <code>range</code> (which yields runes) or <code>[]rune(s)</code> when you need code points.</blockquote>
+
+<h2>switch</h2>
+<pre><code>// No automatic fallthrough — each case breaks implicitly
+switch day {
+case "Sat", "Sun":
+	fmt.Println("weekend")
+default:
+	fmt.Println("weekday")
+}
+
+// Expression-less switch = clean if/else chain
+switch {
+case score &gt;= 90:
+	grade = "A"
+case score &gt;= 80:
+	grade = "B"
+default:
+	grade = "F"
+}
+
+// Type switch (with interfaces)
+switch v := any.(type) {
+case int:
+	fmt.Println("int", v)
+case string:
+	fmt.Println("string", v)
+}</code></pre>
+<p>Use the explicit <code>fallthrough</code> keyword only when you really want the next case to run too — it's rare.</p>
+
+<h2>defer, panic, recover</h2>
+<p><span class="level intermediate">Intermediate</span> <code>defer</code> schedules a call to run when the surrounding function returns, in LIFO order. It's the idiomatic way to guarantee cleanup:</p>
+<pre><code>f, err := os.Open("data.txt")
+if err != nil { return err }
+defer f.Close()   // runs no matter how the function exits
+// ... use f ...</code></pre>
+<pre><code>// defer sees the final named return value — useful for wrapping errors
+func process() (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("recovered: %v", r)
+		}
+	}()
+	mightPanic()
+	return nil
+}</code></pre>
+<blockquote class="warn"><strong>Common mistake:</strong> <code>defer</code> inside a loop. Deferred calls stack up until the <em>function</em> returns, not the loop iteration — opening 10,000 files in a loop with <code>defer f.Close()</code> keeps all 10,000 open. Close explicitly inside the loop, or wrap each iteration in its own function.</blockquote>
+<p>Reserve <code>panic</code>/<code>recover</code> for truly unrecoverable situations and for stopping a goroutine from crashing a server — not for ordinary error handling, which uses returned <code>error</code> values (next lesson).</p>
+
+<h2>Exercises</h2>
+<ul>
+  <li>Rewrite an if/else-if ladder grading scores into an expression-less <code>switch</code>.</li>
+  <li>Count bytes vs runes in <code>"café"</code> and explain the difference.</li>
+  <li>Write a function that opens three files and closes each one correctly inside a loop (not with a leaking <code>defer</code>).</li>
+</ul>
+
+<h2>Mini-project: a tiny calculator REPL</h2>
+<p>Loop forever reading <code>"&lt;num&gt; &lt;op&gt; &lt;num&gt;"</code> lines; use a <code>switch</code> on the operator; handle divide-by-zero without crashing; <code>break</code> on the input <code>quit</code>. Wrap the parse in <code>recover</code> so malformed input prints an error instead of killing the loop.</p>

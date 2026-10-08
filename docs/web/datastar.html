@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en" data-base="../">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0d1117">
+<meta name="description" content="Dev Tutorials — Golang, Bun, Web Development, Linux and DevOps, offline-ready.">
+<title>Datastar — Web Development</title>
+<link rel="manifest" href="../manifest.webmanifest">
+<link rel="icon" href="../icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="../icon-192.png">
+<link rel="stylesheet" href="../app.css">
+<script>/* set theme before paint to avoid flash */(function(){try{var t=localStorage.getItem('tut.theme');document.documentElement.setAttribute('data-theme',t||'dark');}catch(e){document.documentElement.setAttribute('data-theme','dark');}})();</script>
+
+</head>
+<body class="lesson">
+<header class="nav">
+  <a class="brand" href="../index.html">📚 Dev Tutorials</a>
+  <span class="crumb">Datastar — Web Development</span>
+  <span class="spacer"></span>
+  <a class="navbtn" href="../search.html">🔎 Search</a>
+  <button class="navbtn" id="install-btn" type="button">⬇️ Install</button>
+  <button class="navbtn" id="theme-btn" type="button" aria-label="Toggle theme">🌙 Dark</button>
+</header>
+<main class="wrap lesson-body">
+  <h1 class="page-title">Datastar</h1>
+  <div class="lesson-tools" data-lesson-id="web/datastar">
+    <button id="done-btn" type="button" aria-pressed="false">○ Mark complete</button>
+    <button id="mark-btn" type="button" aria-pressed="false">☆ Bookmark</button>
+    <a class="navbtn" href="index.html" style="margin-left:auto">All Web Development lessons →</a>
+  </div>
+<nav class="toc" aria-label="On this page"><strong>On this page</strong><ul>
+<li class="lvl2"><a href="#setup">Setup</a></li>
+<li class="lvl2"><a href="#signals-and-reactivity">Signals and reactivity</a></li>
+<li class="lvl2"><a href="#server-sent-events-the-fragment-model">Server-sent events: the fragment model</a></li>
+<li class="lvl2"><a href="#expressions-must-be-single-expressions">Expressions must be single expressions</a></li>
+<li class="lvl2"><a href="#no-client-side-list-rendering">No client-side list rendering</a></li>
+<li class="lvl3"><a href="#bound-selects-need-a-seeded-signal">Bound selects need a seeded signal</a></li>
+<li class="lvl2"><a href="#datastar-vs-htmx">Datastar vs HTMX</a></li>
+<li class="lvl2"><a href="#exercises">Exercises</a></li>
+<li class="lvl2"><a href="#mini-project-a-reactive-search-with-sse">Mini-project: a reactive search with SSE</a></li>
+</ul></nav>
+<p class="lead">Datastar combines reactive <strong>signals</strong> (client-side state in <code>data-*</code> attributes) with <strong>server-sent events</strong> (the server streams HTML fragments and signal updates back). It's a hypermedia framework like HTMX, but with a reactive front-end layer baked in — one small script, no build step.</p>
+
+<h2 id="setup">Setup</h2>
+<pre><code>&lt;script type="module"
+  src="https://cdn.jsdelivr.net/gh/starfederation/datastar@v1.0.0/bundles/datastar.js"&gt;
+&lt;/script&gt;</code></pre>
+
+<h2 id="signals-and-reactivity">Signals and reactivity</h2>
+<p><span class="level beginner">Beginner</span> Declare signals with <code>data-signals</code>, bind inputs with <code>data-bind</code>, and show reactive values with <code>data-text</code>. Everything updates automatically.</p>
+<pre><code>&lt;div data-signals="{count: 0}"&gt;
+  &lt;button data-on:click="$count++"&gt;+&lt;/button&gt;
+  &lt;span data-text="$count"&gt;&lt;/span&gt;
+  &lt;button data-on:click="$count--"&gt;-&lt;/button&gt;
+&lt;/div&gt;
+
+&lt;input data-bind:value="$name"&gt;
+&lt;p data-show="$name != ''"&gt;Hello, &lt;span data-text="$name"&gt;&lt;/span&gt;&lt;/p&gt;</code></pre>
+<blockquote class="warn"><strong>Syntax matters (v1):</strong> use the <strong>colon</strong> form — <code>data-on:click</code>, <code>data-bind:value</code>, <code>data-attr:disabled</code> — <em>not</em> the hyphenated <code>data-on-click</code>. An unknown/malformed <code>data-*</code> attribute throws during Datastar init and <strong>halts processing of the entire page</strong>, silently killing all reactivity. Symptom: a button "does nothing" while the endpoint works fine via curl.</blockquote>
+
+<h2 id="server-sent-events-the-fragment-model">Server-sent events: the fragment model</h2>
+<p><span class="level intermediate">Intermediate</span> A <code>data-on</code> action can call the backend; the server responds with an SSE stream that merges HTML fragments into the page and patches signals:</p>
+<pre><code>&lt;div data-signals="{q: ''}"&gt;
+  &lt;input data-bind:value="$q"
+         data-on:input__debounce.300ms="@get('/search')"&gt;
+  &lt;ul id="results"&gt;&lt;/ul&gt;
+&lt;/div&gt;</code></pre>
+<pre><code># Server (SSE) streams a fragment that merges into #results:
+event: datastar-merge-fragments
+data: fragments &lt;ul id="results"&gt;&lt;li&gt;…&lt;/li&gt;&lt;/ul&gt;
+
+# …and can patch signals:
+event: datastar-merge-signals
+data: signals {count: 5}</code></pre>
+
+<h2 id="expressions-must-be-single-expressions">Expressions must be single expressions</h2>
+<blockquote class="warn"><strong>A recurring trap:</strong> a <code>data-on:*</code> handler body is wrapped as <code>return (() =&gt; { YOUR_CODE })()</code>, so a statement block like <code>if(!confirm(x)){event.preventDefault()}</code> produces invalid JS and throws at init — again halting all page reactivity. Handlers MUST be single expressions. Proven patterns:</blockquote>
+<pre><code>&lt;!-- confirm-then-post with the && short-circuit --&gt;
+&lt;button data-on:click="confirm('Delete?') && @delete('/items/42')"&gt;Delete&lt;/button&gt;
+
+&lt;!-- gate via a global helper returning a bool, comma operator runs both --&gt;
+&lt;button data-on:click="window.ok($id) && (@post('/do'), close())"&gt;Go&lt;/button&gt;
+
+&lt;!-- for a NATIVE form submit confirm, use plain HTML (not Datastar) --&gt;
+&lt;form onsubmit="return confirm('Submit?')"&gt;…&lt;/form&gt;</code></pre>
+
+<h2 id="no-client-side-list-rendering">No client-side list rendering</h2>
+<blockquote class="warn">Datastar has <strong>no</strong> client list-rendering (<code>&lt;template data-for&gt;</code> does not exist). Render repeated/dynamic rows <strong>server-side</strong> and stream them via SSE fragment merges. For a fixed small set of toggleable rows, pre-render a pool in HTML and show/hide with <code>data-show="idx &lt; $n"</code>.</blockquote>
+
+<h3 id="bound-selects-need-a-seeded-signal">Bound selects need a seeded signal</h3>
+<blockquote class="warn">A <code>data-bind</code> on a <code>&lt;select&gt;</code> drives the value from the <em>signal</em>, not the option's <code>selected</code> attribute. If the signal disagrees with the current value (or the value isn't in the option list) the select renders <strong>blank</strong>. Fix: re-seed the signal on the fragment (<code>data-signals:field="'value'"</code>) and always include the current value as an option.</blockquote>
+
+<h2 id="datastar-vs-htmx">Datastar vs HTMX</h2>
+<p>Both are hypermedia frameworks that swap server-rendered HTML. HTMX is attribute-driven requests with no client state model; Datastar adds reactive signals and leans on SSE for streaming updates. Choose Datastar when you want fine-grained client reactivity (live-bound inputs, computed UI) alongside server-rendered fragments; choose HTMX when request→swap is all you need.</p>
+
+<h2 id="exercises">Exercises</h2>
+<ul>
+  <li>Build a counter and a live "Hello, {name}" using <code>data-signals</code>, <code>data-bind</code>, <code>data-text</code>, <code>data-show</code>.</li>
+  <li>Deliberately write <code>data-on-click</code> (hyphenated) and observe that it breaks ALL reactivity — then fix it to <code>data-on:click</code>.</li>
+  <li>Add a confirm-before-delete using the <code>&&</code> single-expression pattern.</li>
+</ul>
+
+<h2 id="mini-project-a-reactive-search-with-sse">Mini-project: a reactive search with SSE</h2>
+<p>Build a debounced search box bound to a <code>$q</code> signal that calls <code>@get('/search')</code>; have the server stream a <code>datastar-merge-fragments</code> event replacing a results list rendered server-side. Add a confirm-gated delete on each row using a single-expression handler. You'll hit (and now avoid) the init-halting syntax traps above.</p>
+
+<section class="further"><h2 id="further-reading">Further reading</h2>
+<p>Official documentation for the tools and APIs covered on this page:</p>
+<ul class="further-list"><li><a href="https://data-star.dev/" target="_blank" rel="noopener">Datastar docs ↗</a></li>
+<li><a href="https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events" target="_blank" rel="noopener">Server-Sent Events (MDN) ↗</a></li></ul></section>
+  <nav class="pager">
+<a class="prev" href="htmx.html"><small>Previous</small>🌐 HTMX</a>
+<a class="next" href="authentication-concepts.html"><small>Next</small>🌐 Authentication Concepts</a>
+  </nav>
+</main>
+<button type="button" class="fab top" id="fab-top" aria-label="Back to top">↑ Top</button>
+<div class="banner" id="update-banner" role="status">A new version is available.<button type="button">Reload</button></div>
+<div class="banner" id="offline-banner" role="status">You're offline — showing cached lessons.</div>
+<script src="../app.js" defer></script>
+</body>
+</html>

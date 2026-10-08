@@ -1,0 +1,86 @@
+<p class="lead">Reading and writing files and encoding JSON are the two I/O chores every program needs. Go's <code>os</code>, <code>io</code>, and <code>encoding/json</code> packages make both uniform through the <code>io.Reader</code>/<code>io.Writer</code> interfaces.</p>
+
+<h2>Reading files</h2>
+<pre><code>// Whole file into memory (simple, for small files)
+data, err := os.ReadFile("config.yaml")
+if err != nil { return err }
+fmt.Println(string(data))
+
+// Streaming line by line (for large files — constant memory)
+f, err := os.Open("big.log")
+if err != nil { return err }
+defer f.Close()
+
+scanner := bufio.NewScanner(f)
+for scanner.Scan() {
+	line := scanner.Text()
+	process(line)
+}
+if err := scanner.Err(); err != nil { return err }</code></pre>
+<blockquote class="warn"><strong>Common mistake:</strong> <code>os.ReadFile</code> on a multi-gigabyte file — it loads the whole thing into RAM. Stream with <code>bufio.Scanner</code> (lines) or <code>io.Copy</code> (bytes) when size is unbounded.</blockquote>
+
+<h2>Writing files</h2>
+<pre><code>// Whole file at once (0644 = rw-r--r--)
+os.WriteFile("out.txt", []byte("hello\n"), 0644)
+
+// Buffered, incremental
+f, _ := os.Create("report.txt")
+defer f.Close()
+w := bufio.NewWriter(f)
+for _, line := range lines { fmt.Fprintln(w, line) }
+w.Flush()   // don't forget — buffered writers hold data until flushed</code></pre>
+
+<h2>The Reader/Writer abstraction</h2>
+<p><span class="level intermediate">Intermediate</span> Files, network connections, HTTP bodies, and in-memory buffers all satisfy <code>io.Reader</code>/<code>io.Writer</code>, so one function works with all of them:</p>
+<pre><code>// Copy from anything readable to anything writable, streaming
+io.Copy(dst, src)                       // file→file, resp.Body→file, etc.
+io.Copy(os.Stdout, resp.Body)           // stream a download to the terminal
+
+var buf bytes.Buffer                     // an in-memory Writer AND Reader
+fmt.Fprintf(&amp;buf, "n=%d", 42)
+fmt.Println(buf.String())                // → n=42</code></pre>
+
+<h2>Encoding JSON</h2>
+<pre><code>type Config struct {
+	Name    string   `json:"name"`
+	Port    int      `json:"port"`
+	Tags    []string `json:"tags,omitempty"`   // omit when empty
+	secret  string   // unexported → never marshalled
+}
+
+c := Config{Name: "api", Port: 8080}
+b, _ := json.Marshal(c)                  // compact
+b, _ = json.MarshalIndent(c, "", "  ")   // pretty
+fmt.Println(string(b))
+// → { "name": "api", "port": 8080 }</code></pre>
+
+<h2>Decoding JSON</h2>
+<pre><code>var c Config
+if err := json.Unmarshal(b, &amp;c); err != nil { return err }
+
+// Stream a decoder straight off a Reader (file, HTTP body)
+f, _ := os.Open("config.json")
+defer f.Close()
+if err := json.NewDecoder(f).Decode(&amp;c); err != nil { return err }
+
+// Unknown shape → map[string]any
+var raw map[string]any
+json.Unmarshal(b, &amp;raw)</code></pre>
+<blockquote class="warn"><strong>Common mistakes with JSON:</strong> (1) lowercase struct fields are <em>unexported</em> and silently skipped — fields must be capitalized to marshal. (2) Numbers decode into <code>float64</code> when the target is <code>any</code>, so a JSON <code>5</code> becomes <code>5.0</code>. (3) Forgetting the <code>json:"..."</code> tag gives you the Go field name casing in the output.</blockquote>
+
+<h3>Custom field handling</h3>
+<pre><code>type Event struct {
+	At time.Time `json:"at"`                       // RFC 3339 by default
+	ID int       `json:"id,string"`                // marshal number AS a string
+	Hidden bool  `json:"-"`                         // never serialize
+}</code></pre>
+
+<h2>Exercises</h2>
+<ul>
+  <li>Count the lines in a large file with <code>bufio.Scanner</code> without loading it all into memory.</li>
+  <li>Round-trip a struct → JSON → struct and verify equality; then break it by lowercasing a field name.</li>
+  <li>Decode an HTTP JSON response directly with <code>json.NewDecoder(resp.Body).Decode(&amp;v)</code>.</li>
+</ul>
+
+<h2>Mini-project: a JSON ⇄ CSV converter</h2>
+<p>Read a JSON array of flat objects, write it as CSV (header row from the keys), and the reverse. Stream the output so a 100MB file never fully loads into memory, and handle the <code>omitempty</code>/missing-field cases cleanly — the kind of glue utility you write constantly in real jobs.</p>

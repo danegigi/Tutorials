@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="en" data-base="../">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0d1117">
+<meta name="description" content="Dev Tutorials — Golang, Bun, Web Development, Linux and DevOps, offline-ready.">
+<title>Docker — DevOps</title>
+<link rel="manifest" href="../manifest.webmanifest">
+<link rel="icon" href="../icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="../icon-192.png">
+<link rel="stylesheet" href="../app.css">
+<script>/* set theme before paint to avoid flash */(function(){try{var t=localStorage.getItem('tut.theme');document.documentElement.setAttribute('data-theme',t||'dark');}catch(e){document.documentElement.setAttribute('data-theme','dark');}})();</script>
+
+</head>
+<body class="lesson">
+<header class="nav">
+  <a class="brand" href="../index.html">📚 Dev Tutorials</a>
+  <span class="crumb">Docker — DevOps</span>
+  <span class="spacer"></span>
+  <a class="navbtn" href="../search.html">🔎 Search</a>
+  <button class="navbtn" id="install-btn" type="button">⬇️ Install</button>
+  <button class="navbtn" id="theme-btn" type="button" aria-label="Toggle theme">🌙 Dark</button>
+</header>
+<main class="wrap lesson-body">
+  <h1 class="page-title">Docker</h1>
+  <div class="lesson-tools" data-lesson-id="devops/docker">
+    <button id="done-btn" type="button" aria-pressed="false">○ Mark complete</button>
+    <button id="mark-btn" type="button" aria-pressed="false">☆ Bookmark</button>
+    <a class="navbtn" href="index.html" style="margin-left:auto">All DevOps lessons →</a>
+  </div>
+<nav class="toc" aria-label="On this page"><strong>On this page</strong><ul>
+<li class="lvl2"><a href="#images-vs-containers">Images vs containers</a></li>
+<li class="lvl3"><a href="#virtual-machines-vs-containers">Virtual machines vs containers</a></li>
+<li class="lvl3"><a href="#the-two-words-beginners-confuse">The two words beginners confuse</a></li>
+<li class="lvl2"><a href="#the-core-docker-cli">The core Docker CLI</a></li>
+<li class="lvl3"><a href="#the-flags-you-will-use-constantly">The flags you will use constantly</a></li>
+<li class="lvl2"><a href="#writing-a-dockerfile">Writing a Dockerfile</a></li>
+<li class="lvl3"><a href="#cmd-vs-entrypoint">CMD vs ENTRYPOINT</a></li>
+<li class="lvl3"><a href="#layer-caching-get-the-order-right">Layer caching — get the order right</a></li>
+<li class="lvl3"><a href="#always-add-a-dockerignore">Always add a .dockerignore</a></li>
+<li class="lvl2"><a href="#multi-stage-builds-buildkit">Multi-stage builds &amp;amp; BuildKit</a></li>
+<li class="lvl3"><a href="#multi-architecture-images">Multi-architecture images</a></li>
+<li class="lvl2"><a href="#images-tags-and-registries">Images, tags, and registries</a></li>
+<li class="lvl2"><a href="#volumes-bind-mounts-and-networks">Volumes, bind mounts, and networks</a></li>
+<li class="lvl2"><a href="#best-practices">Best practices</a></li>
+<li class="lvl3"><a href="#reclaiming-disk">Reclaiming disk</a></li>
+<li class="lvl2"><a href="#common-mistakes">Common mistakes</a></li>
+<li class="lvl2"><a href="#exercises">Exercises</a></li>
+<li class="lvl2"><a href="#mini-project-containerize-a-small-web-app">Mini-project: containerize a small web app</a></li>
+</ul></nav>
+<p class="lead">Docker packages an application together with everything it needs to run — code, runtime, system libraries, and configuration — into a single portable unit called a container. This lesson takes you from "what even is a container?" to production-grade multi-stage builds, image registries, volumes, and networks. Everything targets modern Docker: BuildKit as the default builder and the <code>docker</code> CLI as you will actually use it.</p>
+
+<h2 id="images-vs-containers">Images vs containers</h2>
+<p><span class="level beginner">Beginner</span> A container is a process (or a small group of processes) running on your machine, isolated so it sees its own filesystem, network interface, and process table — but sharing the host's Linux kernel instead of booting one of its own. That last part is the whole trick, and it is what makes a container start in milliseconds and weigh megabytes where a virtual machine takes a minute and gigabytes.</p>
+
+<h3 id="virtual-machines-vs-containers">Virtual machines vs containers</h3>
+<p>A <strong>virtual machine</strong> emulates an entire computer: a hypervisor hands each VM virtual hardware, and each VM boots a full guest OS with its own kernel. A <strong>container</strong> shares the host kernel and isolates processes using Linux primitives — <em>namespaces</em> (what a process can see) and <em>cgroups</em> (how much it can use). There is no guest OS to boot.</p>
+<table>
+  <thead><tr><th>Aspect</th><th>Virtual machine</th><th>Container</th></tr></thead>
+  <tbody>
+    <tr><td>Isolation boundary</td><td>Virtual hardware + full guest OS</td><td>Kernel namespaces + cgroups</td></tr>
+    <tr><td>Kernel</td><td>Its own guest kernel</td><td>Shares the host kernel</td></tr>
+    <tr><td>Startup time</td><td>Seconds to minutes</td><td>Milliseconds</td></tr>
+    <tr><td>Size on disk</td><td>Gigabytes</td><td>Megabytes to hundreds of MB</td></tr>
+    <tr><td>Density per host</td><td>Tens</td><td>Hundreds to thousands</td></tr>
+  </tbody>
+</table>
+
+<h3 id="the-two-words-beginners-confuse">The two words beginners confuse</h3>
+<ul>
+  <li>An <strong>image</strong> is a read-only, layered template — a filesystem snapshot plus metadata (which command to run, which port it exposes). It is inert, like a class definition or an installer.</li>
+  <li>A <strong>container</strong> is a running (or stopped) <em>instance</em> of an image, with a thin writable layer on top — like an object instantiated from that class.</li>
+</ul>
+<p>One image can spawn many containers. Delete a container and its writable layer disappears; the image is untouched. This is why containers are called <em>ephemeral</em>: never store data you care about inside a container's writable layer — use volumes for that.</p>
+<p>The supply chain: a <strong>Dockerfile</strong> is the recipe, <code>docker build</code> bakes it into an <strong>image</strong>, you push that image to a <strong>registry</strong>, and on any machine <code>docker run</code> pulls the image and starts a <strong>container</strong>. Because the image carries its own dependencies, "works on my machine" becomes "works on every machine."</p>
+
+<h2 id="the-core-docker-cli">The core Docker CLI</h2>
+<p><span class="level beginner">Beginner</span> Almost all day-to-day work runs through a handful of verbs.</p>
+<table>
+  <thead><tr><th>Command</th><th>What it does</th></tr></thead>
+  <tbody>
+    <tr><td><code>docker pull nginx:alpine</code></td><td>Download an image from a registry.</td></tr>
+    <tr><td><code>docker images</code></td><td>List images stored locally.</td></tr>
+    <tr><td><code>docker ps</code> / <code>docker ps -a</code></td><td>List running / all containers (incl. stopped).</td></tr>
+    <tr><td><code>docker run --rm -it ubuntu:24.04 bash</code></td><td>Run a temporary interactive container.</td></tr>
+    <tr><td><code>docker run -d --name web -p 8080:80 nginx:alpine</code></td><td>Run detached, publish host 8080 &amp;rarr; container 80.</td></tr>
+    <tr><td><code>docker exec -it web sh</code></td><td>Open a shell inside a running container.</td></tr>
+    <tr><td><code>docker logs -f web</code></td><td>Stream (follow) a container's output.</td></tr>
+    <tr><td><code>docker inspect web</code></td><td>Dump low-level JSON config (mounts, networks, env).</td></tr>
+    <tr><td><code>docker stop web &amp;&amp; docker rm web</code></td><td>Gracefully stop, then remove the container.</td></tr>
+    <tr><td><code>docker system df</code></td><td>Show disk used by images, containers, volumes, cache.</td></tr>
+  </tbody>
+</table>
+
+<h3 id="the-flags-you-will-use-constantly">The flags you will use constantly</h3>
+<ul>
+  <li><code>-d</code> / <code>--detach</code> — run in the background and return your prompt.</li>
+  <li><code>-it</code> — <code>-i</code> keeps stdin open, <code>-t</code> allocates a TTY; together they give an interactive shell.</li>
+  <li><code>-p HOST:CONTAINER</code> — publish a container port to the host. Left side is the host port.</li>
+  <li><code>--name</code> — a stable name instead of a random one like <code>vibrant_swartz</code>.</li>
+  <li><code>-e KEY=value</code> — set an environment variable inside the container.</li>
+  <li><code>--rm</code> — delete the container automatically when it stops.</li>
+</ul>
+<pre><code># Start a detached nginx and hit it
+docker run -d --name web -p 8080:80 nginx:alpine
+curl -s http://localhost:8080 | head -n 1
+# -&gt; &lt;!DOCTYPE html&gt;
+
+docker ps
+# -&gt; CONTAINER ID   IMAGE          ...   PORTS                  NAMES
+# -&gt; a1b2c3d4e5f6   nginx:alpine   ...   0.0.0.0:8080-&gt;80/tcp   web
+
+docker stop web &amp;&amp; docker rm web
+# -&gt; web
+# -&gt; web</code></pre>
+<blockquote class="tip"><code>docker run</code> = <code>docker create</code> + <code>docker start</code>. When something behaves oddly, splitting them apart (create, inspect, then start) can make the problem obvious.</blockquote>
+
+<h2 id="writing-a-dockerfile">Writing a Dockerfile</h2>
+<p><span class="level intermediate">Intermediate</span> A Dockerfile is a plain-text recipe. Each instruction produces a filesystem <em>layer</em>; layers are cached and reused, so the <em>order</em> of instructions directly controls your build speed. The core instructions:</p>
+<ul>
+  <li><code>FROM</code> — the base image you build on.</li>
+  <li><code>WORKDIR</code> — set (and create) the working directory for later instructions.</li>
+  <li><code>COPY</code> — copy files from the build context into the image.</li>
+  <li><code>RUN</code> — execute a command at build time and commit the result as a layer.</li>
+  <li><code>EXPOSE</code> — document the port the app listens on (metadata only).</li>
+  <li><code>ENV</code> — set an environment variable baked into the image.</li>
+  <li><code>CMD</code> — the default command when a container starts (overridable on the CLI).</li>
+  <li><code>ENTRYPOINT</code> — the fixed executable; <code>CMD</code> supplies its default arguments.</li>
+</ul>
+
+<h3 id="cmd-vs-entrypoint">CMD vs ENTRYPOINT</h3>
+<p>Use <code>CMD</code> alone when the whole command should be easy to override. Use <code>ENTRYPOINT</code> for the fixed program and <code>CMD</code> for its default args when the image should behave like a single executable. Always prefer the <em>exec form</em> (a JSON array) so signals like <code>SIGTERM</code> reach your process directly:</p>
+<pre><code>ENTRYPOINT ["node"]
+CMD ["dist/server.js"]
+# docker run img            -&gt; node dist/server.js
+# docker run img other.js   -&gt; node other.js</code></pre>
+
+<h3 id="layer-caching-get-the-order-right">Layer caching — get the order right</h3>
+<p>Docker rebuilds a layer only if that instruction or a file it copies changed; every later layer is then rebuilt too. So copy the files that change <em>rarely</em> (dependency manifests), install dependencies, and only then copy fast-changing source — a code edit does not bust the dependency-install cache.</p>
+<pre><code># Dockerfile — Node app
+FROM node:22-alpine
+WORKDIR /app
+
+# 1) Copy only manifests first, install deps — cached while package*.json is unchanged
+COPY package*.json ./
+RUN npm ci
+
+# 2) Now copy the rest; editing app code only invalidates from here down
+COPY . .
+
+EXPOSE 3000
+CMD ["node", "server.js"]</code></pre>
+<pre><code>docker build -t myapp:dev .
+# -&gt; [+] Building 12.4s (10/10) FINISHED
+# -&gt;  =&gt; naming to docker.io/library/myapp:dev</code></pre>
+
+<h3 id="always-add-a-dockerignore">Always add a .dockerignore</h3>
+<p>The build context (everything sent to the builder) should exclude junk. Without this, <code>COPY . .</code> can drag in <code>node_modules</code>, secrets, and <code>.git</code> history — bloating the image and busting the cache constantly.</p>
+<pre><code># .dockerignore
+.git
+node_modules
+dist
+*.log
+.env
+Dockerfile
+docker-compose*.yml</code></pre>
+
+<h2 id="multi-stage-builds-buildkit">Multi-stage builds &amp; BuildKit</h2>
+<p><span class="level advanced">Advanced</span> A single-stage image bakes in the whole build toolchain — hundreds of MB you never need at runtime. A <strong>multi-stage build</strong> compiles in a fat "builder" stage, then copies just the finished artifact into a tiny final stage.</p>
+<p>Start advanced Dockerfiles with a syntax directive so BuildKit fetches the latest frontend, unlocking <code>--mount</code>, secrets, and heredocs:</p>
+<pre><code># syntax=docker/dockerfile:1
+FROM golang:1.23-alpine AS build
+WORKDIR /src
+
+# Cache modules and the build cache across builds with --mount=type=cache
+COPY go.mod go.sum ./
+RUN --mount=type=cache,target=/go/pkg/mod go mod download
+
+COPY . .
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /bin/app ./cmd/app
+
+# Final stage: nothing but the static binary and CA certs
+FROM scratch
+COPY --from=build /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
+COPY --from=build /bin/app /app
+EXPOSE 8080
+USER 65534:65534
+ENTRYPOINT ["/app"]</code></pre>
+<p>Setting <code>CGO_ENABLED=0</code> produces a fully static binary with no libc dependency, so it runs in <code>scratch</code> — a completely empty image. The result is often a few MB versus hundreds.</p>
+<blockquote class="tip">BuildKit secrets mount a file only for the duration of one <code>RUN</code>, leaving no trace in any layer. A token passed as a build <code>ARG</code> or set in <code>ENV</code>, by contrast, is permanently visible in <code>docker history</code>.</blockquote>
+<pre><code># syntax=docker/dockerfile:1
+FROM alpine
+RUN --mount=type=secret,id=npmrc,target=/root/.npmrc npm ci</code></pre>
+<pre><code>docker build --secret id=npmrc,src="$HOME/.npmrc" -t myapp .
+# the .npmrc file is never copied into any layer</code></pre>
+
+<h3 id="multi-architecture-images">Multi-architecture images</h3>
+<pre><code># One image manifest that works on amd64 and arm64
+docker buildx build --platform linux/amd64,linux/arm64 -t youruser/app:1.0 --push .</code></pre>
+
+<h2 id="images-tags-and-registries">Images, tags, and registries</h2>
+<p><span class="level intermediate">Intermediate</span> An image reference is <code>registry/namespace/repository:tag</code>. Omit the registry and Docker assumes Docker Hub; omit the tag and it assumes <code>:latest</code> — which is just a mutable tag, not a promise of newness.</p>
+<pre><code># Log in once
+docker login
+
+# Build with a meaningful version, also tag :latest
+docker build -t youruser/myapp:1.4.0 .
+docker tag youruser/myapp:1.4.0 youruser/myapp:latest
+
+# Push both tags
+docker push youruser/myapp:1.4.0
+docker push youruser/myapp:latest
+# -&gt; 1.4.0: digest: sha256:9c1f... size: 1986</code></pre>
+<pre><code>docker history youruser/myapp:1.4.0   # each layer and its size
+docker image inspect youruser/myapp:1.4.0 \
+  --format '{{.Config.Entrypoint}} {{.Config.Cmd}}'
+# -&gt; [node] [dist/server.js]</code></pre>
+<p>Images are content-addressed stacks of layers: if ten images share the same <code>node:22-alpine</code> base, that base is stored once and reused. Pushing a new app version only uploads layers that actually changed.</p>
+<blockquote class="warn">Never deploy production off a floating <code>:latest</code> tag. Pin an exact version (or a digest, <code>myapp@sha256:…</code>) so a redeploy is reproducible and cannot silently pull a different image.</blockquote>
+
+<h2 id="volumes-bind-mounts-and-networks">Volumes, bind mounts, and networks</h2>
+<p><span class="level intermediate">Intermediate</span> A container's writable layer is thrown away when the container is removed. To keep data, and to let containers talk by name, you use volumes and user-defined networks.</p>
+<ul>
+  <li><strong>Named volume</strong> — storage managed by Docker in its own area. Best for database data; survives container removal.</li>
+  <li><strong>Bind mount</strong> — a specific host path mapped into the container. Best for local development with live source edits.</li>
+</ul>
+<pre><code># Named volume: Postgres data persists across recreation
+docker volume create pgdata
+docker run -d --name db \
+  -e POSTGRES_PASSWORD=secret \
+  -v pgdata:/var/lib/postgresql/data \
+  postgres:17-alpine
+
+# Bind mount: edit ./site on the host, see it live (read-only in the container)
+docker run -d --name web -p 8080:80 \
+  -v "$PWD/site":/usr/share/nginx/html:ro \
+  nginx:alpine</code></pre>
+<p>The default bridge network gives no name resolution. Create a <em>user-defined</em> bridge and containers on it reach each other by <strong>container name</strong> via Docker's embedded DNS:</p>
+<pre><code>docker network create appnet
+
+docker run -d --name db  --network appnet \
+  -e POSTGRES_PASSWORD=secret -e POSTGRES_DB=app postgres:17-alpine
+
+docker run -d --name api --network appnet -p 3000:3000 \
+  -e DATABASE_URL=postgres://postgres:secret@db:5432/app \
+  youruser/api:1.0</code></pre>
+<p>The <code>api</code> container connects to host <code>db</code> — that name resolves over <code>appnet</code>. Notice the database port is <em>not</em> published to the host; it is reachable only inside the network. That is the production pattern: expose the edge, keep data private.</p>
+
+<h2 id="best-practices">Best practices</h2>
+<p><span class="level intermediate">Intermediate</span> The habits that separate a demo from a maintainable setup.</p>
+<ul>
+  <li><strong>Small base images.</strong> Prefer <code>-alpine</code>, <code>-slim</code>, distroless, or <code>scratch</code> — faster pulls, smaller attack surface.</li>
+  <li><strong>Multi-stage builds.</strong> Keep compilers out of the runtime image.</li>
+  <li><strong>Run as non-root.</strong> Add a <code>USER</code> instruction so a container breakout does not hand over root.</li>
+  <li><strong>Pin versions.</strong> Exact tags or digests so redeploys are reproducible.</li>
+  <li><strong>Healthchecks everywhere.</strong> Let Docker gate readiness and restart the genuinely unhealthy.</li>
+  <li><strong>Keep databases private.</strong> Do not publish DB ports; reach them over an internal network by name.</li>
+</ul>
+
+<h3 id="reclaiming-disk">Reclaiming disk</h3>
+<pre><code>docker system df                 # what is using space
+docker system prune              # stopped containers, unused nets, dangling images, cache
+docker builder prune             # build cache only</code></pre>
+<blockquote class="warn">Destructive: <code>docker system prune -a --volumes</code> also deletes unused images AND volumes — that can wipe data you meant to keep. Prune reads like a broom; on a shared or production host it can be a wrecking ball. Read the confirmation prompt before answering "y".</blockquote>
+
+<h2 id="common-mistakes">Common mistakes</h2>
+<blockquote class="warn"><strong>Common mistakes</strong>
+<ul>
+  <li><strong>Storing data in the writable layer.</strong> It vanishes when the container is removed. Use a named volume.</li>
+  <li><strong>No <code>.dockerignore</code>.</strong> <code>COPY . .</code> drags in <code>node_modules</code>, <code>.git</code>, and <code>.env</code> — bloating the image and leaking secrets.</li>
+  <li><strong>Binding to <code>127.0.0.1</code> inside the container.</strong> The app must listen on <code>0.0.0.0</code> or the published port reaches nothing.</li>
+  <li><strong>Expecting <code>EXPOSE</code> to publish a port.</strong> It is documentation only — you still need <code>-p HOST:CONTAINER</code>.</li>
+  <li><strong>Copying source before installing deps.</strong> Every code edit then reinstalls everything, because the cache busts too early.</li>
+  <li><strong>Shipping secrets in a build <code>ARG</code> or <code>ENV</code>.</strong> They live forever in <code>docker history</code>. Use a BuildKit secret mount.</li>
+</ul></blockquote>
+
+<h2 id="exercises">Exercises</h2>
+<ul>
+  <li>Run <code>docker run -d --name web -p 8080:80 nginx:alpine</code>, hit it with <code>curl</code>, then <code>exec</code> into it and read <code>nginx -v</code>.</li>
+  <li>Write a two-stage Dockerfile for any compiled language and compare the final image size to a single-stage build with <code>docker images</code>.</li>
+  <li>Create a named volume, run Postgres on it, write a row, remove and recreate the container, and prove the row survived.</li>
+  <li>Create a user-defined network, run an app plus a database on it with the DB port unpublished, and connect the app to the DB by container name.</li>
+  <li>Deliberately break your layer caching by copying source before <code>npm ci</code>, then fix the ordering and watch the rebuild time drop.</li>
+</ul>
+
+<h2 id="mini-project-containerize-a-small-web-app">Mini-project: containerize a small web app</h2>
+<p>Take any small HTTP service (Node, Go, or Python). Write a multi-stage Dockerfile that builds in a full base image and ships a minimal runtime image running as a non-root user with a <code>HEALTHCHECK</code>. Add a <code>.dockerignore</code>. Build it, tag it <code>1.0.0</code> and <code>latest</code>, run it on a user-defined network alongside a Postgres container (DB port unpublished, reached by name), and confirm the app serves traffic on a published port while the database stays private. Finish by pruning dangling images and comparing your final image size to the base.</p>
+
+<section class="further"><h2 id="further-reading">Further reading</h2>
+<p>Official documentation for the tools and APIs covered on this page:</p>
+<ul class="further-list"><li><a href="https://docs.docker.com/" target="_blank" rel="noopener">Docker docs ↗</a></li>
+<li><a href="https://docs.docker.com/reference/dockerfile/" target="_blank" rel="noopener">Dockerfile reference ↗</a></li>
+<li><a href="https://docs.docker.com/build/building/best-practices/" target="_blank" rel="noopener">Build best practices ↗</a></li></ul></section>
+  <nav class="pager">
+<a class="prev" href="github-actions.html"><small>Previous</small>🔁 GitHub Actions</a>
+<a class="next" href="docker-compose.html"><small>Next</small>🔁 Docker Compose</a>
+  </nav>
+</main>
+<button type="button" class="fab top" id="fab-top" aria-label="Back to top">↑ Top</button>
+<div class="banner" id="update-banner" role="status">A new version is available.<button type="button">Reload</button></div>
+<div class="banner" id="offline-banner" role="status">You're offline — showing cached lessons.</div>
+<script src="../app.js" defer></script>
+</body>
+</html>

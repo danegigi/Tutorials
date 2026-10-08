@@ -1,0 +1,88 @@
+<p class="lead">A Go program compiles to one static binary with no runtime dependencies — which makes deployment unusually simple. Learn optimized builds, cross-compilation, tiny Docker images, and running as a managed service.</p>
+
+<h2>Building for release</h2>
+<pre><code># Strip debug info for a smaller binary
+go build -ldflags="-s -w" -o app .
+
+# Embed a version at build time
+go build -ldflags="-X main.version=$(git describe --tags)" -o app .</code></pre>
+<pre><code>// main.go
+var version = "dev"   // overwritten by -ldflags -X
+func main() { fmt.Println("version:", version) }</code></pre>
+
+<h2>Cross-compilation</h2>
+<p><span class="level beginner">Beginner</span> Set <code>GOOS</code> and <code>GOARCH</code> to build for any target from any machine — no cross-toolchain to install:</p>
+<pre><code>GOOS=linux   GOARCH=amd64 go build -o app-linux-amd64 .
+GOOS=linux   GOARCH=arm64 go build -o app-linux-arm64 .
+GOOS=darwin  GOARCH=arm64 go build -o app-macos .
+GOOS=windows GOARCH=amd64 go build -o app.exe .
+
+go tool dist list    # every supported GOOS/GOARCH pair</code></pre>
+<blockquote class="warn"><strong>Common gotcha:</strong> cross-compiling fails or produces a dynamically-linked binary when your code uses cgo (C bindings — e.g. the <code>mattn/go-sqlite3</code> driver). Set <code>CGO_ENABLED=0</code> for a pure-Go static build, or use a pure-Go driver (e.g. <code>modernc.org/sqlite</code>) so cross-compilation stays trivial.</blockquote>
+
+<h2>A minimal Docker image</h2>
+<p><span class="level intermediate">Intermediate</span> Multi-stage builds compile in a full Go image, then copy just the binary into a tiny base — a few MB total:</p>
+<pre><code># Dockerfile
+FROM golang:1.23 AS build
+WORKDIR /src
+COPY go.mod go.sum ./
+RUN go mod download                 # cached layer: deps change rarely
+COPY . .
+RUN CGO_ENABLED=0 go build -ldflags="-s -w" -o /app .
+
+FROM gcr.io/distroless/static-debian12   # no shell, no package manager
+COPY --from=build /app /app
+USER nonroot:nonroot
+ENTRYPOINT ["/app"]</code></pre>
+<pre><code>docker build -t myapp .
+docker run -p 8080:8080 myapp</code></pre>
+<blockquote class="tip">Order the Dockerfile so <code>go.mod</code>/<code>go.sum</code> and <code>go mod download</code> come <em>before</em> <code>COPY . .</code>. Then a code change doesn't invalidate the dependency-download layer, and rebuilds are seconds instead of minutes.</blockquote>
+
+<h2>Configuration via environment</h2>
+<pre><code>port := os.Getenv("PORT")
+if port == "" { port = "8080" }      // sensible default
+dsn := os.Getenv("DATABASE_URL")     // never hard-code secrets</code></pre>
+<p>Twelve-factor style: read config from the environment, keep secrets out of the image, and inject them at runtime (Compose env, Kubernetes Secrets, or your platform's secret store).</p>
+
+<h2>Running as a systemd service</h2>
+<p><span class="level intermediate">Intermediate</span> On a plain Linux server, systemd keeps your binary running and restarts it on crash or reboot:</p>
+<pre><code># /etc/systemd/system/myapp.service
+[Unit]
+Description=My Go App
+After=network.target
+
+[Service]
+ExecStart=/usr/local/bin/myapp
+Restart=always
+Environment=PORT=8080
+User=myapp
+
+[Install]
+WantedBy=multi-user.target</code></pre>
+<pre><code>sudo systemctl daemon-reload
+sudo systemctl enable --now myapp
+sudo systemctl status myapp
+journalctl -u myapp -f           # follow its logs</code></pre>
+
+<h2>Graceful shutdown</h2>
+<pre><code>// Drain in-flight requests on SIGTERM instead of dropping them
+srv := &amp;http.Server{Addr: ":8080", Handler: mux}
+go srv.ListenAndServe()
+
+stop := make(chan os.Signal, 1)
+signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
+&lt;-stop
+
+ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+defer cancel()
+srv.Shutdown(ctx)                // waits for active requests, then exits</code></pre>
+
+<h2>Exercises</h2>
+<ul>
+  <li>Build your app for Linux/arm64 with <code>CGO_ENABLED=0</code> and confirm it's statically linked (<code>file app</code>).</li>
+  <li>Write the multi-stage Dockerfile and compare the image size to the full <code>golang</code> base.</li>
+  <li>Add SIGTERM graceful shutdown and verify an in-flight request completes during a redeploy.</li>
+</ul>
+
+<h2>Mini-project: ship the TODO API</h2>
+<p>Take the SQLite-backed TODO API, switch to a pure-Go SQLite driver so <code>CGO_ENABLED=0</code> works, add graceful shutdown and env-based config, build a distroless Docker image, and write a systemd unit for the non-container path. You've now taken one program from <code>go run</code> to a deployable, restart-safe service.</p>

@@ -1,0 +1,131 @@
+<p class="lead">SSH is how you reach every remote machine — the shell on a cloud server, the Git push over an encrypted channel, the file copy to a droplet. It is built on public-key cryptography, so once you understand key pairs the rest (config files, agents, tunnels, file copy) falls into place. This lesson takes you from generating a key to forwarding a port through an encrypted tunnel, with the security pitfalls called out as you go.</p>
+
+<h2>Key pairs, not passwords</h2>
+<p><span class="level beginner">Beginner</span> An SSH key pair is two files: a <strong>private key</strong> that never leaves your machine, and a <strong>public key</strong> you freely hand out. The server stores your public key; when you connect, SSH proves you hold the matching private key without ever sending it. This is far stronger than a password and the only sane option for servers.</p>
+<pre><code># Generate a modern ed25519 key pair
+ssh-keygen -t ed25519 -C "ada@laptop"
+# -> Enter file in which to save the key (/home/ada/.ssh/id_ed25519):
+# -> Enter passphrase (empty for no passphrase):      &lt;- set one!
+# -> Your identification has been saved in /home/ada/.ssh/id_ed25519
+# -> Your public key has been saved in /home/ada/.ssh/id_ed25519.pub
+
+ls -l ~/.ssh/id_ed25519*
+# -> -rw------- 1 ada ada 411 id_ed25519        (private: 600, owner only)
+# -> -rw-r--r-- 1 ada ada  97 id_ed25519.pub    (public: safe to share)</code></pre>
+<blockquote class="tip">Prefer <code>ed25519</code> over RSA: the keys are tiny, fast, and at least as secure. Only fall back to <code>ssh-keygen -t rsa -b 4096</code> for an old server that does not support ed25519. Always set a passphrase on the private key — it encrypts the key at rest, so a stolen laptop does not immediately hand over your servers.</blockquote>
+
+<h3>authorized_keys: granting access</h3>
+<p>To let your key log into a server, append its <em>public</em> half to <code>~/.ssh/authorized_keys</code> on that server. <code>ssh-copy-id</code> does this for you:</p>
+<pre><code>ssh-copy-id -i ~/.ssh/id_ed25519.pub ada@203.0.113.10
+# -> Number of key(s) added: 1
+
+# ...or by hand, which is what ssh-copy-id does under the hood:
+cat ~/.ssh/id_ed25519.pub | ssh ada@203.0.113.10 \
+  'mkdir -p ~/.ssh &amp;&amp; chmod 700 ~/.ssh &amp;&amp; cat &gt;&gt; ~/.ssh/authorized_keys &amp;&amp; chmod 600 ~/.ssh/authorized_keys'
+
+# Now connect with no password
+ssh ada@203.0.113.10
+# -> Welcome to Ubuntu 24.04 LTS</code></pre>
+<blockquote class="warn"><strong>Common mistake:</strong> copying the <em>private</em> key to the server, or pasting it anywhere. The private key must never leave your machine — only the <code>.pub</code> file goes on servers. If you ever leak a private key, delete its line from every <code>authorized_keys</code> and generate a new pair. Also: SSH refuses keys and <code>authorized_keys</code> files with loose permissions, so keep <code>~/.ssh</code> at <code>700</code> and the files at <code>600</code>.</blockquote>
+
+<h2>~/.ssh/config: stop retyping</h2>
+<p><span class="level intermediate">Intermediate</span> Instead of long <code>ssh -i ~/.ssh/key -p 2222 user@host</code> commands, declare each host once in <code>~/.ssh/config</code> and connect by a short alias.</p>
+<pre><code># ~/.ssh/config
+Host web
+    HostName 203.0.113.10
+    User ada
+    IdentityFile ~/.ssh/id_ed25519
+    Port 22
+
+Host db
+    HostName 10.0.0.5
+    User postgres
+    ProxyJump web          # reach db THROUGH web (a bastion host)
+
+Host *
+    ServerAliveInterval 60 # keep idle connections from dropping</code></pre>
+<pre><code>ssh web                   # expands to ssh -i ~/.ssh/id_ed25519 ada@203.0.113.10
+ssh db                    # transparently hops through 'web' first
+scp report.csv web:/tmp/  # the alias works everywhere ssh does</code></pre>
+
+<h2>ssh-agent and forwarding</h2>
+<p><span class="level intermediate">Intermediate</span> If your key has a passphrase (it should), <code>ssh-agent</code> holds the decrypted key in memory so you type the passphrase once per session instead of once per connection.</p>
+<pre><code>eval "$(ssh-agent -s)"            # start the agent
+# -> Agent pid 4821
+ssh-add ~/.ssh/id_ed25519        # add the key (prompts for passphrase once)
+# -> Identity added: /home/ada/.ssh/id_ed25519 (ada@laptop)
+ssh-add -l                       # list keys the agent holds
+
+# Agent forwarding: use your LOCAL keys from a remote host (e.g. to git clone there)
+ssh -A web
+# on 'web', your laptop's key is used for the next hop — no key stored on the server</code></pre>
+<blockquote class="warn">Agent forwarding (<code>-A</code>) is convenient but means anyone with root on the remote host can use your agent to authenticate <em>as you</em> while you are connected. Only forward to hosts you fully trust, and prefer <code>ProxyJump</code> (which does not expose your agent on the intermediate host) for simple bastion hops.</blockquote>
+
+<h2>Tunnels: forwarding ports</h2>
+<p><span class="level advanced">Advanced</span> SSH can carry arbitrary TCP connections through its encrypted channel. This is how you reach a database bound to <code>127.0.0.1</code> on a remote server, or expose a local dev server to a remote box.</p>
+<table>
+  <thead><tr><th>Flag</th><th>Direction</th><th>Meaning</th></tr></thead>
+  <tbody>
+    <tr><td><code>-L</code></td><td>Local &rarr; remote</td><td>Open a port on <em>your</em> machine that forwards to a host:port reachable from the <em>server</em>.</td></tr>
+    <tr><td><code>-R</code></td><td>Remote &rarr; local</td><td>Open a port on the <em>server</em> that forwards back to a host:port reachable from <em>you</em>.</td></tr>
+    <tr><td><code>-D</code></td><td>Dynamic</td><td>A local SOCKS proxy that tunnels everything through the server.</td></tr>
+  </tbody>
+</table>
+<pre><code># -L: reach the remote Postgres (bound to localhost on the server) from your laptop
+ssh -L 5433:localhost:5432 web
+# now 'psql -h localhost -p 5433' on your laptop hits the server's Postgres
+
+# -R: expose your local dev server (port 3000) on the remote box's port 8000
+ssh -R 8000:localhost:3000 web
+# now something on 'web' hitting localhost:8000 reaches your laptop's :3000
+
+# -L without a login shell (-N = no command, -f = background)
+ssh -fN -L 5433:localhost:5432 web</code></pre>
+
+<h2>Copying files: scp and rsync</h2>
+<p><span class="level beginner">Beginner</span> <code>scp</code> copies files over SSH with scp-like syntax; <code>rsync</code> is smarter — it transfers only the differences, resumes, and preserves attributes, making it the right choice for directories and repeated syncs.</p>
+<pre><code># scp: single files, simple cases
+scp app.tar.gz web:/opt/app/              # local -> remote
+scp web:/var/log/app.log ./               # remote -> local
+scp -r ./dist web:/var/www/site           # a directory (-r)
+
+# rsync: directories, incremental, resumable — prefer for anything non-trivial
+rsync -avz ./dist/ web:/var/www/site/     # archive, verbose, compress
+rsync -avz --delete ./dist/ web:/var/www/site/   # mirror: delete extras on the far side
+# -> sending incremental file list
+# -> index.html
+# -> sent 2,041 bytes  received 35 bytes  speedup is 118.6</code></pre>
+<blockquote class="warn"><code>rsync --delete</code> removes files on the destination that are not in the source — it is a true mirror. Run it once <em>without</em> <code>--delete</code> (or add <code>--dry-run</code>) to preview what it would do before letting it delete anything. And mind the trailing slash: <code>rsync src/ dst/</code> copies the <em>contents</em> of <code>src</code>, while <code>rsync src dst/</code> copies the <code>src</code> directory itself into <code>dst</code>.</blockquote>
+
+<h2>Exercises</h2>
+<ul>
+  <li>Generate a fresh ed25519 key pair into <code>~/.ssh/id_demo</code> with a passphrase, and confirm the private key is mode <code>600</code>.</li>
+  <li>Write a <code>~/.ssh/config</code> entry so that <code>ssh myserver</code> connects as a given user with a specific key and port.</li>
+  <li>Start <code>ssh-agent</code>, add your demo key, and list the keys it holds with <code>ssh-add -l</code>.</li>
+  <li>Explain, in one sentence each, the difference between <code>ssh -L</code> and <code>ssh -R</code>.</li>
+</ul>
+
+<h2>Mini-project: passwordless deploy over an SSH tunnel</h2>
+<p>Set up key-based access to a server, alias it in your config, then use an <code>rsync</code> over SSH to deploy a static site — the exact flow a simple CI deploy uses.</p>
+<pre><code># 1. Key + config
+ssh-keygen -t ed25519 -f ~/.ssh/deploy -C "deploy@ci" -N "ci-passphrase"
+ssh-copy-id -i ~/.ssh/deploy.pub ada@203.0.113.10
+cat &gt;&gt; ~/.ssh/config &lt;&lt;'EOF'
+Host prod
+    HostName 203.0.113.10
+    User ada
+    IdentityFile ~/.ssh/deploy
+EOF
+
+# 2. Preview the deploy (dry run — changes nothing)
+rsync -avz --delete --dry-run ./public/ prod:/var/www/site/
+# -> (lists exactly what WOULD be sent/deleted)
+
+# 3. Deploy for real
+rsync -avz --delete ./public/ prod:/var/www/site/
+# -> sent 48,112 bytes  received 212 bytes
+
+# 4. Verify over the same SSH connection
+ssh prod 'ls /var/www/site | head'
+# -> index.html  assets  about.html</code></pre>
+<p>You now have a one-command deploy that authenticates with a dedicated key, previews before it destroys, and runs entirely over an encrypted channel — the backbone of every push-to-deploy pipeline.</p>

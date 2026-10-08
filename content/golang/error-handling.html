@@ -1,0 +1,90 @@
+<p class="lead">Go has no exceptions for ordinary failures. Errors are plain values you return and check. Learn the <code>(result, error)</code> convention, wrapping with <code>%w</code>, and <code>errors.Is</code>/<code>errors.As</code> for inspecting error chains.</p>
+
+<h2>Errors are values</h2>
+<pre><code>func readConfig(path string) ([]byte, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err   // propagate up
+	}
+	return data, nil
+}
+
+data, err := readConfig("app.yaml")
+if err != nil {
+	log.Fatalf("config: %v", err)
+}</code></pre>
+<p>The <code>error</code> type is just an interface with one method:</p>
+<pre><code>type error interface { Error() string }</code></pre>
+<blockquote class="warn"><strong>Common mistake:</strong> ignoring the error with <code>data, _ := readConfig(...)</code>. Occasionally justified, but each one is a decision — <code>go vet</code> and linters like <code>errcheck</code> flag unchecked errors so they're a conscious choice, not an oversight.</blockquote>
+
+<h2>Creating errors</h2>
+<pre><code>// Simple
+errors.New("something failed")
+
+// Formatted
+fmt.Errorf("open %s: permission denied", path)
+
+// Sentinel errors — exported values callers can compare against
+var ErrNotFound = errors.New("not found")
+
+func Get(id string) (*Item, error) {
+	if _, ok := store[id]; !ok {
+		return nil, ErrNotFound
+	}
+	// ...
+}</code></pre>
+
+<h2>Wrapping with %w</h2>
+<p><span class="level intermediate">Intermediate</span> Wrapping adds context while preserving the original error so callers can still inspect it. Use the <code>%w</code> verb:</p>
+<pre><code>func loadUser(id string) (*User, error) {
+	u, err := Get(id)
+	if err != nil {
+		return nil, fmt.Errorf("loadUser %q: %w", id, err)
+	}
+	return u, nil
+}
+
+// The message chains:  loadUser "42": not found</code></pre>
+
+<h2>Inspecting errors: Is and As</h2>
+<pre><code>_, err := loadUser("42")
+
+// errors.Is: does the chain contain this sentinel?
+if errors.Is(err, ErrNotFound) {
+	http.Error(w, "no such user", 404)
+	return
+}
+
+// errors.As: extract a specific error TYPE from the chain
+var pathErr *os.PathError
+if errors.As(err, &amp;pathErr) {
+	fmt.Println("failing path:", pathErr.Path)
+}</code></pre>
+<blockquote class="warn"><strong>Common mistake:</strong> comparing wrapped errors with <code>==</code> (e.g. <code>err == ErrNotFound</code>). Once an error is wrapped with <code>%w</code>, equality fails. Always use <code>errors.Is</code> for sentinels and <code>errors.As</code> for types — they walk the whole chain.</blockquote>
+
+<h2>Custom error types</h2>
+<pre><code>type ValidationError struct {
+	Field string
+	Msg   string
+}
+func (e *ValidationError) Error() string {
+	return fmt.Sprintf("%s: %s", e.Field, e.Msg)
+}
+
+// Return it, then recover it with errors.As
+err := &amp;ValidationError{Field: "email", Msg: "required"}
+var ve *ValidationError
+if errors.As(err, &amp;ve) { fmt.Println(ve.Field) }  // → email</code></pre>
+
+<h2>When to panic</h2>
+<p>Reserve <code>panic</code> for programmer errors and truly impossible states (a nil map you control, a corrupt invariant), and for the top of a goroutine where you <code>recover</code> to keep a server alive. Everything a caller might reasonably handle — bad input, missing file, network failure — returns an <code>error</code>.</p>
+
+<h2>Exercises</h2>
+<ul>
+  <li>Define <code>ErrEmpty</code> and return it from a parser; have the caller branch on <code>errors.Is</code>.</li>
+  <li>Wrap a file-open error with context three layers deep and confirm <code>errors.As(&amp;pathErr)</code> still extracts the <code>*os.PathError</code>.</li>
+  <li>Write a <code>ValidationError</code> with a <code>Fields map[string]string</code> and aggregate several field errors into one.</li>
+</ul>
+
+<h2>Mini-project: a validating form parser</h2>
+<p>Parse a <code>map[string]string</code> of form fields into a <code>SignupRequest</code> struct. Collect every validation failure into a custom <code>Errors</code> type (a slice of <code>*ValidationError</code>) that itself satisfies <code>error</code>. Return the aggregate, and in the caller use <code>errors.As</code> to render per-field messages — the pattern behind real web form validation.</p>

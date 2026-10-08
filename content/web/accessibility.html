@@ -1,0 +1,62 @@
+<p class="lead">Accessibility (a11y) means everyone can use your site — including people using keyboards, screen readers, magnification, or voice control. Most of it comes from semantic HTML; ARIA fills the gaps; and a handful of habits prevent the common failures.</p>
+
+<h2>Semantic HTML does most of the work</h2>
+<p><span class="level beginner">Beginner</span> A real <code>&lt;button&gt;</code> is focusable, clickable by keyboard (Enter/Space), and announced as "button" — all for free. A <code>&lt;div onclick&gt;</code> has none of that.</p>
+<pre><code>&lt;!-- Accessible: keyboard + screen reader work automatically --&gt;
+&lt;button type="button" onclick="save()"&gt;Save&lt;/button&gt;
+
+&lt;!-- Broken: not focusable, no keyboard, announced as nothing --&gt;
+&lt;div class="btn" onclick="save()"&gt;Save&lt;/div&gt;</code></pre>
+<blockquote class="warn"><strong>The first rule of ARIA: don't use ARIA</strong> when a native element exists. Use <code>&lt;button&gt;</code>, <code>&lt;a href&gt;</code>, <code>&lt;input&gt;</code>, <code>&lt;nav&gt;</code>, <code>&lt;main&gt;</code> — they're accessible by default and you can't out-engineer them with <code>div</code>s and <code>role</code>s.</blockquote>
+
+<h2>Images, labels, and names</h2>
+<pre><code>&lt;img src="chart.png" alt="Sales rose 40% from Q1 to Q2"&gt;   &lt;!-- meaningful --&gt;
+&lt;img src="divider.png" alt=""&gt;                             &lt;!-- decorative --&gt;
+
+&lt;label for="q"&gt;Search&lt;/label&gt;
+&lt;input id="q" name="q"&gt;                                     &lt;!-- labelled --&gt;
+
+&lt;button aria-label="Close dialog"&gt;✕&lt;/button&gt;                &lt;!-- icon-only needs a name --&gt;</code></pre>
+<p>Every interactive element needs an <strong>accessible name</strong> — from its text, a <code>&lt;label&gt;</code>, <code>aria-label</code>, or <code>aria-labelledby</code>. Icon-only buttons are the usual offender.</p>
+
+<h2>Keyboard navigation and focus</h2>
+<p><span class="level intermediate">Intermediate</span> Everything clickable must be reachable and operable with the keyboard alone:</p>
+<pre><code>/* NEVER remove the focus outline without replacing it */
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+&lt;!-- Skip link so keyboard users can jump past the nav --&gt;
+&lt;a href="#main" class="skip-link"&gt;Skip to content&lt;/a&gt;
+...
+&lt;main id="main" tabindex="-1"&gt;…&lt;/main&gt;</code></pre>
+<blockquote class="warn"><strong>Common mistakes:</strong> (1) <code>outline: none</code> with no replacement — keyboard users lose track of where they are. (2) Positive <code>tabindex</code> values (<code>tabindex="3"</code>) — they create a confusing tab order; only ever use <code>0</code> (focusable in order) or <code>-1</code> (focusable only via script). (3) Opening a modal without moving focus into it or trapping focus there.</blockquote>
+
+<h2>ARIA for custom widgets</h2>
+<p>When you must build something HTML has no element for (a tab panel, a disclosure, a custom combobox), ARIA describes its role, state, and relationships:</p>
+<pre><code>&lt;button aria-expanded="false" aria-controls="menu"&gt;Options&lt;/button&gt;
+&lt;ul id="menu" hidden&gt; … &lt;/ul&gt;
+// toggle aria-expanded + the hidden attribute together in JS
+
+&lt;div role="alert"&gt;Form saved&lt;/div&gt;        &lt;!-- announced immediately --&gt;
+&lt;div aria-live="polite"&gt;3 results&lt;/div&gt;   &lt;!-- announced when idle --&gt;</code></pre>
+<p>Follow the <a href="https://www.w3.org/WAI/ARIA/apg/" target="_blank" rel="noopener">ARIA Authoring Practices Guide</a> patterns — custom widgets have expected keyboard behavior (arrow keys in a menu, Escape to close) that you must implement, not just the attributes.</p>
+
+<h2>Color and contrast</h2>
+<pre><code>/* WCAG AA: 4.5:1 for normal text, 3:1 for large text (≥24px or ≥19px bold) */</code></pre>
+<blockquote class="warn">Never convey information by color alone. A red/green status dot is invisible to colorblind users — add text or an icon. Check contrast with your browser's devtools or the WebAIM contrast checker.</blockquote>
+
+<h2>Testing</h2>
+<ul>
+  <li><strong>Keyboard:</strong> unplug the mouse. Can you reach and operate everything with Tab/Shift+Tab/Enter/Space/arrows/Escape?</li>
+  <li><strong>Screen reader:</strong> VoiceOver (⌘+F5 on macOS) or NVDA (Windows). Does it announce names, roles, and state changes?</li>
+  <li><strong>Automated:</strong> Lighthouse a11y audit and axe DevTools catch ~40% of issues — a floor, not a ceiling.</li>
+</ul>
+
+<h2>Exercises</h2>
+<ul>
+  <li>Replace a <code>&lt;div onclick&gt;</code> "button" with a real <code>&lt;button&gt;</code> and test it with the keyboard.</li>
+  <li>Add a skip link and a visible <code>:focus-visible</code> style; tab through the page.</li>
+  <li>Give every icon-only control an <code>aria-label</code>; verify with a screen reader.</li>
+</ul>
+
+<h2>Mini-project: an accessible disclosure + modal</h2>
+<p>Build a collapsible FAQ (button with <code>aria-expanded</code> toggling a region) and a modal dialog that moves focus in on open, traps Tab inside it, closes on Escape, and restores focus to the trigger on close. Pass a Lighthouse a11y audit and a full keyboard-only walkthrough — the two checks that matter most.</p>

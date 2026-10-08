@@ -1,0 +1,58 @@
+<p class="lead">Git is the backbone of every DevOps workflow — the source of truth for code, infrastructure, and pipelines. Beyond the basic commands, what matters is a <em>branching strategy</em> that lets a team ship continuously, review changes, and roll back safely.</p>
+
+<h2>The commands you actually use</h2>
+<pre><code>git status                       # what's changed
+git add -p                       # stage hunks interactively (review as you stage)
+git commit -m "fix: handle nil user"
+git switch -c feat/rate-limit    # create + switch to a branch
+git push -u origin feat/rate-limit
+git pull --rebase                # update, replaying your commits on top (linear history)
+git log --oneline --graph --all  # see the shape of history</code></pre>
+<blockquote class="tip">Write commit messages in the imperative mood ("add X", not "added X") and keep the subject under ~50 chars with detail in the body. <a href="https://www.conventionalcommits.org/" target="_blank" rel="noopener">Conventional Commits</a> (<code>feat:</code>, <code>fix:</code>, <code>chore:</code>) make history scannable and can drive automated changelogs/versioning.</blockquote>
+
+<h2>Branching strategies</h2>
+<p><span class="level intermediate">Intermediate</span> Two dominant models:</p>
+<table>
+  <thead><tr><th></th><th>Trunk-based</th><th>GitFlow</th></tr></thead>
+  <tbody>
+    <tr><td>Branches</td><td>Short-lived feature branches off <code>main</code>; merge daily</td><td>Long-lived <code>develop</code>, <code>release/*</code>, <code>hotfix/*</code></td></tr>
+    <tr><td>Suits</td><td>Continuous delivery, feature flags</td><td>Scheduled releases, versioned products</td></tr>
+    <tr><td>Risk</td><td>Needs strong CI + flags</td><td>Painful merges, slow integration</td></tr>
+  </tbody>
+</table>
+<p>Most modern teams doing continuous delivery use <strong>trunk-based</strong>: branch, open a PR within a day or two, merge to <code>main</code>, deploy. Long-lived branches drift and produce agonizing merges — the longer a branch lives, the more it hurts.</p>
+
+<h2>Pull requests and review</h2>
+<pre><code>gh pr create --title "Add upload rate limiting" --body "…"
+gh pr status
+gh pr merge --squash   # squash the branch into one tidy commit on main</code></pre>
+<p>A PR is where code review, CI, and discussion converge. Keep them small (a reviewer can hold ~400 lines in their head, not 4000), with a description saying <em>what</em> changed, <em>why</em>, and <em>how it was tested</em>. Require green CI and at least one approval before merge via branch protection.</p>
+
+<h2>Rebase vs merge</h2>
+<pre><code># Rebase your feature branch onto the latest main (linear history)
+git switch feat/x
+git fetch origin
+git rebase origin/main
+# resolve conflicts, then:
+git push --force-with-lease     # safe force-push: fails if someone else pushed</code></pre>
+<blockquote class="warn"><strong>Golden rule:</strong> never rebase (or force-push) a branch others are working on — it rewrites history out from under them. Rebase your <em>own</em> unshared feature branch to keep it current; use plain <code>merge</code> for shared/long-lived branches. And prefer <code>--force-with-lease</code> over <code>--force</code>: it refuses to clobber work you haven't seen.</blockquote>
+
+<h2>Undoing safely</h2>
+<pre><code>git revert &lt;sha&gt;          # NEW commit that undoes a bad one — safe on shared history
+git reset --soft HEAD~1   # undo last commit, keep changes staged (local only)
+git restore --staged file # unstage
+git reflog                # your safety net: find "lost" commits after a bad reset</code></pre>
+<blockquote class="warn"><code>git reset --hard</code> and <code>git clean -f</code> permanently discard uncommitted work — there is no undo. On a <em>shared</em> branch, use <code>git revert</code> (which adds a new undo commit) rather than rewriting history. <code>git reflog</code> can rescue commits lost to a bad reset, but not uncommitted changes.</blockquote>
+
+<h2>Hooks and automation</h2>
+<p><span class="level intermediate">Intermediate</span> Git hooks run scripts on events; teams use them (via tools like pre-commit or husky) to format, lint, and run fast tests before a commit or push — catching problems before CI even starts.</p>
+
+<h2>Exercises</h2>
+<ul>
+  <li>Make a feature branch, commit with a Conventional Commit message, open a PR with <code>gh</code>, and squash-merge it.</li>
+  <li>Rebase a feature branch onto an updated <code>main</code>, resolve a conflict, and push with <code>--force-with-lease</code>.</li>
+  <li>Make a bad commit on <code>main</code>, then <code>git revert</code> it; explain why revert (not reset) is correct here.</li>
+</ul>
+
+<h2>Mini-project: a team workflow doc</h2>
+<p>Write a <code>CONTRIBUTING.md</code> defining your team's Git workflow: trunk-based with short feature branches, Conventional Commits, PRs with required green CI + one review via branch protection, squash-merge, and the rebase/force-with-lease rules. Add a pre-commit hook config that formats and lints. This is the exact artifact every well-run repo has.</p>

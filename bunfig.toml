@@ -1,0 +1,7 @@
+# Bun project configuration for the Tutorials PWA.
+# The site is a static generator with zero runtime dependencies — the build
+# script and dev server both run directly under Bun.
+
+[install]
+# Keep the lockfile deterministic. No third-party deps are required to build.
+exact = true

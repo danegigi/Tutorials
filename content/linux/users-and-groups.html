@@ -1,0 +1,127 @@
+<p class="lead">Linux is multi-user to its core: every process runs as some user, every file is owned by one, and the whole permission model rests on knowing who is who. This lesson covers the three files that define accounts (<code>/etc/passwd</code>, <code>/etc/group</code>, <code>/etc/shadow</code>), the commands that create and modify users, how group membership grants access, and how <code>sudo</code> lets ordinary accounts do privileged work without ever logging in as root.</p>
+
+<h2>The three account files</h2>
+<p><span class="level beginner">Beginner</span> User and group definitions are plain colon-separated text files you can read (two of them, anyway):</p>
+<table>
+  <thead><tr><th>File</th><th>Holds</th><th>Readable by</th></tr></thead>
+  <tbody>
+    <tr><td><code>/etc/passwd</code></td><td>One line per user: name, UID, GID, home, login shell.</td><td>Everyone.</td></tr>
+    <tr><td><code>/etc/group</code></td><td>One line per group: name, GID, and member list.</td><td>Everyone.</td></tr>
+    <tr><td><code>/etc/shadow</code></td><td>Hashed passwords and expiry policy.</td><td><strong>root only</strong> (0640, group <code>shadow</code>).</td></tr>
+  </tbody>
+</table>
+<pre><code>grep '^ada:' /etc/passwd
+# -> ada:x:1001:1001:Ada Lovelace:/home/ada:/bin/bash
+#      |   | |    |    |            |          |
+#      |   | |    |    comment      home       login shell
+#      |   | UID  GID
+#      |   password placeholder (x = see /etc/shadow)
+#      username
+
+grep '^devs:' /etc/group
+# -> devs:x:1005:ada,grace,linus     (members of the devs group)</code></pre>
+<p>Despite the <code>x</code> placeholder in <code>passwd</code>, no password hash lives there — it is in <code>/etc/shadow</code>, which only root can read, so a world-readable <code>passwd</code> leaks no secrets.</p>
+<pre><code>sudo grep '^ada:' /etc/shadow
+# -> ada:$6$rounds=...$hashhash:19640:0:99999:7:::
+#      |  |                     |     | |     |
+#      |  hashed password       |     | max   warn-before-expiry
+#      |                        |     min days between changes
+#      |                        last-changed (days since epoch)
+#      username</code></pre>
+
+<h3>UIDs tell you the kind of account</h3>
+<table>
+  <thead><tr><th>UID range</th><th>Meaning</th></tr></thead>
+  <tbody>
+    <tr><td><code>0</code></td><td><strong>root</strong> — the superuser, unrestricted.</td></tr>
+    <tr><td><code>1</code>&ndash;<code>999</code></td><td>System/service accounts (<code>www-data</code>, <code>sshd</code>, <code>systemd-*</code>) — usually no login shell.</td></tr>
+    <tr><td><code>1000</code>+</td><td>Regular human users, created in creation order.</td></tr>
+  </tbody>
+</table>
+<pre><code>id
+# -> uid=1001(ada) gid=1001(ada) groups=1001(ada),1005(devs),27(sudo)
+
+whoami
+# -> ada
+
+getent passwd www-data        # getent reads passwd + any directory (LDAP etc.)
+# -> www-data:x:33:33:www-data:/var/www:/usr/sbin/nologin</code></pre>
+
+<h2>Creating and modifying users</h2>
+<p><span class="level intermediate">Intermediate</span> The admin commands all require root. <code>useradd</code> is the low-level tool; <code>adduser</code> (Debian/Ubuntu) is a friendlier wrapper that also prompts for a password and creates the home directory.</p>
+<pre><code># Create a user with a home dir and bash shell
+sudo useradd -m -s /bin/bash grace
+
+# Set (or reset) their password
+sudo passwd grace
+
+# Create a service account with NO login (for a daemon)
+sudo useradd -r -s /usr/sbin/nologin widgetd
+
+# Add grace to an existing group (the -aG is the critical part)
+sudo usermod -aG devs grace
+
+# Change a user's shell or home
+sudo usermod -s /bin/zsh grace
+
+# Remove a user and their home directory
+sudo userdel -r grace</code></pre>
+<blockquote class="warn"><strong>Common mistake:</strong> adding a user to a group with <code>usermod -G devs grace</code> (no <code>-a</code>) <em>replaces</em> all their supplementary groups with just <code>devs</code>, silently dropping them from <code>sudo</code> and everything else. Always use <code>-aG</code> (append). Also note that a user's group membership is only re-read at login — after <code>usermod -aG</code> they must log out and back in (or run <code>newgrp devs</code>) before the new group takes effect.</blockquote>
+
+<h2>Groups and shared access</h2>
+<p>Groups are how several users share access to the same files without making them world-readable. A user has one <strong>primary group</strong> (the GID in <code>/etc/passwd</code>, used for files they create) and any number of <strong>supplementary groups</strong>.</p>
+<pre><code>groups ada
+# -> ada : ada devs sudo
+
+sudo groupadd deploy             # make a new group
+sudo usermod -aG deploy ada      # add ada to it
+sudo chgrp deploy /srv/release   # let the group own a directory
+sudo chmod 2775 /srv/release     # setgid so new files inherit the group</code></pre>
+<p>Now any member of <code>deploy</code> can read and write <code>/srv/release</code>, and files they create there belong to <code>deploy</code> automatically — the clean alternative to loosening permissions.</p>
+
+<h2>sudo and the principle of least privilege</h2>
+<p><span class="level intermediate">Intermediate</span> You should <strong>almost never log in as root.</strong> Instead, give trusted users the ability to run specific (or all) commands as root through <code>sudo</code>, which asks for <em>their own</em> password, logs every command, and limits what each person can do.</p>
+<pre><code>sudo apt update                  # run one command as root
+sudo systemctl restart nginx
+sudo -i                          # start an interactive root shell (use sparingly)
+sudo -u www-data whoami          # run as a specific other user
+# -> www-data</code></pre>
+
+<h3>Granting sudo</h3>
+<p>Membership of the <code>sudo</code> group (Debian/Ubuntu) or <code>wheel</code> (RHEL/Fedora) grants full sudo:</p>
+<pre><code>sudo usermod -aG sudo grace      # grace can now sudo</code></pre>
+<p>For finer control, drop a file in <code>/etc/sudoers.d/</code> — <strong>always edited with <code>visudo</code></strong>, which validates syntax before saving so a typo cannot lock everyone out:</p>
+<pre><code>sudo visudo -f /etc/sudoers.d/deploy
+# then add, for a deploy user allowed only to restart one service:
+# deploy  ALL=(root) NOPASSWD: /usr/bin/systemctl restart myapp</code></pre>
+<blockquote class="warn">Never edit <code>/etc/sudoers</code> directly with a plain editor — a syntax error there can make <code>sudo</code> refuse to run <em>at all</em>, locking you out of privilege escalation entirely. <code>visudo</code> exists precisely to prevent that. And prefer narrow grants (one command for one user) over blanket <code>ALL=(ALL) NOPASSWD:ALL</code>: the whole point of least privilege is that a compromised deploy account should not equal full root.</blockquote>
+
+<h2>Exercises</h2>
+<ul>
+  <li>Find your own UID, GID, and every group you belong to with a single command.</li>
+  <li>Read the line for <code>root</code> in <code>/etc/passwd</code> and identify its UID, home directory, and shell.</li>
+  <li>Create a group <code>editors</code>, add a user to it with the correct append flag, and verify the membership in <code>/etc/group</code>.</li>
+  <li>Explain in one sentence why <code>/etc/shadow</code> is not world-readable while <code>/etc/passwd</code> is.</li>
+</ul>
+
+<h2>Mini-project: a locked-down deploy account</h2>
+<p>Create a service account that can restart one application and nothing else — the least-privilege pattern you would use for a CI runner or a webhook.</p>
+<pre><code># 1. A no-login service user
+sudo useradd -r -s /usr/sbin/nologin -m -d /srv/deployer deployer
+
+# 2. A group owning the release directory, setgid so files inherit it
+sudo groupadd release
+sudo usermod -aG release deployer
+sudo mkdir -p /srv/release
+sudo chgrp release /srv/release
+sudo chmod 2775 /srv/release
+
+# 3. A narrow sudo grant: restart ONE service, no password, nothing else
+sudo visudo -f /etc/sudoers.d/deployer
+# deployer ALL=(root) NOPASSWD: /usr/bin/systemctl restart myapp
+
+# 4. Verify the account cannot do more than intended
+sudo -u deployer sudo -l
+# -> User deployer may run the following commands:
+# ->     (root) NOPASSWD: /usr/bin/systemctl restart myapp</code></pre>
+<p>The <code>deployer</code> account cannot log in interactively, cannot read other users' files, and can run exactly one privileged command. If its credentials leak, the blast radius is a single service restart — least privilege working as designed.</p>

@@ -1,0 +1,75 @@
+<p class="lead">HTML is the structure layer of the web. Write it <em>semantically</em> — elements chosen for meaning, not appearance — and you get accessibility, SEO, and maintainability almost for free.</p>
+
+<h2>Document skeleton</h2>
+<pre><code>&lt;!DOCTYPE html&gt;
+&lt;html lang="en"&gt;
+&lt;head&gt;
+  &lt;meta charset="utf-8"&gt;
+  &lt;meta name="viewport" content="width=device-width, initial-scale=1"&gt;
+  &lt;title&gt;Page title&lt;/title&gt;
+  &lt;meta name="description" content="One-sentence summary for search results."&gt;
+&lt;/head&gt;
+&lt;body&gt;
+  &lt;!-- content --&gt;
+&lt;/body&gt;
+&lt;/html&gt;</code></pre>
+<blockquote class="warn"><strong>Three non-negotiables:</strong> the <code>&lt;!DOCTYPE html&gt;</code> (triggers standards mode), <code>lang</code> on <code>&lt;html&gt;</code> (screen readers and translation), and the viewport <code>&lt;meta&gt;</code> (without it, mobile browsers render at desktop width and zoom out). Omitting any is a common, visible bug.</blockquote>
+
+<h2>Semantic structure</h2>
+<p><span class="level beginner">Beginner</span> Use landmark elements instead of a sea of <code>&lt;div&gt;</code>s. They give the page an outline that assistive tech and browsers understand:</p>
+<pre><code>&lt;header&gt;…site header, logo, nav…&lt;/header&gt;
+&lt;nav&gt;…primary navigation…&lt;/nav&gt;
+&lt;main&gt;
+  &lt;article&gt;
+    &lt;h1&gt;One h1 per page&lt;/h1&gt;
+    &lt;section&gt;
+      &lt;h2&gt;A subsection&lt;/h2&gt;
+      &lt;p&gt;Paragraph text.&lt;/p&gt;
+    &lt;/section&gt;
+  &lt;/article&gt;
+  &lt;aside&gt;…related links…&lt;/aside&gt;
+&lt;/main&gt;
+&lt;footer&gt;…copyright, secondary links…&lt;/footer&gt;</code></pre>
+<blockquote class="tip">Heading levels (<code>h1</code>–<code>h6</code>) convey a document outline — never skip a level for visual size. Style a heading with CSS; don't pick <code>&lt;h4&gt;</code> because it "looks right".</blockquote>
+
+<h2>Links and media</h2>
+<pre><code>&lt;a href="/about"&gt;About&lt;/a&gt;
+&lt;a href="https://example.com" target="_blank" rel="noopener"&gt;External ↗&lt;/a&gt;
+
+&lt;img src="/cat.jpg" alt="A tabby cat asleep on a keyboard" width="640" height="480"&gt;
+&lt;picture&gt;
+  &lt;source srcset="/hero.avif" type="image/avif"&gt;
+  &lt;source srcset="/hero.webp" type="image/webp"&gt;
+  &lt;img src="/hero.jpg" alt="Mountain at sunrise"&gt;
+&lt;/picture&gt;</code></pre>
+<blockquote class="warn"><strong>Common mistakes:</strong> (1) empty or missing <code>alt</code> on meaningful images — screen-reader users get nothing. (Decorative images get <code>alt=""</code> deliberately.) (2) Omitting <code>width</code>/<code>height</code>, which causes layout shift as images load. (3) <code>target="_blank"</code> without <code>rel="noopener"</code>, a minor security/perf footgun.</blockquote>
+
+<h2>Forms</h2>
+<pre><code>&lt;form action="/signup" method="post"&gt;
+  &lt;label for="email"&gt;Email&lt;/label&gt;
+  &lt;input id="email" name="email" type="email" required autocomplete="email"&gt;
+
+  &lt;label for="pw"&gt;Password&lt;/label&gt;
+  &lt;input id="pw" name="password" type="password" minlength="8" required&gt;
+
+  &lt;button type="submit"&gt;Create account&lt;/button&gt;
+&lt;/form&gt;</code></pre>
+<p>Every input needs a <code>&lt;label&gt;</code> tied by <code>for</code>/<code>id</code> — it's a clickable target and the accessible name. The <code>type</code> drives mobile keyboards and built-in validation (covered in Forms &amp; Validation).</p>
+
+<h2>Tables (for tabular data only)</h2>
+<pre><code>&lt;table&gt;
+  &lt;caption&gt;Q3 revenue by region&lt;/caption&gt;
+  &lt;thead&gt;&lt;tr&gt;&lt;th scope="col"&gt;Region&lt;/th&gt;&lt;th scope="col"&gt;Revenue&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;
+  &lt;tbody&gt;&lt;tr&gt;&lt;th scope="row"&gt;EU&lt;/th&gt;&lt;td&gt;$1.2M&lt;/td&gt;&lt;/tr&gt;&lt;/tbody&gt;
+&lt;/table&gt;</code></pre>
+<blockquote class="warn">Don't use tables for page layout — that's what CSS Grid/Flexbox are for. Tables are for data; <code>scope</code> on headers makes them navigable by screen readers.</blockquote>
+
+<h2>Exercises</h2>
+<ul>
+  <li>Mark up a blog post using <code>header/main/article/section/footer</code> with a single <code>h1</code> and a correct heading outline.</li>
+  <li>Add a responsive <code>&lt;picture&gt;</code> that serves AVIF/WebP with a JPEG fallback and proper <code>alt</code>.</li>
+  <li>Run the page through the browser's accessibility tree view and confirm the landmarks appear.</li>
+</ul>
+
+<h2>Mini-project: a semantic resume page</h2>
+<p>Build a single-page resume using only semantic HTML (no styling yet): header with name + contact, <code>main</code> with sections for experience and education, a skills list, and a data <code>&lt;table&gt;</code> for a certifications grid. Validate it at <a href="https://validator.w3.org/" target="_blank" rel="noopener">validator.w3.org</a> — zero errors is the goal. You'll style it in the CSS lesson.</p>

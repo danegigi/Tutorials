@@ -1,0 +1,244 @@
+/* ──────────────────────────────────────────────────────────────────────────
+   Tutorials PWA — shared stylesheet
+   Light & dark theming via [data-theme] on <html>. Dark is the default and is
+   applied before paint by an inline bootstrap in <head> to avoid a flash.
+   ────────────────────────────────────────────────────────────────────────── */
+
+:root,
+:root[data-theme="dark"] {
+  --bg: #0d1117;
+  --surface: #161b22;
+  --surface-2: #1c2230;
+  --border: #2d3148;
+  --text: #e6edf3;
+  --muted: #9aa4b2;
+  --accent: #38bdf8;
+  --accent-2: #818cf8;
+  --link: #7dd3fc;
+  --code-bg: #0b0f14;
+  --code-text: #e6e9f5;
+  --inline-code-bg: #252836;
+  --inline-code-text: #8be9fd;
+  --ok: #34d399;
+  --warn: #fbbf24;
+  --shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
+}
+
+:root[data-theme="light"] {
+  --bg: #f7f8fb;
+  --surface: #ffffff;
+  --surface-2: #eef1f6;
+  --border: #d7dce5;
+  --text: #1b2130;
+  --muted: #5b6372;
+  --accent: #0369a1;
+  --accent-2: #4f46e5;
+  --link: #0369a1;
+  --code-bg: #1b2130;
+  --code-text: #e6e9f5;
+  --inline-code-bg: #eceff5;
+  --inline-code-text: #7c3aed;
+  --ok: #059669;
+  --warn: #b45309;
+  --shadow: 0 4px 14px rgba(15, 23, 42, 0.12);
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font: 16px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+a { color: var(--link); text-decoration: none; }
+a:hover { text-decoration: underline; }
+strong { color: var(--text); }
+
+/* ── Top navigation bar ── */
+header.nav {
+  position: sticky; top: 0; z-index: 30;
+  background: color-mix(in srgb, var(--bg) 85%, transparent);
+  backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; gap: 14px;
+  padding: 10px 20px;
+}
+header.nav .brand {
+  font-weight: 700; color: var(--text); font-size: 15px;
+  display: flex; align-items: center; gap: 8px;
+}
+header.nav .brand:hover { text-decoration: none; }
+header.nav .crumb { color: var(--muted); font-size: 0.85rem; }
+header.nav .spacer { margin-left: auto; }
+header.nav .navbtn {
+  background: var(--surface); border: 1px solid var(--border); color: var(--text);
+  border-radius: 8px; padding: 6px 11px; font-size: 13px; cursor: pointer;
+  display: inline-flex; align-items: center; gap: 6px; line-height: 1;
+}
+header.nav .navbtn:hover { border-color: var(--accent); text-decoration: none; }
+
+/* ── Layout wrappers ── */
+.wrap { max-width: 940px; margin: 0 auto; padding: 28px 20px 120px; }
+.wrap-wide { max-width: 1100px; }
+
+h1.page-title { font-size: 2rem; margin: 0.2em 0 0.1em; line-height: 1.2; }
+.section-tagline { color: var(--muted); margin: 0 0 1.4em; font-size: 1.05rem; }
+
+/* ── Content typography (lesson body) ── */
+.lesson-body h2 {
+  font-size: 1.4rem; margin: 2.2em 0 0.5em; padding-top: 0.6em;
+  border-top: 1px solid var(--border); color: var(--accent); scroll-margin-top: 72px;
+}
+.lesson-body h3 { font-size: 1.14rem; margin: 1.6em 0 0.4em; color: var(--accent-2); scroll-margin-top: 72px; }
+.lesson-body h4 { font-size: 1rem; margin: 1.3em 0 0.3em; color: var(--muted); }
+.lesson-body p { margin: 0.2em 0 0.9em; }
+.lesson-body ul, .lesson-body ol { padding-left: 26px; margin: 0.2em 0 1em; }
+.lesson-body li { margin: 5px 0; }
+.lesson-body p.lead { font-size: 1.08rem; color: var(--muted); margin-bottom: 1.2em; }
+.lesson-body img { max-width: 100%; border-radius: 8px; }
+.lesson-body hr { border: none; border-top: 1px solid var(--border); margin: 2.2em 0; }
+
+.level {
+  display: inline-block; font-size: 0.68rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.06em; padding: 2px 8px; border-radius: 999px; margin-right: 6px; vertical-align: middle;
+}
+.level.beginner { background: color-mix(in srgb, var(--ok) 18%, transparent); color: var(--ok); }
+.level.intermediate { background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--accent); }
+.level.advanced { background: color-mix(in srgb, var(--accent-2) 20%, transparent); color: var(--accent-2); }
+
+/* ── Code ── */
+pre {
+  position: relative; background: var(--code-bg); border: 1px solid var(--border);
+  border-radius: 10px; padding: 16px 18px; overflow: auto; margin: 1.1em 0;
+  font-size: 13.5px; line-height: 1.6;
+}
+pre code { background: none; padding: 0; color: var(--code-text); white-space: pre;
+  font-family: "JetBrains Mono", "SF Mono", SFMono-Regular, Menlo, Consolas, monospace; }
+:not(pre) > code {
+  background: var(--inline-code-bg); color: var(--inline-code-text);
+  padding: 2px 6px; border-radius: 5px; font-size: 0.88em;
+  font-family: "JetBrains Mono", "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+}
+pre .copy {
+  position: absolute; top: 8px; right: 8px; opacity: 0; transition: opacity 0.15s;
+  background: var(--surface); border: 1px solid var(--border); color: var(--text);
+  border-radius: 6px; padding: 4px 10px; font-size: 12px; cursor: pointer;
+}
+pre:hover .copy, pre .copy:focus { opacity: 1; }
+
+/* ── Tables ── */
+table { border-collapse: collapse; width: 100%; margin: 1.2em 0; font-size: 14px; display: block; overflow: auto; }
+th, td { border: 1px solid var(--border); padding: 8px 12px; text-align: left; vertical-align: top; }
+th { background: var(--surface); color: var(--accent); font-weight: 600; }
+td code { white-space: nowrap; }
+
+/* ── Callouts ── */
+blockquote { border-left: 3px solid var(--accent); background: var(--surface);
+  padding: 10px 16px; border-radius: 0 8px 8px 0; margin: 1.1em 0; color: var(--text); }
+blockquote.warn { border-left-color: var(--warn); background: color-mix(in srgb, var(--warn) 10%, var(--surface)); }
+blockquote.tip { border-left-color: var(--ok); background: color-mix(in srgb, var(--ok) 10%, var(--surface)); }
+
+/* ── Reference link row ── */
+.ref { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0.4em 0 1.6em;
+  font-size: 14px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 9px 13px; }
+
+/* ── Table of contents ── */
+nav.toc { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 20px; margin: 1.6em 0; }
+nav.toc strong { display: block; color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 8px; }
+nav.toc ul { margin: 0; padding: 0; list-style: none; columns: 2; column-gap: 28px; }
+nav.toc li { margin: 5px 0; break-inside: avoid; }
+nav.toc li.lvl3 { padding-left: 14px; font-size: 14px; }
+nav.toc a { color: var(--text); }
+nav.toc a:hover { color: var(--accent); }
+@media (max-width: 640px) { nav.toc ul { columns: 1; } }
+
+/* ── Further reading ── */
+.further { margin-top: 2.4em; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 6px 20px 16px; }
+.further h2 { border-top: none; color: var(--accent-2); }
+.further-list { margin: 0; padding-left: 20px; columns: 2; column-gap: 28px; }
+.further-list li { margin: 6px 0; break-inside: avoid; }
+@media (max-width: 640px) { .further-list { columns: 1; } }
+
+/* ── Lesson toolbar (bookmark + completion) ── */
+.lesson-tools { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: 0.4em 0 0.2em; }
+.lesson-tools button {
+  background: var(--surface); border: 1px solid var(--border); color: var(--text);
+  border-radius: 8px; padding: 7px 13px; font-size: 13px; cursor: pointer;
+  display: inline-flex; align-items: center; gap: 7px;
+}
+.lesson-tools button:hover { border-color: var(--accent); }
+.lesson-tools button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--surface)); }
+
+/* ── Prev / next pager ── */
+.pager { display: flex; justify-content: space-between; gap: 12px; margin-top: 3em; border-top: 1px solid var(--border); padding-top: 1.4em; }
+.pager a { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 12px 16px; flex: 1; color: var(--text); }
+.pager a:hover { border-color: var(--accent); text-decoration: none; }
+.pager a.next { text-align: right; }
+.pager a small { display: block; color: var(--muted); font-size: 12px; margin-bottom: 2px; }
+
+/* ── Dashboard (home) ── */
+.hero { text-align: center; padding: 36px 0 6px; }
+.hero .logo { font-size: 3rem; line-height: 1; }
+.hero h1 { font-size: 2.4rem; margin: 0.15em 0; }
+.hero p { color: var(--muted); max-width: 680px; margin: 0 auto; }
+.progress-overall { max-width: 420px; margin: 18px auto 0; }
+.bar { height: 8px; background: var(--surface-2); border-radius: 999px; overflow: hidden; border: 1px solid var(--border); }
+.bar > span { display: block; height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent-2)); width: 0; transition: width 0.4s; }
+.progress-overall .label { color: var(--muted); font-size: 13px; text-align: center; margin-top: 6px; }
+
+.section-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 18px; margin: 30px 0; }
+.section-card { display: flex; flex-direction: column; gap: 8px; background: var(--surface); border: 1px solid var(--border);
+  border-left: 4px solid var(--card-accent, var(--accent)); border-radius: 14px; padding: 22px; transition: transform 0.15s, border-color 0.15s; }
+.section-card:hover { transform: translateY(-3px); text-decoration: none; border-color: var(--accent); }
+.section-card .ic { font-size: 2rem; line-height: 1; }
+.section-card h2 { margin: 4px 0 0; font-size: 1.25rem; color: var(--text); }
+.section-card p { color: var(--muted); font-size: 0.92rem; margin: 0; flex: 1; }
+.section-card .meta { display: flex; align-items: center; gap: 10px; margin-top: 6px; }
+.section-card .meta .bar { flex: 1; }
+.section-card .meta .count { color: var(--muted); font-size: 12px; white-space: nowrap; }
+
+/* ── Lesson list (section page) ── */
+.lesson-list { list-style: none; padding: 0; margin: 20px 0; display: grid; gap: 10px; }
+.lesson-list li { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; }
+.lesson-list a { display: flex; align-items: center; gap: 12px; padding: 14px 16px; color: var(--text); }
+.lesson-list a:hover { text-decoration: none; border-color: var(--accent); }
+.lesson-list .num { color: var(--muted); font-variant-numeric: tabular-nums; font-size: 13px; min-width: 26px; }
+.lesson-list .ttl { font-weight: 600; }
+.lesson-list .desc { color: var(--muted); font-size: 0.9rem; margin-top: 2px; }
+.lesson-list .state { margin-left: auto; font-size: 1.1rem; min-width: 22px; text-align: center; }
+.lesson-list .body { min-width: 0; }
+
+/* ── Search ── */
+.search-wrap { position: relative; }
+#search-input {
+  width: 100%; background: var(--surface); border: 1px solid var(--border); color: var(--text);
+  border-radius: 10px; padding: 12px 14px; font-size: 15px;
+}
+#search-input:focus { outline: 2px solid var(--accent); border-color: var(--accent); }
+#search-results { list-style: none; padding: 0; margin: 14px 0 0; display: grid; gap: 8px; }
+#search-results li a { display: block; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; color: var(--text); }
+#search-results li a:hover { border-color: var(--accent); text-decoration: none; }
+#search-results .sec { font-size: 12px; color: var(--muted); }
+#search-results mark { background: color-mix(in srgb, var(--warn) 40%, transparent); color: inherit; border-radius: 3px; padding: 0 2px; }
+.search-empty { color: var(--muted); margin-top: 14px; }
+
+/* ── Floating buttons ── */
+.fab { position: fixed; right: 20px; z-index: 25; border: none; border-radius: 24px; padding: 10px 16px;
+  font-weight: 600; cursor: pointer; box-shadow: var(--shadow); font-size: 14px; }
+.fab.top { bottom: 20px; background: var(--surface); color: var(--text); border: 1px solid var(--border); }
+
+/* ── Offline / update banners ── */
+.banner { position: fixed; left: 50%; transform: translateX(-50%); bottom: 20px; z-index: 40;
+  background: var(--surface); border: 1px solid var(--accent); color: var(--text); border-radius: 10px;
+  padding: 10px 16px; box-shadow: var(--shadow); font-size: 14px; display: none; align-items: center; gap: 12px; max-width: 92vw; }
+.banner.show { display: flex; }
+.banner button { background: var(--accent); color: #04222e; border: none; border-radius: 7px; padding: 6px 12px; font-weight: 600; cursor: pointer; }
+
+/* ── Install button (hidden until installable) ── */
+#install-btn { display: none; }
+
+@media (max-width: 520px) {
+  .wrap { padding: 20px 14px 110px; }
+  .hero h1 { font-size: 1.9rem; }
+}

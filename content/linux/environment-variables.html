@@ -1,0 +1,133 @@
+<p class="lead">Environment variables are the key-value settings every process inherits from its parent — they are how you tell a program where to find things, which mode to run in, and what credentials to use, without hard-coding anything. This lesson covers setting and exporting variables, the all-important <code>PATH</code>, inspecting the current environment, and the shell startup files that decide which settings survive a new login.</p>
+
+<h2>Setting variables</h2>
+<p><span class="level beginner">Beginner</span> A plain assignment creates a <em>shell variable</em> visible only to the current shell. Prefixing a command sets a variable for <em>that one command only</em>. <code>export</code> promotes a variable to an <em>environment variable</em> that child processes inherit.</p>
+<pre><code>GREETING="hello"          # shell variable, this shell only
+echo "$GREETING"
+# -> hello
+
+bash -c 'echo "$GREETING"'   # a child shell does NOT see it
+# -> (empty line)
+
+export GREETING           # now promote it
+bash -c 'echo "$GREETING"'
+# -> hello
+
+# Set a variable for a single command only
+DEBUG=1 ./app             # ./app sees DEBUG=1; your shell does not keep it
+NODE_ENV=production node server.js</code></pre>
+<blockquote class="tip">Always quote expansions as <code>"$VAR"</code>. Unquoted <code>$VAR</code> is split on whitespace and glob-expanded, so a value with spaces (or a <code>*</code>) breaks in surprising ways. The quotes are not optional cosmetics — they are correctness.</blockquote>
+
+<h2>Inspecting the environment</h2>
+<pre><code>printenv                  # print every exported variable
+printenv HOME             # print just one
+# -> /home/ada
+
+env                       # same list (and can run a command in a modified env)
+echo "$HOME $USER $SHELL" # expand several at once
+# -> /home/ada ada /bin/bash
+
+env -i bash -c 'printenv' # run with an EMPTY environment (for debugging)</code></pre>
+<table>
+  <thead><tr><th>Variable</th><th>What it holds</th></tr></thead>
+  <tbody>
+    <tr><td><code>PATH</code></td><td>Colon-separated list of directories searched for commands.</td></tr>
+    <tr><td><code>HOME</code></td><td>Your home directory; <code>~</code> expands to it.</td></tr>
+    <tr><td><code>USER</code> / <code>LOGNAME</code></td><td>Your username.</td></tr>
+    <tr><td><code>SHELL</code></td><td>Your login shell's path.</td></tr>
+    <tr><td><code>PWD</code> / <code>OLDPWD</code></td><td>Current and previous working directory.</td></tr>
+    <tr><td><code>LANG</code> / <code>LC_*</code></td><td>Locale: language, date format, sort order.</td></tr>
+    <tr><td><code>EDITOR</code></td><td>Which editor tools like <code>git</code> and <code>crontab -e</code> open.</td></tr>
+  </tbody>
+</table>
+
+<h2>PATH: how the shell finds commands</h2>
+<p><span class="level beginner">Beginner</span> When you type <code>git</code>, the shell searches each directory in <code>PATH</code>, left to right, and runs the first <code>git</code> it finds. This is why installing a tool is not enough — its directory must be on <code>PATH</code>.</p>
+<pre><code>echo "$PATH"
+# -> /home/ada/.local/bin:/usr/local/bin:/usr/bin:/bin
+
+which git                 # which git would actually run?
+# -> /usr/bin/git
+
+type -a python3           # ALL matches on PATH, in search order
+# -> python3 is /usr/local/bin/python3
+# -> python3 is /usr/bin/python3
+
+# Add a directory to the FRONT of PATH (takes priority)
+export PATH="$HOME/bin:$PATH"
+# Add to the END (fallback, lower priority)
+export PATH="$PATH:/opt/tools/bin"</code></pre>
+<blockquote class="warn"><strong>Common mistake:</strong> writing <code>export PATH="$HOME/bin"</code> without appending the old <code>$PATH</code> — this <em>replaces</em> the entire search path, and suddenly <code>ls</code>, <code>cd</code>, and everything else &ldquo;command not found&rdquo; because <code>/usr/bin</code> is no longer on it. Always include <code>:$PATH</code>. If it happens in a live shell, you can still run commands by full path (<code>/usr/bin/ls</code>) or just open a new terminal.</blockquote>
+
+<h2>Where to persist settings: the startup files</h2>
+<p><span class="level intermediate">Intermediate</span> A variable set at the prompt vanishes when the terminal closes. To make it permanent you add the <code>export</code> line to a shell startup file — but <em>which</em> file depends on whether the shell is a login shell or an interactive non-login shell.</p>
+<table>
+  <thead><tr><th>File</th><th>Read when</th><th>Put here</th></tr></thead>
+  <tbody>
+    <tr><td><code>~/.bash_profile</code> (or <code>~/.profile</code>)</td><td>At <strong>login</strong> (SSH session, console login).</td><td>Things that should be set once per login: <code>PATH</code>, <code>EDITOR</code>, environment for all programs.</td></tr>
+    <tr><td><code>~/.bashrc</code></td><td>Each <strong>interactive non-login</strong> shell (new terminal tab in a desktop).</td><td>Aliases, prompt (<code>PS1</code>), shell options, interactive niceties.</td></tr>
+    <tr><td><code>/etc/profile</code>, <code>/etc/environment</code></td><td>System-wide, for every user.</td><td>Machine-wide defaults (needs root).</td></tr>
+  </tbody>
+</table>
+<p>Most setups make <code>~/.bash_profile</code> source <code>~/.bashrc</code> so you only maintain one file in practice:</p>
+<pre><code># in ~/.bash_profile
+[ -f ~/.bashrc ] &amp;&amp; source ~/.bashrc
+
+# in ~/.bashrc — persist a PATH addition and an editor choice
+export PATH="$HOME/.local/bin:$PATH"
+export EDITOR=vim
+alias ll='ls -la'
+
+# Apply changes without logging out
+source ~/.bashrc</code></pre>
+<blockquote class="tip">After editing a startup file, run <code>source ~/.bashrc</code> (or open a new terminal) to apply it — editing the file does not change your <em>current</em> shell. If a tool's installer told you to &ldquo;restart your shell,&rdquo; this is why.</blockquote>
+
+<h2>App config via environment: the twelve-factor way</h2>
+<p><span class="level intermediate">Intermediate</span> Modern apps read their configuration from the environment rather than from code, which keeps secrets out of the repo and lets the same build run in dev, staging, and prod with different values. A <code>.env</code> file is the common local pattern — <strong>and it must be gitignored.</strong></p>
+<pre><code># .env  (NEVER commit this — add it to .gitignore)
+DATABASE_URL=postgres://localhost/myapp
+PORT=8080
+LOG_LEVEL=debug
+
+# Load it into the current shell before running the app
+set -a; source .env; set +a    # -a auto-exports every variable sourced
+echo "$PORT"
+# -> 8080
+./app                           # now sees DATABASE_URL, PORT, LOG_LEVEL</code></pre>
+<blockquote class="warn">Never commit a <code>.env</code> that contains real credentials, and never <code>echo</code> a secret value into a log or a chat. If a secret is ever committed or printed, treat it as compromised and rotate it — scrubbing it from history is slower and less reliable than issuing a new one.</blockquote>
+
+<h2>Exercises</h2>
+<ul>
+  <li>Set a variable without exporting it, confirm a child shell cannot see it, then export it and confirm it can.</li>
+  <li>Print your <code>PATH</code>, then use <code>which</code> and <code>type -a</code> to find every <code>python</code> or <code>python3</code> on it.</li>
+  <li>Add <code>$HOME/bin</code> to the front of your <code>PATH</code> in <code>~/.bashrc</code>, create a trivial script there, make it executable, and run it by name alone.</li>
+  <li>Create a <code>.env</code> with two variables, load it with <code>set -a; source .env; set +a</code>, and confirm both are exported with <code>printenv</code>.</li>
+</ul>
+
+<h2>Mini-project: a project <code>.envrc</code> loader</h2>
+<p>Build a small, safe loader so that entering a project directory sets its environment and leaving it unsets it — the manual version of what tools like <code>direnv</code> automate.</p>
+<pre><code># In the project: .env (gitignored) holds the values
+cat &gt; .env &lt;&lt;'EOF'
+APP_ENV=development
+API_BASE=http://localhost:8080
+EOF
+echo ".env" &gt;&gt; .gitignore
+
+# A loader function in ~/.bashrc
+cat &gt;&gt; ~/.bashrc &lt;&lt;'EOF'
+loadenv() {
+  if [ -f .env ]; then
+    set -a; source ./.env; set +a
+    echo "loaded $(grep -c = .env) vars from $(pwd)/.env"
+  else
+    echo "no .env here"
+  fi
+}
+EOF
+source ~/.bashrc
+
+cd myproject &amp;&amp; loadenv
+# -> loaded 2 vars from /home/ada/myproject/.env
+echo "$API_BASE"
+# -> http://localhost:8080</code></pre>
+<p>You now have a repeatable way to pull per-project config out of a gitignored file into the environment, keeping secrets out of both the code and your global shell profile — the foundation every deployment pipeline builds on.</p>

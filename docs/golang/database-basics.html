@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en" data-base="../">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0d1117">
+<meta name="description" content="Dev Tutorials — Golang, Bun, Web Development, Linux and DevOps, offline-ready.">
+<title>Database Basics — Golang</title>
+<link rel="manifest" href="../manifest.webmanifest">
+<link rel="icon" href="../icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="../icon-192.png">
+<link rel="stylesheet" href="../app.css">
+<script>/* set theme before paint to avoid flash */(function(){try{var t=localStorage.getItem('tut.theme');document.documentElement.setAttribute('data-theme',t||'dark');}catch(e){document.documentElement.setAttribute('data-theme','dark');}})();</script>
+
+</head>
+<body class="lesson">
+<header class="nav">
+  <a class="brand" href="../index.html">📚 Dev Tutorials</a>
+  <span class="crumb">Database Basics — Golang</span>
+  <span class="spacer"></span>
+  <a class="navbtn" href="../search.html">🔎 Search</a>
+  <button class="navbtn" id="install-btn" type="button">⬇️ Install</button>
+  <button class="navbtn" id="theme-btn" type="button" aria-label="Toggle theme">🌙 Dark</button>
+</header>
+<main class="wrap lesson-body">
+  <h1 class="page-title">Database Basics</h1>
+  <div class="lesson-tools" data-lesson-id="golang/database-basics">
+    <button id="done-btn" type="button" aria-pressed="false">○ Mark complete</button>
+    <button id="mark-btn" type="button" aria-pressed="false">☆ Bookmark</button>
+    <a class="navbtn" href="index.html" style="margin-left:auto">All Golang lessons →</a>
+  </div>
+<nav class="toc" aria-label="On this page"><strong>On this page</strong><ul>
+<li class="lvl2"><a href="#connecting">Connecting</a></li>
+<li class="lvl2"><a href="#querying-safely">Querying safely</a></li>
+<li class="lvl2"><a href="#writes-and-results">Writes and results</a></li>
+<li class="lvl2"><a href="#transactions">Transactions</a></li>
+<li class="lvl2"><a href="#pool-configuration">Pool configuration</a></li>
+<li class="lvl2"><a href="#when-to-use-an-orm-ent">When to use an ORM: Ent</a></li>
+<li class="lvl2"><a href="#exercises">Exercises</a></li>
+<li class="lvl2"><a href="#mini-project-persist-the-todo-api">Mini-project: persist the TODO API</a></li>
+</ul></nav>
+<p class="lead">Go talks to SQL databases through <code>database/sql</code> — a driver-agnostic interface with connection pooling built in. Learn safe queries, the pool knobs that matter, and when a typed ORM like Ent earns its keep.</p>
+
+<h2 id="connecting">Connecting</h2>
+<pre><code>import (
+	"database/sql"
+	_ "github.com/mattn/go-sqlite3"   // blank import registers the driver
+)
+
+db, err := sql.Open("sqlite3", "app.db")
+if err != nil { log.Fatal(err) }
+defer db.Close()
+
+if err := db.Ping(); err != nil {    // Open is lazy — Ping actually connects
+	log.Fatal(err)
+}</code></pre>
+<blockquote class="tip"><code>sql.DB</code> is a <em>pool</em>, not a single connection. Create one per database for the lifetime of your program and share it — do not open a new one per request.</blockquote>
+
+<h2 id="querying-safely">Querying safely</h2>
+<pre><code>// Single row
+var name string
+err := db.QueryRow("SELECT name FROM users WHERE id = ?", id).Scan(&amp;name)
+if err == sql.ErrNoRows {
+	// not found
+}
+
+// Many rows
+rows, err := db.Query("SELECT id, name FROM users WHERE active = ?", true)
+if err != nil { return err }
+defer rows.Close()                   // ALWAYS — leaks a connection otherwise
+
+for rows.Next() {
+	var u User
+	if err := rows.Scan(&amp;u.ID, &amp;u.Name); err != nil { return err }
+	users = append(users, u)
+}
+return rows.Err()                    // check for mid-iteration errors</code></pre>
+<blockquote class="warn"><strong>Never build SQL with string concatenation.</strong> <code>"... WHERE name = '" + input + "'"</code> is a SQL-injection hole. Always use placeholders (<code>?</code> for SQLite/MySQL, <code>$1</code> for Postgres) and pass values as arguments — the driver escapes them.</blockquote>
+
+<h2 id="writes-and-results">Writes and results</h2>
+<pre><code>res, err := db.Exec("INSERT INTO users(name, email) VALUES(?, ?)", name, email)
+if err != nil { return err }
+id, _ := res.LastInsertId()
+n, _ := res.RowsAffected()</code></pre>
+
+<h2 id="transactions">Transactions</h2>
+<pre><code>tx, err := db.Begin()
+if err != nil { return err }
+defer tx.Rollback()                  // no-op if already committed
+
+if _, err := tx.Exec("UPDATE accounts SET bal = bal - ? WHERE id = ?", amt, from); err != nil {
+	return err
+}
+if _, err := tx.Exec("UPDATE accounts SET bal = bal + ? WHERE id = ?", amt, to); err != nil {
+	return err
+}
+return tx.Commit()</code></pre>
+
+<h2 id="pool-configuration">Pool configuration</h2>
+<p><span class="level intermediate">Intermediate</span> The defaults are rarely right for production:</p>
+<pre><code>db.SetMaxOpenConns(25)                 // cap concurrent connections
+db.SetMaxIdleConns(25)                 // keep warm connections ready
+db.SetConnMaxLifetime(5 * time.Minute) // recycle to survive DB restarts/LB</code></pre>
+<blockquote class="warn"><strong>Common mistake:</strong> leaving <code>MaxOpenConns</code> unbounded (the default). Under load Go will open thousands of connections and exhaust the database's own connection limit. Set it to something your DB can handle.</blockquote>
+
+<h2 id="when-to-use-an-orm-ent">When to use an ORM: Ent</h2>
+<p><span class="level advanced">Advanced</span> For large schemas with lots of relations, a code-generating ORM like <a href="https://entgo.io/" target="_blank" rel="noopener">Ent</a> gives you a typed query builder and migrations. You define the schema in Go, run codegen, and get compile-checked queries:</p>
+<pre><code>// schema/user.go — declarative
+func (User) Fields() []ent.Field {
+	return []ent.Field{
+		field.String("name"),
+		field.String("email").Unique(),
+	}
+}
+// go generate ./ent  → generated client
+
+// Typed queries, no raw SQL strings
+u, err := client.User.Create().SetName("Ada").SetEmail("ada@x.com").Save(ctx)
+users, err := client.User.Query().Where(user.NameHasPrefix("A")).All(ctx)</code></pre>
+<p>The trade-off: a build step and generated code in your repo, in exchange for eliminating a whole class of hand-written-SQL bugs. For small apps, plain <code>database/sql</code> (optionally with <code>sqlx</code> for struct scanning) is simpler.</p>
+
+<h2 id="exercises">Exercises</h2>
+<ul>
+  <li>Create a SQLite <code>users</code> table, insert three rows with placeholders, and query them back into a <code>[]User</code>.</li>
+  <li>Wrap two writes in a transaction and prove a mid-transaction error rolls both back.</li>
+  <li>Set <code>MaxOpenConns(2)</code>, fire 10 concurrent queries, and observe them queueing.</li>
+</ul>
+
+<h2 id="mini-project-persist-the-todo-api">Mini-project: persist the TODO API</h2>
+<p>Replace the in-memory map from the HTTP lesson with a SQLite-backed store: a <code>Store</code> struct holding <code>*sql.DB</code> with <code>List/Get/Create/Update/Delete</code> methods using placeholders throughout. Add a transaction for a "mark all complete" endpoint, and configure the pool. Now your API survives restarts.</p>
+
+<section class="further"><h2 id="further-reading">Further reading</h2>
+<p>Official documentation for the tools and APIs covered on this page:</p>
+<ul class="further-list"><li><a href="https://pkg.go.dev/database/sql" target="_blank" rel="noopener">database/sql ↗</a></li>
+<li><a href="https://go.dev/doc/tutorial/database-access" target="_blank" rel="noopener">Accessing a database (tutorial) ↗</a></li>
+<li><a href="https://entgo.io/docs/getting-started/" target="_blank" rel="noopener">Ent ORM ↗</a></li></ul></section>
+  <nav class="pager">
+<a class="prev" href="testing.html"><small>Previous</small>🐹 Testing &amp; Benchmarks</a>
+<a class="next" href="cli-tools.html"><small>Next</small>🐹 Building CLI Tools</a>
+  </nav>
+</main>
+<button type="button" class="fab top" id="fab-top" aria-label="Back to top">↑ Top</button>
+<div class="banner" id="update-banner" role="status">A new version is available.<button type="button">Reload</button></div>
+<div class="banner" id="offline-banner" role="status">You're offline — showing cached lessons.</div>
+<script src="../app.js" defer></script>
+</body>
+</html>

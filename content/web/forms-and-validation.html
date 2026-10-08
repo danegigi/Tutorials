@@ -1,0 +1,82 @@
+<p class="lead">Forms are how the web collects input. The browser gives you a lot for free — typed inputs, required fields, pattern matching, and the Constraint Validation API — but client checks are a convenience, never a security boundary. Always validate on the server too.</p>
+
+<h2>Native constraints</h2>
+<p><span class="level beginner">Beginner</span> Attributes on inputs declare rules the browser enforces before submit, with no JavaScript:</p>
+<pre><code>&lt;form&gt;
+  &lt;label for="email"&gt;Email&lt;/label&gt;
+  &lt;input id="email" name="email" type="email" required&gt;
+
+  &lt;label for="age"&gt;Age&lt;/label&gt;
+  &lt;input id="age" name="age" type="number" min="18" max="120"&gt;
+
+  &lt;label for="user"&gt;Username&lt;/label&gt;
+  &lt;input id="user" name="user" pattern="[a-z0-9_]{3,16}" required
+         title="3–16 lowercase letters, digits, or underscores"&gt;
+
+  &lt;input name="pw" type="password" minlength="8" required&gt;
+  &lt;button&gt;Sign up&lt;/button&gt;
+&lt;/form&gt;</code></pre>
+<table>
+  <thead><tr><th>Attribute</th><th>Effect</th></tr></thead>
+  <tbody>
+    <tr><td><code>required</code></td><td>Field must not be empty.</td></tr>
+    <tr><td><code>type="email"/"url"/"number"/"tel"</code></td><td>Format check + the right mobile keyboard.</td></tr>
+    <tr><td><code>min</code>/<code>max</code>/<code>step</code></td><td>Numeric/date range.</td></tr>
+    <tr><td><code>minlength</code>/<code>maxlength</code></td><td>Text length bounds.</td></tr>
+    <tr><td><code>pattern</code></td><td>A regex the value must match.</td></tr>
+  </tbody>
+</table>
+
+<h2>The Constraint Validation API</h2>
+<p><span class="level intermediate">Intermediate</span> Script can read validity state and set custom messages — useful for cross-field rules the attributes can't express:</p>
+<pre><code>const form = document.querySelector("form");
+const pw = form.pw, confirm = form.confirm;
+
+confirm.addEventListener("input", () =&gt; {
+  // Custom cross-field rule: passwords must match
+  confirm.setCustomValidity(
+    confirm.value !== pw.value ? "Passwords do not match" : ""
+  );
+});
+
+form.addEventListener("submit", (e) =&gt; {
+  if (!form.checkValidity()) {   // triggers the browser's bubbles
+    e.preventDefault();
+    form.reportValidity();        // show messages
+  }
+});
+
+// Per-field state
+emailInput.validity.valueMissing;   // true if required &amp; empty
+emailInput.validity.typeMismatch;   // true if not a valid email</code></pre>
+<blockquote class="tip">Style invalid fields with the <code>:invalid</code> and <code>:user-invalid</code> pseudo-classes. <code>:user-invalid</code> (newer) only matches <em>after</em> the user has interacted, so you don't flag empty fields the moment the page loads.</blockquote>
+
+<h2>Reading form data in JS</h2>
+<pre><code>form.addEventListener("submit", async (e) =&gt; {
+  e.preventDefault();
+  const data = Object.fromEntries(new FormData(form));   // {email, age, ...}
+  const res = await fetch("/signup", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  // handle res.ok / validation errors from the server
+});</code></pre>
+
+<h2>Server-side validation is the real one</h2>
+<p><span class="level intermediate">Intermediate</span> Client validation improves UX; it does not protect your data. Anyone can bypass it with <code>curl</code> or devtools.</p>
+<blockquote class="warn"><strong>The cardinal rule:</strong> never trust client input. Re-validate <em>everything</em> on the server — presence, type, length, format, and business rules — and treat the browser checks purely as a fast feedback loop. A form that only validates in JS is an open door.</blockquote>
+<pre><code>// Server (pseudo): return field-level errors as JSON
+// 422 Unprocessable Entity
+{ "errors": { "email": "already registered", "age": "must be 18+" } }
+// → the client maps these back onto the fields</code></pre>
+
+<h2>Exercises</h2>
+<ul>
+  <li>Build a signup form using only native attributes; confirm the browser blocks a bad email with no JS.</li>
+  <li>Add a "confirm password" field with <code>setCustomValidity</code> cross-field matching.</li>
+  <li>Style <code>:user-invalid</code> fields red and show the native message on submit.</li>
+</ul>
+
+<h2>Mini-project: a resilient signup form</h2>
+<p>Build a signup form that (1) uses native constraints for instant feedback, (2) adds a cross-field password-match rule, (3) submits as JSON via <code>fetch</code>, and (4) maps a server <code>422</code> error payload back onto the matching fields. Then prove the server rejects a request sent via <code>curl</code> that skipped the client checks — demonstrating why both layers exist.</p>

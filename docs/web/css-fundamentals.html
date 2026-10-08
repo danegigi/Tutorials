@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en" data-base="../">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0d1117">
+<meta name="description" content="Dev Tutorials — Golang, Bun, Web Development, Linux and DevOps, offline-ready.">
+<title>CSS Fundamentals — Web Development</title>
+<link rel="manifest" href="../manifest.webmanifest">
+<link rel="icon" href="../icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="../icon-192.png">
+<link rel="stylesheet" href="../app.css">
+<script>/* set theme before paint to avoid flash */(function(){try{var t=localStorage.getItem('tut.theme');document.documentElement.setAttribute('data-theme',t||'dark');}catch(e){document.documentElement.setAttribute('data-theme','dark');}})();</script>
+
+</head>
+<body class="lesson">
+<header class="nav">
+  <a class="brand" href="../index.html">📚 Dev Tutorials</a>
+  <span class="crumb">CSS Fundamentals — Web Development</span>
+  <span class="spacer"></span>
+  <a class="navbtn" href="../search.html">🔎 Search</a>
+  <button class="navbtn" id="install-btn" type="button">⬇️ Install</button>
+  <button class="navbtn" id="theme-btn" type="button" aria-label="Toggle theme">🌙 Dark</button>
+</header>
+<main class="wrap lesson-body">
+  <h1 class="page-title">CSS Fundamentals</h1>
+  <div class="lesson-tools" data-lesson-id="web/css-fundamentals">
+    <button id="done-btn" type="button" aria-pressed="false">○ Mark complete</button>
+    <button id="mark-btn" type="button" aria-pressed="false">☆ Bookmark</button>
+    <a class="navbtn" href="index.html" style="margin-left:auto">All Web Development lessons →</a>
+  </div>
+<nav class="toc" aria-label="On this page"><strong>On this page</strong><ul>
+<li class="lvl2"><a href="#the-box-model">The box model</a></li>
+<li class="lvl2"><a href="#selectors-and-specificity">Selectors and specificity</a></li>
+<li class="lvl2"><a href="#flexbox-one-dimensional-layout">Flexbox — one-dimensional layout</a></li>
+<li class="lvl2"><a href="#grid-two-dimensional-layout">Grid — two-dimensional layout</a></li>
+<li class="lvl2"><a href="#custom-properties-css-variables">Custom properties (CSS variables)</a></li>
+<li class="lvl2"><a href="#exercises">Exercises</a></li>
+<li class="lvl2"><a href="#mini-project-style-the-resume">Mini-project: style the resume</a></li>
+</ul></nav>
+<p class="lead">CSS controls presentation. Master the box model, selectors and the cascade, then the two modern layout systems — Flexbox and Grid — and custom properties for theming. These five ideas cover the vast majority of real styling.</p>
+
+<h2 id="the-box-model">The box model</h2>
+<p><span class="level beginner">Beginner</span> Every element is a box: content, then padding, then border, then margin. The default <code>box-sizing</code> makes width/height apply to content only — switch it globally so padding and border are included (far more predictable):</p>
+<pre><code>*, *::before, *::after { box-sizing: border-box; }
+
+.card {
+  width: 300px;          /* now INCLUDES padding + border */
+  padding: 16px;
+  border: 1px solid #ccc;
+  margin: 12px;
+}</code></pre>
+<blockquote class="warn"><strong>Margin collapsing</strong> surprises everyone: adjacent vertical margins merge into the larger of the two, not their sum. Two stacked elements with <code>margin: 20px</code> are 20px apart, not 40px. Flex/Grid gaps don't collapse — another reason to prefer them.</blockquote>
+
+<h2 id="selectors-and-specificity">Selectors and specificity</h2>
+<pre><code>h1            { }   /* type:      specificity 0,0,1 */
+.btn          { }   /* class:     0,1,0 */
+#main         { }   /* id:        1,0,0 */
+.btn.primary  { }   /* 0,2,0 — beats a single class */
+a:hover       { }   /* pseudo-class counts as a class */</code></pre>
+<p>When two rules match, higher specificity wins; ties go to the later rule. The cascade order is: origin/importance → specificity → source order.</p>
+<blockquote class="warn"><strong>Common mistake:</strong> fighting specificity with <code>!important</code>. It almost always makes the next override harder. Prefer a single flat class layer (the idea behind utility CSS and BEM) and keep IDs out of your selectors.</blockquote>
+
+<h2 id="flexbox-one-dimensional-layout">Flexbox — one-dimensional layout</h2>
+<pre><code>.toolbar {
+  display: flex;
+  align-items: center;      /* cross axis (vertical here) */
+  justify-content: space-between;  /* main axis */
+  gap: 12px;                /* spacing between items — no margin hacks */
+}
+.toolbar .spacer { flex: 1; }   /* push the rest to the right */</code></pre>
+<p>Flexbox excels at rows or columns of items: navbars, button groups, centering. <code>flex: 1</code> on an item makes it grow to fill free space.</p>
+
+<h2 id="grid-two-dimensional-layout">Grid — two-dimensional layout</h2>
+<pre><code>.gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 16px;
+}
+
+/* Named areas for a page shell */
+.layout {
+  display: grid;
+  grid-template-columns: 240px 1fr;
+  grid-template-areas: "sidebar main";
+}
+.sidebar { grid-area: sidebar; }
+.main    { grid-area: main; }</code></pre>
+<p>The <code>auto-fill</code> + <code>minmax</code> pattern is the single most useful responsive layout: it fits as many columns as will hold their minimum width, with no media queries.</p>
+
+<h2 id="custom-properties-css-variables">Custom properties (CSS variables)</h2>
+<p><span class="level intermediate">Intermediate</span> Variables cascade and can be swapped at runtime — the foundation of theming (including the dark/light toggle on this very site):</p>
+<pre><code>:root {
+  --bg: #ffffff;
+  --text: #1b2130;
+  --accent: #0369a1;
+}
+:root[data-theme="dark"] {
+  --bg: #0d1117;
+  --text: #e6edf3;
+  --accent: #38bdf8;
+}
+body { background: var(--bg); color: var(--text); }
+a    { color: var(--accent); }
+/* Toggle the theme by setting data-theme on &lt;html&gt; in JS — every var updates */</code></pre>
+
+<h2 id="exercises">Exercises</h2>
+<ul>
+  <li>Build a navbar with Flexbox: logo left, links right, vertically centered, with a <code>gap</code>.</li>
+  <li>Make a responsive card grid with <code>repeat(auto-fill, minmax(…))</code> — no media queries.</li>
+  <li>Implement a dark/light theme with custom properties toggled by a <code>data-theme</code> attribute.</li>
+</ul>
+
+<h2 id="mini-project-style-the-resume">Mini-project: style the resume</h2>
+<p>Take the semantic resume from the HTML lesson and style it: a Grid page shell (sidebar + main), Flexbox for the contact row, custom properties for colors with a dark mode, and a readable type scale. Keep specificity flat (one class layer) and prove it looks right at 360px and 1200px wide.</p>
+
+<section class="further"><h2 id="further-reading">Further reading</h2>
+<p>Official documentation for the tools and APIs covered on this page:</p>
+<ul class="further-list"><li><a href="https://developer.mozilla.org/en-US/docs/Web/CSS/Reference" target="_blank" rel="noopener">CSS reference (MDN) ↗</a></li>
+<li><a href="https://css-tricks.com/snippets/css/a-guide-to-flexbox/" target="_blank" rel="noopener">A Complete Guide to Flexbox ↗</a></li>
+<li><a href="https://css-tricks.com/snippets/css/complete-guide-grid/" target="_blank" rel="noopener">A Complete Guide to Grid ↗</a></li></ul></section>
+  <nav class="pager">
+<a class="prev" href="html-fundamentals.html"><small>Previous</small>🌐 HTML Fundamentals</a>
+<a class="next" href="javascript-fundamentals.html"><small>Next</small>🌐 JavaScript Fundamentals</a>
+  </nav>
+</main>
+<button type="button" class="fab top" id="fab-top" aria-label="Back to top">↑ Top</button>
+<div class="banner" id="update-banner" role="status">A new version is available.<button type="button">Reload</button></div>
+<div class="banner" id="offline-banner" role="status">You're offline — showing cached lessons.</div>
+<script src="../app.js" defer></script>
+</body>
+</html>

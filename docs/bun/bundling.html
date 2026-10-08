@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en" data-base="../">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0d1117">
+<meta name="description" content="Dev Tutorials — Golang, Bun, Web Development, Linux and DevOps, offline-ready.">
+<title>Bundling &amp; Executables — Bun</title>
+<link rel="manifest" href="../manifest.webmanifest">
+<link rel="icon" href="../icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="../icon-192.png">
+<link rel="stylesheet" href="../app.css">
+<script>/* set theme before paint to avoid flash */(function(){try{var t=localStorage.getItem('tut.theme');document.documentElement.setAttribute('data-theme',t||'dark');}catch(e){document.documentElement.setAttribute('data-theme','dark');}})();</script>
+
+</head>
+<body class="lesson">
+<header class="nav">
+  <a class="brand" href="../index.html">📚 Dev Tutorials</a>
+  <span class="crumb">Bundling &amp; Executables — Bun</span>
+  <span class="spacer"></span>
+  <a class="navbtn" href="../search.html">🔎 Search</a>
+  <button class="navbtn" id="install-btn" type="button">⬇️ Install</button>
+  <button class="navbtn" id="theme-btn" type="button" aria-label="Toggle theme">🌙 Dark</button>
+</header>
+<main class="wrap lesson-body">
+  <h1 class="page-title">Bundling &amp; Executables</h1>
+  <div class="lesson-tools" data-lesson-id="bun/bundling">
+    <button id="done-btn" type="button" aria-pressed="false">○ Mark complete</button>
+    <button id="mark-btn" type="button" aria-pressed="false">☆ Bookmark</button>
+    <a class="navbtn" href="index.html" style="margin-left:auto">All Bun lessons →</a>
+  </div>
+<nav class="toc" aria-label="On this page"><strong>On this page</strong><ul>
+<li class="lvl2"><a href="#bun-build-the-basics">bun build — the basics</a></li>
+<li class="lvl2"><a href="#the-programmatic-api">The programmatic API</a></li>
+<li class="lvl2"><a href="#tree-shaking">Tree-shaking</a></li>
+<li class="lvl2"><a href="#standalone-executables-bun-build---compile">Standalone executables — bun build --compile</a></li>
+<li class="lvl3"><a href="#cross-compilation">Cross-compilation</a></li>
+<li class="lvl3"><a href="#embedding-assets">Embedding assets</a></li>
+<li class="lvl2"><a href="#dockerizing-a-bun-app">Dockerizing a Bun app</a></li>
+<li class="lvl3"><a href="#even-smaller-ship-a-compiled-binary-in-a-scratch-like-image">Even smaller: ship a compiled binary in a scratch-like image</a></li>
+<li class="lvl2"><a href="#common-mistakes">Common mistakes</a></li>
+<li class="lvl2"><a href="#exercises">Exercises</a></li>
+<li class="lvl2"><a href="#mini-project-a-cross-platform-cli-built-embedded-and-shipped-three-ways">Mini-project: a cross-platform CLI, built, embedded, and shipped three ways</a></li>
+</ul></nav>
+<p class="lead"><code>bun build</code> is a fast native bundler for both browser and server targets — with tree-shaking, code splitting, minification, and the standout feature <code>--compile</code>, which packs your app <em>and</em> the Bun runtime into a single standalone binary. This lesson covers bundling, tree-shaking, standalone executables, and Docker.</p>
+
+<h2 id="bun-build-the-basics">bun build — the basics</h2>
+<p><span class="level beginner">Beginner</span> Point it at one or more entry points and give it an output directory:</p>
+<pre><code>bun build ./src/index.ts --outdir ./dist                  # bundle
+bun build ./src/index.ts --outdir ./dist --minify          # minified
+bun build ./src/index.ts --outdir ./dist --target bun      # for the Bun runtime
+bun build ./src/index.ts --outdir ./dist --target node     # for Node
+bun build ./src/index.ts --outdir ./dist --target browser --splitting   # web + code splitting
+bun build ./src/index.ts --outdir ./dist --sourcemap       # emit source maps</code></pre>
+<p>The <code>--target</code> flag changes what globals and module format the output assumes:</p>
+<table>
+  <thead><tr><th>Target</th><th>Output assumes</th><th>Use for</th></tr></thead>
+  <tbody>
+    <tr><td><code>browser</code> (default)</td><td>DOM globals, no Node builtins</td><td>Frontend bundles</td></tr>
+    <tr><td><code>bun</code></td><td>The <code>Bun</code> global &amp; Bun stdlib</td><td>Server apps run by Bun</td></tr>
+    <tr><td><code>node</code></td><td>Node globals, CommonJS/ESM</td><td>Output meant for <code>node</code></td></tr>
+  </tbody>
+</table>
+
+<h2 id="the-programmatic-api">The programmatic API</h2>
+<p>Everything the CLI does, <code>Bun.build</code> does from code — handy for a custom build script:</p>
+<pre><code>// build.ts
+const result = await Bun.build({
+  entrypoints: ["./src/index.ts"],
+  outdir: "./dist",
+  target: "bun",
+  minify: true,
+  sourcemap: "external",
+  splitting: true,
+  define: { "process.env.NODE_ENV": JSON.stringify("production") },
+});
+
+if (!result.success) {
+  for (const log of result.logs) console.error(log);
+  process.exit(1);
+}
+console.log(`built ${result.outputs.length} files`);</code></pre>
+
+<h2 id="tree-shaking">Tree-shaking</h2>
+<p>Bun removes unused exports automatically from ES modules. Import only what you use and dead code never reaches the bundle:</p>
+<pre><code>// utils.ts
+export function used() { return 1; }
+export function neverImported() { return expensiveThing(); }  // dropped
+
+// index.ts
+import { used } from "./utils";    // only `used` ends up in the output
+console.log(used());</code></pre>
+<blockquote class="tip">Tree-shaking works best with ES modules and no side effects at import time. If a module <em>does</em> something just by being imported (registers a global, mutates state), the bundler must keep it. Mark genuinely side-effect-free packages with <code>"sideEffects": false</code> in their <code>package.json</code> so the bundler can prune aggressively.</blockquote>
+
+<h2 id="standalone-executables-bun-build---compile">Standalone executables — bun build --compile</h2>
+<p><span class="level advanced">Advanced</span> <code>--compile</code> bundles your app and the Bun runtime into one self-contained binary. The target machine needs no Bun install, no <code>node_modules</code>, nothing — just the file.</p>
+<pre><code># current platform
+bun build ./src/cli.ts --compile --outfile myapp
+./myapp
+
+# production binary: minified, with a source map for stack traces
+bun build ./src/cli.ts --compile --minify --sourcemap --outfile myapp</code></pre>
+
+<h3 id="cross-compilation">Cross-compilation</h3>
+<p>Build for another OS/arch from your dev machine — ship Linux and Windows binaries from a Mac:</p>
+<pre><code>bun build ./src/cli.ts --compile --target=bun-linux-x64    --outfile myapp-linux
+bun build ./src/cli.ts --compile --target=bun-linux-arm64  --outfile myapp-arm
+bun build ./src/cli.ts --compile --target=bun-darwin-arm64 --outfile myapp-mac
+bun build ./src/cli.ts --compile --target=bun-windows-x64  --outfile myapp.exe</code></pre>
+
+<h3 id="embedding-assets">Embedding assets</h3>
+<p>Files you <code>import</code> with <code>{ type: "file" }</code> get baked into the binary and resolve at runtime from inside it:</p>
+<pre><code>import icon from "./icon.png" with { type: "file" };
+import schema from "./schema.sql" with { type: "text" };
+
+// `icon` is a path that resolves inside the compiled binary
+console.log(await Bun.file(icon).bytes());
+console.log(schema);   // the SQL text, embedded</code></pre>
+
+<h2 id="dockerizing-a-bun-app">Dockerizing a Bun app</h2>
+<p>Use the official <code>oven/bun</code> image with a multi-stage build so your runtime image stays small and dependency installs are cached:</p>
+<pre><code># Dockerfile
+FROM oven/bun:1.4.2 AS base
+WORKDIR /app
+
+# install deps first — this layer is cached unless package.json/lockfile change
+FROM base AS deps
+COPY package.json bun.lockb ./
+RUN bun install --frozen-lockfile --production
+
+# runtime image
+FROM base AS release
+COPY --from=deps /app/node_modules ./node_modules
+COPY . .
+ENV NODE_ENV=production
+EXPOSE 3000
+USER bun                           # run as the non-root bun user
+CMD ["bun", "run", "src/index.ts"]</code></pre>
+<pre><code>docker build -t my-bun-app .
+docker run -p 3000:3000 --env-file .env.production my-bun-app</code></pre>
+
+<h3 id="even-smaller-ship-a-compiled-binary-in-a-scratch-like-image">Even smaller: ship a compiled binary in a scratch-like image</h3>
+<pre><code># Build the binary in a bun stage, then copy ONLY the binary into a tiny base
+FROM oven/bun:1.4.2 AS build
+WORKDIR /app
+COPY package.json bun.lockb ./
+RUN bun install --frozen-lockfile
+COPY . .
+RUN bun build ./src/cli.ts --compile --minify --outfile /app/server
+
+FROM gcr.io/distroless/base
+COPY --from=build /app/server /server
+EXPOSE 3000
+CMD ["/server"]</code></pre>
+<p>No runtime, no <code>node_modules</code> in the final image — just one binary. The result is often an order of magnitude smaller than a full Node image.</p>
+
+<h2 id="common-mistakes">Common mistakes</h2>
+<blockquote class="warn"><strong>Common mistake:</strong> bundling a server with <code>--target browser</code> (the default). The output then assumes DOM globals and strips Node/Bun builtins, so <code>Bun.serve</code> or <code>node:fs</code> blow up at runtime. Pass <code>--target bun</code> (or <code>node</code>) for server code. Two more: forgetting <code>--sourcemap</code> on a <code>--compile</code> binary (production stack traces become unreadable minified gibberish), and expecting a cross-compiled binary built from a dynamically-constructed import path to embed assets — only statically-analyzable <code>import ... with { type }</code> references get baked in.</blockquote>
+
+<h2 id="exercises">Exercises</h2>
+<ul>
+  <li>Bundle a server entry with <code>--target bun --minify</code> and run the output from <code>dist/</code>.</li>
+  <li>Add an unused export to a util module, bundle with <code>--minify</code>, and confirm (via the output size or search) it was tree-shaken away.</li>
+  <li>Compile a CLI to a standalone binary with <code>--compile --minify</code> and run it on a machine (or container) that has no Bun installed.</li>
+  <li>Cross-compile the same CLI for <code>bun-linux-x64</code> and verify the file type with <code>file myapp-linux</code>.</li>
+</ul>
+
+<h2 id="mini-project-a-cross-platform-cli-built-embedded-and-shipped-three-ways">Mini-project: a cross-platform CLI, built, embedded, and shipped three ways</h2>
+<p>Build a small CLI that embeds a template file, then produce three deliverables from the same source: a bundle, a native binary, and a Docker image — the three ways you'd actually ship a Bun tool.</p>
+<pre><code>// src/cli.ts
+import banner from "./banner.txt" with { type: "text" };   // embedded at compile time
+
+const [, , cmd = "help"] = Bun.argv;
+switch (cmd) {
+  case "version": console.log(`myapp ${Bun.version}`); break;
+  case "hello":   console.log(banner, "\nhello from a standalone binary!"); break;
+  default:        console.log("usage: myapp &lt;version|hello&gt;");
+}</code></pre>
+<pre><code># 1) BUNDLE — a single JS file to run with Bun
+bun build ./src/cli.ts --outdir dist --target bun --minify
+
+# 2) STANDALONE BINARIES — no runtime needed on the target
+bun build ./src/cli.ts --compile --minify --sourcemap \
+  --target=bun-linux-x64    --outfile dist/myapp-linux-x64
+bun build ./src/cli.ts --compile --minify --sourcemap \
+  --target=bun-darwin-arm64 --outfile dist/myapp-macos-arm64
+./dist/myapp-macos-arm64 hello      # runs standalone, banner.txt baked in
+
+# 3) DOCKER IMAGE — compiled binary in a distroless base
+docker build -t myapp .             # using the "build + distroless" Dockerfile above
+docker run --rm myapp /server hello</code></pre>
+<p>One source file, three artifacts: the bundle for environments that already have Bun, the native binaries for direct distribution (download one file, run it — the whole appeal of <code>--compile</code>), and the tiny Docker image for orchestrated deploys. The embedded <code>banner.txt</code> travels inside every one of them.</p>
+
+<section class="further"><h2 id="further-reading">Further reading</h2>
+<p>Official documentation for the tools and APIs covered on this page:</p>
+<ul class="further-list"><li><a href="https://bun.com/docs/bundler" target="_blank" rel="noopener">Bundler ↗</a></li>
+<li><a href="https://bun.com/docs/bundler/executables" target="_blank" rel="noopener">Standalone executables ↗</a></li></ul></section>
+  <nav class="pager">
+<a class="prev" href="testing.html"><small>Previous</small>🥟 Testing with bun test</a>
+<a class="next" href="databases.html"><small>Next</small>🥟 Database Usage</a>
+  </nav>
+</main>
+<button type="button" class="fab top" id="fab-top" aria-label="Back to top">↑ Top</button>
+<div class="banner" id="update-banner" role="status">A new version is available.<button type="button">Reload</button></div>
+<div class="banner" id="offline-banner" role="status">You're offline — showing cached lessons.</div>
+<script src="../app.js" defer></script>
+</body>
+</html>

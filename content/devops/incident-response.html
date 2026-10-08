@@ -1,0 +1,65 @@
+<p class="lead">Things break. Incident response is the discipline of detecting, mitigating, and learning from outages so they're short, calm, and don't recur. The payoff metric is MTTR — mean time to restore — and the culture that makes it low is <em>blameless</em>.</p>
+
+<h2>Severity levels</h2>
+<p><span class="level beginner">Beginner</span> Classify incidents so the response matches the impact. A typical scale:</p>
+<table>
+  <thead><tr><th>Sev</th><th>Impact</th><th>Response</th></tr></thead>
+  <tbody>
+    <tr><td>SEV1</td><td>Full outage / data loss</td><td>All-hands, page immediately, exec comms</td></tr>
+    <tr><td>SEV2</td><td>Major feature down / severe degradation</td><td>Page on-call, war room</td></tr>
+    <tr><td>SEV3</td><td>Minor/partial, workaround exists</td><td>Business-hours fix</td></tr>
+    <tr><td>SEV4</td><td>Cosmetic / low impact</td><td>Backlog</td></tr>
+  </tbody>
+</table>
+
+<h2>On-call and roles</h2>
+<p>An <strong>on-call</strong> rotation ensures someone is always responsible for responding. In a real incident, assign roles explicitly so it doesn't descend into chaos:</p>
+<ul>
+  <li><strong>Incident Commander</strong> — coordinates, makes decisions, is <em>not</em> hands-on-keyboard.</li>
+  <li><strong>Operations/responders</strong> — investigate and apply fixes.</li>
+  <li><strong>Communications</strong> — updates the status page and stakeholders on a cadence.</li>
+  <li><strong>Scribe</strong> — timestamps everything in the incident channel for the postmortem.</li>
+</ul>
+<blockquote class="tip">The Incident Commander's job is coordination, not debugging. The most common small-team failure is everyone diving into the logs and nobody steering, communicating, or deciding when to roll back.</blockquote>
+
+<h2>The response loop</h2>
+<pre><code>DETECT → TRIAGE → MITIGATE → RESOLVE → LEARN
+  alert    how bad?   stop the    fix the     postmortem
+           who's      bleeding    root cause  &amp; actions
+           affected?  (rollback!)</code></pre>
+<blockquote class="warn"><strong>Mitigate before you diagnose.</strong> The first goal is to stop user pain, not to understand the bug. If a deploy caused it, <em>roll back now</em> and investigate the root cause afterward from a stable state. Teams lose precious MTTR minutes debugging a live outage they could have ended with one rollback.</blockquote>
+
+<h2>SLOs and error budgets</h2>
+<p><span class="level intermediate">Intermediate</span> You can't have 100% uptime, so define the target explicitly:</p>
+<table>
+  <thead><tr><th>Term</th><th>Meaning</th></tr></thead>
+  <tbody>
+    <tr><td>SLI</td><td>A measured indicator, e.g. % of requests &lt; 300ms.</td></tr>
+    <tr><td>SLO</td><td>The target for an SLI, e.g. 99.9% of requests succeed/month.</td></tr>
+    <tr><td>Error budget</td><td>The allowed failure: 99.9% → ~43 min/month of "down" you can spend.</td></tr>
+  </tbody>
+</table>
+<p>The error budget turns reliability into a shared, quantified decision: budget left → ship features fast; budget exhausted → freeze features and spend the sprint on reliability. It ends the dev-vs-ops "ship vs stabilize" argument with data.</p>
+
+<h2>Blameless postmortems</h2>
+<p><span class="level intermediate">Intermediate</span> After every significant incident, write a postmortem — <em>blamelessly</em>. The premise: people act reasonably given the information and tools they had, so a human "mistake" is a signal that the <em>system</em> let it happen.</p>
+<pre><code># Postmortem skeleton
+- Summary + impact (who, how long, how many users)
+- Timeline (detection → mitigation → resolution, with timestamps)
+- Root cause (the systemic "why", not "Alice pushed a bad config")
+- What went well / what was hard
+- Action items (owner + due date) — concrete fixes to prevent recurrence</code></pre>
+<blockquote class="warn"><strong>The point of a postmortem is action items, not blame.</strong> If people fear being punished, they hide information and the same incident recurs. "The deploy script allowed an untested config to reach prod" is actionable; "Alice was careless" is not — and it poisons the honesty you need.</blockquote>
+
+<h2>Runbooks</h2>
+<p>A runbook is a step-by-step guide for a known operational task or failure ("API latency high: check X, then Y, roll back with Z"). Good runbooks turn a 3am page from improvisation into following a checklist — and are a prime action-item output of postmortems.</p>
+
+<h2>Exercises</h2>
+<ul>
+  <li>Define SLIs/SLOs for a web API and compute the monthly error budget for 99.9% vs 99.95%.</li>
+  <li>Write a runbook for one failure mode of a service you know (symptoms → checks → mitigation → rollback).</li>
+  <li>Take a past incident and draft a blameless root cause as a <em>system</em> gap, not a person's error.</li>
+</ul>
+
+<h2>Mini-project: an incident response kit</h2>
+<p>Assemble a kit for the app you've been building: a severity matrix, an on-call + roles definition, a status-page/comms template, two runbooks (e.g. "high error rate after deploy", "database connection exhaustion"), an SLO with its error budget, and a blameless postmortem template. Then run a tabletop drill: walk a simulated SEV2 through detect→mitigate→resolve→learn.</p>

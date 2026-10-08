@@ -1,0 +1,148 @@
+<p class="lead">When a service is down, the slowest way to fix it is to guess. The fastest is a fixed checklist you run top to bottom every time, because the fault is almost always at one specific layer and the checklist finds that layer in minutes. This lesson gives you a repeatable method — five questions, each with the exact command that answers it — and then walks a real down web service from alert to root cause using nothing else.</p>
+
+<h2>The method: five questions in order</h2>
+<p><span class="level intermediate">Intermediate</span> Troubleshoot from the outside in and from the bottom up. Each question narrows the fault; do not skip ahead, because a &ldquo;no&rdquo; early on makes the later questions moot.</p>
+<table>
+  <thead><tr><th>#</th><th>Question</th><th>The command that answers it</th></tr></thead>
+  <tbody>
+    <tr><td>1</td><td><strong>Is it up?</strong> Is the process/service even running?</td><td><code>systemctl status X</code> &middot; <code>ps aux | grep X</code></td></tr>
+    <tr><td>2</td><td><strong>Is it reachable?</strong> DNS resolves, host answers, port open?</td><td><code>dig +short</code> &middot; <code>ping</code> &middot; <code>ss -tulpn</code> &middot; <code>curl</code></td></tr>
+    <tr><td>3</td><td><strong>Is it resourced?</strong> Disk, memory, CPU, file descriptors?</td><td><code>df -h</code> &middot; <code>free -h</code> &middot; <code>top</code> &middot; <code>uptime</code></td></tr>
+    <tr><td>4</td><td><strong>Is it logged?</strong> What does the service itself say?</td><td><code>journalctl -u X -n 50</code> &middot; <code>tail /var/log/...</code></td></tr>
+    <tr><td>5</td><td><strong>What changed recently?</strong> Deploy, config edit, update, cert?</td><td><code>git log</code> &middot; <code>journalctl --since</code> &middot; file mtimes</td></tr>
+  </tbody>
+</table>
+<blockquote class="tip">Write the five questions on a sticky note. Under pressure the temptation is to jump straight to the fix you fixed last time — but running the checklist in order is faster <em>and</em> finds the faults the last-time fix would have missed. &ldquo;What changed?&rdquo; is last on the list but resolves the majority of incidents, because systems that were working rarely break on their own.</blockquote>
+
+<h2>Question 1 — Is it up?</h2>
+<pre><code>systemctl status myapp
+# -> Active: failed (Result: exit-code) since Thu 10:01:12; 2min ago
+# ->  Process: 5120 ExecStart=/opt/myapp/myapp (code=exited, status=1)
+
+# If not managed by systemd:
+ps aux | grep -v grep | grep myapp
+# -> (no output = not running)</code></pre>
+<p>If it is not running, you already know a lot: skip straight to <strong>logs</strong> (Q4) to see <em>why</em> it exited, then <strong>what changed</strong> (Q5). If it <em>is</em> running but still broken, move to reachability.</p>
+
+<h2>Question 2 — Is it reachable?</h2>
+<p>Walk the network chain in order; the first failing step is your answer.</p>
+<pre><code>dig +short api.example.com        # DNS: does the name resolve?
+# -> 203.0.113.10                 (empty = DNS problem, stop here)
+
+ping -c2 203.0.113.10             # host reachable? (may be blocked — not definitive)
+
+sudo ss -tulpn | grep :8080       # is anything LISTENING on the port?
+# -> tcp LISTEN 127.0.0.1:8080 users:(("myapp",pid=...))
+
+curl -sv http://localhost:8080/health   # does the app actually answer?
+# -> &lt; HTTP/1.1 200 OK   (or a connection-refused / timeout telling you where it breaks)</code></pre>
+<blockquote class="warn"><strong>Common trap:</strong> the service is up and the port is listening — but on <code>127.0.0.1</code> only, so it works from the box and fails from everywhere else. The <code>ss</code> output above (<code>127.0.0.1:8080</code> rather than <code>0.0.0.0:8080</code>) is the tell. &ldquo;Works locally, broken remotely&rdquo; is almost always a bind-address or firewall issue, not an app bug.</blockquote>
+
+<h2>Question 3 — Is it resourced?</h2>
+<p>A healthy-looking app that misbehaves is often starved of a resource. Check the big three.</p>
+<pre><code>df -h              # DISK — a full / or /var breaks writes, logs, sessions
+# -> /dev/root  39G  39G  0  100% /       &lt;- the smoking gun
+
+free -h            # MEMORY — is it swapping or OOM-killing?
+# -> Mem: 3.9Gi used 3.8Gi  free 48Mi
+
+uptime             # LOAD — sustained load &gt; core count = CPU saturation
+# -> load average: 8.40, 7.90, 6.10   (on a 4-core box: overloaded)
+
+dmesg | grep -i 'killed process'   # was the app OOM-killed by the kernel?
+# -> Out of memory: Killed process 5120 (myapp)</code></pre>
+<blockquote class="warn">A disk at 100% is one of the most common and most confusing outages: writes fail in ways that look like unrelated application bugs. Confirm with <code>df -h</code>, find the offender with <code>du -sh /var/* | sort -h</code>, and the culprit is usually runaway logs (<code>/var/log</code>) or Docker images (<code>/var/lib/docker</code> — prune with <code>docker system prune</code>).</blockquote>
+
+<h2>Question 4 — Is it logged?</h2>
+<pre><code>journalctl -u myapp -n 50 --no-pager      # last 50 lines for the service
+# -> myapp[5120]: FATAL: could not connect to database "mydb": Connection refused
+
+journalctl -u myapp -p err --since "30 min ago"   # just errors, recent window
+tail -n 50 /var/log/myapp/error.log               # file-based logs too</code></pre>
+<p>The log line almost always names the real fault — here, the app is fine but its <em>database</em> is unreachable, which sends you to run the same five questions against the database. Follow the error to its source rather than restarting blindly.</p>
+
+<h2>Question 5 — What changed recently?</h2>
+<pre><code>git -C /opt/myapp log --oneline -5        # recent deploys/commits
+# -> a1b2c3d (HEAD) switch DB host to db-02   &lt;- suspicious, matches the error
+
+ls -lt /etc/myapp/                        # most-recently-modified config first
+# -> -rw-r--r-- 1 root root  210 Oct  8 09:58 config.yaml   &lt;- edited 3 min before it broke
+
+journalctl --since "1 hour ago" | grep -iE "install|upgrade|renew"   # package/cert changes</code></pre>
+<p>A config edited minutes before the outage, a deploy that changed a hostname, a cert that just expired — &ldquo;what changed&rdquo; is where most incidents actually resolve.</p>
+
+<h2>Worked example: a down web service</h2>
+<p><span class="level intermediate">Intermediate</span> An alert fires: <em>&ldquo;example.com returns 502.&rdquo;</em> Run the checklist.</p>
+<pre><code># Q1 Is it up? nginx is fine; the APP behind it is the question.
+systemctl status nginx
+# -> Active: active (running)
+systemctl status myapp
+# -> Active: failed (Result: exit-code)       &lt;- found it: the backend is down
+
+# Q2 Reachable? nginx answers but has nothing to proxy to.
+curl -s -o /dev/null -w "%{http_code}\n" http://localhost:80
+# -> 502                                       (nginx up, upstream dead — consistent)
+sudo ss -tulpn | grep :8080
+# -> (empty)                                   the app is not listening at all
+
+# Q4 Logged? ask the app why it died.
+journalctl -u myapp -n 10 --no-pager
+# -> myapp[5120]: FATAL: config: unknown key 'databse_url'   &lt;- a typo!
+
+# Q5 What changed? confirm the cause.
+ls -lt /etc/myapp/config.yaml
+# -> -rw-r--r-- 1 root root 210 Oct  8 09:58 config.yaml    (edited just before the alert)
+git -C /opt/myapp diff HEAD~1 -- /etc/myapp/config.yaml
+# -> -database_url: ...
+# -> +databse_url: ...                          the typo that crashed startup</code></pre>
+<p>Root cause: a misspelled config key (<code>databse_url</code>) in an edit made at 09:58 crashed the app on startup; nginx then returned 502 because its upstream was gone. Fix the typo, restart, verify:</p>
+<pre><code>sudo sed -i 's/databse_url/database_url/' /etc/myapp/config.yaml
+sudo systemctl restart myapp
+curl -s -o /dev/null -w "%{http_code}\n" http://localhost:80
+# -> 200                                        service restored</code></pre>
+<p>Notice the checklist never guessed: Q1 located the layer (backend, not nginx), Q4 named the error, Q5 confirmed the cause. Four commands, no restarting-and-hoping.</p>
+
+<h2>Exercises</h2>
+<ul>
+  <li>Write out the five questions from memory and the single command you would run first for each.</li>
+  <li>On your machine, run the full Q3 resource trio (<code>df -h</code>, <code>free -h</code>, <code>uptime</code>) and note which resource has the least headroom.</li>
+  <li>Pick any running service and answer Q1 and Q4 for it: is it up, and what are its last 20 log lines?</li>
+  <li>Explain why a port listening on <code>127.0.0.1</code> instead of <code>0.0.0.0</code> produces a &ldquo;works locally, fails remotely&rdquo; symptom.</li>
+</ul>
+
+<h2>Mini-project: a one-shot triage script</h2>
+<p>Turn the five questions into a script you can run (or hand to a teammate) the moment an alert fires. It takes a service name and a port and answers all five layers in one pass.</p>
+<pre><code>#!/usr/bin/env bash
+set -uo pipefail
+svc="${1:?usage: triage.sh SERVICE [PORT]}"
+port="${2:-8080}"
+
+echo "===== Q1: is $svc up? ====="
+systemctl is-active "$svc" 2&gt;/dev/null || echo "NOT active"
+systemctl status "$svc" --no-pager -n 3 2&gt;/dev/null | tail -3
+
+echo; echo "===== Q2: is port $port listening? ====="
+sudo ss -tulpn 2&gt;/dev/null | grep ":$port" || echo "nothing on :$port"
+
+echo; echo "===== Q3: resources ====="
+df -h / /var 2&gt;/dev/null | tail -2
+free -h | awk 'NR==1||/Mem/'
+uptime
+
+echo; echo "===== Q4: recent errors from $svc ====="
+journalctl -u "$svc" -p warning -n 15 --no-pager 2&gt;/dev/null || echo "(no journal)"
+
+echo; echo "===== Q5: what changed? ====="
+journalctl --since "1 hour ago" 2&gt;/dev/null | grep -iE "install|upgrade|renew" | tail -5
+echo "(also check: git log in the deploy dir, and mtimes under /etc/$svc)"</code></pre>
+<pre><code>sudo ./triage.sh myapp 8080
+# -> ===== Q1: is myapp up? =====
+# -> NOT active
+# -> ===== Q2: is port 8080 listening? =====
+# -> nothing on :8080
+# -> ===== Q3: resources =====
+# -> /dev/root 39G 12G 26G 32% /
+# -> ===== Q4: recent errors from myapp =====
+# -> myapp[5120]: FATAL: config: unknown key 'databse_url'
+# -> ...</code></pre>
+<p>One command now prints every layer's answer, so you — or whoever is on call at 3am — read down the output and the broken layer announces itself. That is the entire discipline of troubleshooting: a fixed order, the right command per layer, and the patience to run them before touching anything.</p>

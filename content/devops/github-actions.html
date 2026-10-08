@@ -1,0 +1,96 @@
+<p class="lead">GitHub Actions runs your CI/CD pipelines inside GitHub, triggered by repo events. You describe workflows in YAML under <code>.github/workflows/</code>; GitHub provisions runners, executes your jobs, and reports status on commits and PRs.</p>
+
+<h2>The building blocks</h2>
+<table>
+  <thead><tr><th>Concept</th><th>Meaning</th></tr></thead>
+  <tbody>
+    <tr><td><strong>Workflow</strong></td><td>A YAML file in <code>.github/workflows/</code>; triggered by events.</td></tr>
+    <tr><td><strong>Event</strong></td><td>What starts it: <code>push</code>, <code>pull_request</code>, <code>schedule</code>, <code>workflow_dispatch</code>.</td></tr>
+    <tr><td><strong>Job</strong></td><td>A set of steps on one runner; jobs run in parallel by default.</td></tr>
+    <tr><td><strong>Step</strong></td><td>A single action or shell command.</td></tr>
+    <tr><td><strong>Action</strong></td><td>A reusable unit, e.g. <code>actions/checkout</code>.</td></tr>
+    <tr><td><strong>Runner</strong></td><td>The VM/container the job runs on (<code>ubuntu-latest</code>, self-hosted…).</td></tr>
+  </tbody>
+</table>
+
+<h2>A first workflow</h2>
+<pre><code># .github/workflows/ci.yml
+name: CI
+on:
+  push: { branches: [main] }
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version: "1.23" }
+      - run: go vet ./...
+      - run: go test -race ./...</code></pre>
+<p><span class="level beginner">Beginner</span> This runs on every push to <code>main</code> and every PR: check out the code, install Go, vet, and test with the race detector. The result appears as a check on the commit/PR.</p>
+
+<h2>Matrix builds</h2>
+<p><span class="level intermediate">Intermediate</span> Run the same job across versions/OSes in parallel:</p>
+<pre><code>jobs:
+  test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        go: ["1.22", "1.23"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version: "${{ matrix.go }}" }
+      - run: go test ./...
+# → 4 parallel jobs: {ubuntu,macos} × {1.22,1.23}</code></pre>
+
+<h2>Caching for speed</h2>
+<pre><code>      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/go-build
+          key: go-${{ hashFiles('**/go.sum') }}
+# Most setup-* actions have built-in caching: with: { cache: true }</code></pre>
+<blockquote class="tip">Cache dependencies keyed by the lockfile hash (<code>go.sum</code>, <code>bun.lockb</code>, <code>package-lock.json</code>). The cache is reused until dependencies change, cutting minutes off every run. This is the single highest-ROI pipeline optimization.</blockquote>
+
+<h2>Secrets and permissions</h2>
+<pre><code>      - run: ./deploy.sh
+        env:
+          AWS_ROLE: ${{ secrets.AWS_ROLE_ARN }}   # from repo/org Secrets
+
+permissions:            # least privilege for the GITHUB_TOKEN
+  contents: read
+  id-token: write       # for OIDC cloud auth (no long-lived keys!)</code></pre>
+<blockquote class="warn"><strong>Security musts:</strong> never echo a secret (<code>run: echo ${{ secrets.X }}</code>) — it can leak into logs. Pin third-party actions to a full commit SHA, not a mutable tag, so a compromised tag can't inject code. Prefer OIDC federation (<code>id-token: write</code>) over storing long-lived cloud keys as secrets.</blockquote>
+
+<h2>A build-and-deploy job</h2>
+<pre><code>jobs:
+  deploy:
+    needs: test                     # only after tests pass
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: production         # enables required reviewers / protection
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build &amp; push image
+        run: |
+          docker build -t ghcr.io/${{ github.repository }}:${{ github.sha }} .
+          echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+          docker push ghcr.io/${{ github.repository }}:${{ github.sha }}
+      - run: ./deploy.sh ${{ github.sha }}   # promote the SHA-tagged image</code></pre>
+<p>Note <code>needs: test</code> (gating), the <code>if</code> branch guard, tagging the image with <code>github.sha</code> (immutable artifact), and <code>environment: production</code> which can require manual approval.</p>
+
+<h2>Reusable &amp; composite workflows</h2>
+<p>Factor shared pipeline logic into a <code>workflow_call</code> reusable workflow and call it from many repos — the DRY principle for pipelines.</p>
+
+<h2>Exercises</h2>
+<ul>
+  <li>Write a CI workflow for a Bun project: checkout, <code>oven-sh/setup-bun</code>, <code>bun install</code>, <code>bun test</code>, triggered on PRs.</li>
+  <li>Add a matrix over two runtime versions and dependency caching keyed by the lockfile.</li>
+  <li>Add a deploy job gated on <code>needs:</code> + a <code>main</code>-only <code>if</code>, pushing a SHA-tagged image to GHCR.</li>
+</ul>
+
+<h2>Mini-project: a complete pipeline</h2>
+<p>Implement the pipeline you designed in the CI/CD lesson as real GitHub Actions YAML: a <code>test</code> job (lint + test + vuln scan with matrix + caching), a <code>build</code> job producing a SHA-tagged container image in GHCR, and a <code>deploy</code> job gated on <code>test</code>, restricted to <code>main</code>, using OIDC (not stored keys) and a protected <code>production</code> environment. Pin every third-party action to a SHA.</p>
