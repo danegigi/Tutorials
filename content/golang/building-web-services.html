@@ -1,0 +1,160 @@
+<p class="lead">The HTTP Servers lesson got you serving requests. This one is about everything between "it responds" and "it survives production": the Go 1.22 router that finally made <code>net/http</code> enough on its own, middleware you can actually compose, timeouts that stop a slow client from exhausting you, graceful shutdown that doesn't drop in-flight requests, and structured logging with <code>slog</code> carried through <code>context</code>.</p>
+
+<h2>The 1.22 router: method + path patterns <span class="level beginner">beginner</span></h2>
+
+<p>Before Go 1.22 the stdlib mux couldn't match methods or capture path variables, which is why everyone reached for a third-party router. Now it can:</p>
+
+<pre><code>mux := http.NewServeMux()
+
+mux.HandleFunc("GET /users/{id}", func(w http.ResponseWriter, r *http.Request) {
+    id := r.PathValue("id") // typed path capture
+    fmt.Fprintf(w, "user %s", id)
+})
+mux.HandleFunc("POST /users", createUser)
+mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
+    w.WriteHeader(http.StatusOK)
+})
+
+// {$} matches ONLY the exact path (no subpaths); {rest...} is a wildcard tail.
+mux.HandleFunc("GET /{$}", home)              // "/" exactly
+mux.HandleFunc("GET /static/{file...}", serve) // /static/a/b.css</code></pre>
+
+<blockquote class="tip">For many services, the stdlib mux is now all you need — no framework. Reach for chi/echo/gin only when you want their batteries (binding, validation, large middleware ecosystems), not because routing forces you to.</blockquote>
+
+<h2>Composable middleware <span class="level intermediate">intermediate</span></h2>
+
+<p>Middleware in Go is just <code>func(http.Handler) http.Handler</code>. Compose a chain so order is explicit and readable:</p>
+
+<pre><code>type Middleware func(http.Handler) http.Handler
+
+func Chain(h http.Handler, mw ...Middleware) http.Handler {
+    for i := len(mw) - 1; i &gt;= 0; i-- { // apply in reverse so the first listed runs first
+        h = mw[i](h)
+    }
+    return h
+}
+
+func Logging(next http.Handler) http.Handler {
+    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+        start := time.Now()
+        rw := &amp;statusRecorder{ResponseWriter: w, status: 200}
+        next.ServeHTTP(rw, r)
+        slog.InfoContext(r.Context(), "request",
+            "method", r.Method, "path", r.URL.Path,
+            "status", rw.status, "dur", time.Since(start))
+    })
+}
+
+// Capture the status code (ResponseWriter won't tell you otherwise).
+type statusRecorder struct {
+    http.ResponseWriter
+    status int
+}
+func (r *statusRecorder) WriteHeader(c int) { r.status = c; r.ResponseWriter.WriteHeader(c) }
+
+handler := Chain(mux, Logging, Recover, RequestID)</code></pre>
+
+<h2>Timeouts: the ones that actually matter <span class="level intermediate">intermediate</span></h2>
+
+<p>A default <code>http.Server{}</code> has <strong>no timeouts</strong>. One slow or malicious client can hold a connection open forever and exhaust your server. Always set them:</p>
+
+<pre><code>srv := &amp;http.Server{
+    Addr:              ":8080",
+    Handler:           handler,
+    ReadHeaderTimeout: 5 * time.Second,  // Slowloris protection
+    ReadTimeout:       15 * time.Second,
+    WriteTimeout:      15 * time.Second,
+    IdleTimeout:       60 * time.Second,
+}</code></pre>
+
+<p>For per-request deadlines on your own work (DB calls, upstreams), derive a <code>context</code> with a timeout and pass it down — never block forever:</p>
+
+<pre><code>func handler(w http.ResponseWriter, r *http.Request) {
+    ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
+    defer cancel()
+    row := db.QueryRowContext(ctx, "SELECT ...") // cancels at 3s or on client disconnect
+    _ = row
+}</code></pre>
+
+<h2>Graceful shutdown <span class="level advanced">advanced</span></h2>
+
+<p>On deploy or <code>SIGTERM</code>, you want to stop accepting new connections but let in-flight requests finish. <code>srv.Shutdown(ctx)</code> does exactly that:</p>
+
+<pre><code>func main() {
+    srv := &amp;http.Server{Addr: ":8080", Handler: handler /* + timeouts */}
+
+    go func() {
+        if err := srv.ListenAndServe(); err != nil &amp;&amp; err != http.ErrServerClosed {
+            slog.Error("listen", "err", err)
+            os.Exit(1)
+        }
+    }()
+
+    // Wait for SIGINT/SIGTERM.
+    ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+    defer stop()
+    &lt;-ctx.Done()
+
+    // Give in-flight requests up to 10s to finish.
+    shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+    defer cancel()
+    if err := srv.Shutdown(shutdownCtx); err != nil {
+        slog.Error("forced shutdown", "err", err) // deadline hit — some requests cut off
+    }
+    slog.Info("stopped cleanly")
+}</code></pre>
+
+<blockquote class="warn">Set the shutdown timeout <em>shorter</em> than your orchestrator's termination grace period (Kubernetes defaults to 30s). If <code>Shutdown</code>'s deadline is longer, the orchestrator <code>SIGKILL</code>s you mid-request and the graceful logic was pointless.</blockquote>
+
+<h2>Structured logging with slog + context <span class="level advanced">advanced</span></h2>
+
+<p><code>log/slog</code> (Go 1.21+) gives you structured, leveled logs with no dependency. The pattern that scales: put a request-scoped logger (with a request ID) into the <code>context</code>, and every layer logs through it so lines correlate.</p>
+
+<pre><code>logger := slog.New(slog.NewJSONHandler(os.Stdout, &amp;slog.HandlerOptions{Level: slog.LevelInfo}))
+slog.SetDefault(logger)
+
+type ctxKey struct{}
+
+func WithRequestID(next http.Handler) http.Handler {
+    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+        id := r.Header.Get("X-Request-ID")
+        if id == "" { id = randomID() }
+        l := slog.With("request_id", id)
+        ctx := context.WithValue(r.Context(), ctxKey{}, l)
+        next.ServeHTTP(w, r.WithContext(ctx))
+    })
+}
+
+// Any handler/service pulls the correlated logger back out:
+func L(ctx context.Context) *slog.Logger {
+    if l, ok := ctx.Value(ctxKey{}).(*slog.Logger); ok { return l }
+    return slog.Default()
+}
+
+func createUser(w http.ResponseWriter, r *http.Request) {
+    L(r.Context()).Info("creating user", "name", "Ada") // carries request_id automatically
+}</code></pre>
+
+<h2>Common mistakes</h2>
+
+<ul>
+  <li><strong>No server timeouts.</strong> The zero-value <code>http.Server</code> will happily let a client hold a connection open indefinitely. Always set <code>ReadHeaderTimeout</code> at minimum.</li>
+  <li><strong>Ignoring <code>http.ErrServerClosed</code>.</strong> <code>ListenAndServe</code> returns that error on a clean <code>Shutdown</code> — treating it as a failure makes graceful shutdown log a false error (or exit non-zero).</li>
+  <li><strong>Writing the body before the status.</strong> The first <code>Write</code> implicitly sends <code>200</code>; a later <code>WriteHeader(500)</code> is ignored and logs a warning. Set the status first.</li>
+  <li><strong>Shutdown timeout longer than the orchestrator grace.</strong> You get SIGKILLed anyway. Keep it shorter.</li>
+  <li><strong>Logging without correlation.</strong> Unstructured <code>log.Printf</code> lines you can't tie to a request are nearly useless under load. Carry a request ID.</li>
+  <li><strong>Putting a <code>*slog.Logger</code> in context as the ONLY copy.</strong> Fine for request scope, but don't make background goroutines depend on a request's context that may already be cancelled.</li>
+</ul>
+
+<h2>Exercises</h2>
+
+<ol>
+  <li>Convert a service from a third-party router to the stdlib 1.22 mux with <code>{id}</code> path values and method matching. Confirm the routes still behave.</li>
+  <li>Write a <code>Recover</code> middleware that turns a panic into a 500 and logs the stack through the context logger instead of crashing the server.</li>
+  <li>Add all four server timeouts, then simulate a slow client (<code>nc</code> that sends headers one byte at a time) and confirm <code>ReadHeaderTimeout</code> cuts it off.</li>
+  <li>Implement graceful shutdown and verify with a 5-second handler + <code>curl</code> in flight when you send SIGTERM — the request should finish, not drop.</li>
+</ol>
+
+<h2>Mini-project: a production-ready JSON API skeleton</h2>
+
+<p>Build a small <code>net/http</code> service (no framework) with: the 1.22 mux, a middleware chain (request-ID → structured logging → panic recovery), all server timeouts set, per-request context timeouts on a simulated DB call, and graceful shutdown on SIGTERM. Expose <code>GET /health</code>, <code>GET /users/{id}</code>, and <code>POST /users</code>. Prove it works: show a log line carrying a request ID through two layers, show a slow request finishing during shutdown, and show the server rejecting a Slowloris-style client. This skeleton is the thing you copy to start any real Go service.</p>

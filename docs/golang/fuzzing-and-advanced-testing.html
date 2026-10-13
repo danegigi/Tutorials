@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en" data-base="../">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0d1117">
+<title>Fuzzing &amp; Advanced Testing — Golang</title>
+<meta name="description" content="Native fuzzing with go test -fuzz, table-driven and golden-file tests, deterministic concurrency with testing/synctest, coverage, parallel subtests, and integration tests with real dependencies.">
+<link rel="canonical" href="https://danegigi.github.io/Tutorials/golang/fuzzing-and-advanced-testing.html">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Dev Tutorials">
+<meta property="og:title" content="Fuzzing &amp; Advanced Testing — Golang">
+<meta property="og:description" content="Native fuzzing with go test -fuzz, table-driven and golden-file tests, deterministic concurrency with testing/synctest, coverage, parallel subtests, and integration tests with real dependencies.">
+<meta property="og:url" content="https://danegigi.github.io/Tutorials/golang/fuzzing-and-advanced-testing.html">
+<meta property="og:image" content="https://danegigi.github.io/Tutorials/icon-512.png">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Fuzzing &amp; Advanced Testing — Golang">
+<meta name="twitter:description" content="Native fuzzing with go test -fuzz, table-driven and golden-file tests, deterministic concurrency with testing/synctest, coverage, parallel subtests, and integration tests with real dependencies.">
+<meta name="twitter:image" content="https://danegigi.github.io/Tutorials/icon-512.png">
+<link rel="manifest" href="../manifest.webmanifest">
+<link rel="icon" href="../icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="../icon-192.png">
+<link rel="stylesheet" href="../app.css">
+<script>/* set theme before paint to avoid flash */(function(){try{var t=localStorage.getItem('tut.theme');document.documentElement.setAttribute('data-theme',t||'dark');}catch(e){document.documentElement.setAttribute('data-theme','dark');}})();</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"LearningResource","name":"Fuzzing & Advanced Testing","description":"Native fuzzing with go test -fuzz, table-driven and golden-file tests, deterministic concurrency with testing/synctest, coverage, parallel subtests, and integration tests with real dependencies.","url":"https://danegigi.github.io/Tutorials/golang/fuzzing-and-advanced-testing.html","inLanguage":"en","isPartOf":{"@type":"Course","name":"Golang — Dev Tutorials","url":"https://danegigi.github.io/Tutorials/golang/"},"learningResourceType":"Tutorial"},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Dev Tutorials","item":"https://danegigi.github.io/Tutorials/"},{"@type":"ListItem","position":2,"name":"Golang","item":"https://danegigi.github.io/Tutorials/golang/"},{"@type":"ListItem","position":3,"name":"Fuzzing & Advanced Testing","item":"https://danegigi.github.io/Tutorials/golang/fuzzing-and-advanced-testing.html"}]}]}</script>
+
+</head>
+<body class="lesson">
+<header class="nav">
+  <a class="brand" href="../index.html">📚 Dev Tutorials</a>
+  <span class="crumb">Fuzzing &amp; Advanced Testing — Golang</span>
+  <span class="spacer"></span>
+  <a class="navbtn" href="../search.html">🔎 Search</a>
+  <button class="navbtn" id="install-btn" type="button">⬇️ Install</button>
+  <button class="navbtn" id="theme-btn" type="button" aria-label="Toggle theme">🌙 Dark</button>
+</header>
+<main class="wrap lesson-body">
+  <h1 class="page-title">Fuzzing &amp; Advanced Testing</h1>
+  <div class="lesson-tools" data-lesson-id="golang/fuzzing-and-advanced-testing">
+    <button id="done-btn" type="button" aria-pressed="false">○ Mark complete</button>
+    <button id="mark-btn" type="button" aria-pressed="false">☆ Bookmark</button>
+    <a class="navbtn" href="index.html" style="margin-left:auto">All Golang lessons →</a>
+  </div>
+<nav class="toc" aria-label="On this page"><strong>On this page</strong><ul>
+<li class="lvl2"><a href="#native-fuzzing-intermediate">Native fuzzing intermediate</a></li>
+<li class="lvl2"><a href="#table-driven-tests-done-right-beginner">Table-driven tests, done right beginner</a></li>
+<li class="lvl2"><a href="#golden-file-tests-intermediate">Golden-file tests intermediate</a></li>
+<li class="lvl2"><a href="#deterministic-concurrency-with-testingsynctest-advanced">Deterministic concurrency with testing/synctest advanced</a></li>
+<li class="lvl2"><a href="#integration-tests-with-real-dependencies-advanced">Integration tests with real dependencies advanced</a></li>
+<li class="lvl2"><a href="#coverage-parallelism-intermediate">Coverage &amp;amp; parallelism intermediate</a></li>
+<li class="lvl2"><a href="#common-mistakes">Common mistakes</a></li>
+<li class="lvl2"><a href="#exercises">Exercises</a></li>
+<li class="lvl2"><a href="#mini-project-break-your-own-encoder">Mini-project: break your own encoder</a></li>
+</ul></nav>
+<p class="lead">The Testing &amp; Benchmarks lesson covered <code>go test</code>, table tests, and benchmarks. This one goes further: native fuzzing that <em>generates</em> inputs to break your code, golden-file tests for complex output, deterministic concurrency testing with <code>testing/synctest</code>, parallel subtests, and integration tests that run against real dependencies — the techniques that catch the bugs example-based tests never will.</p>
+
+<h2 id="native-fuzzing-intermediate">Native fuzzing <span class="level intermediate">intermediate</span></h2>
+
+<p>A fuzz test feeds your function a stream of mutated inputs, hunting for one that panics or violates a property. It's built into <code>go test</code> — no external tooling. The signature takes <code>*testing.F</code>:</p>
+
+<pre><code>func Reverse(s string) string {
+    r := []rune(s)
+    for i, j := 0, len(r)-1; i &lt; j; i, j = i+1, j-1 { r[i], r[j] = r[j], r[i] }
+    return string(r)
+}
+
+func FuzzReverse(f *testing.F) {
+    f.Add("hello")        // seed corpus: known interesting inputs
+    f.Add("")             // edge cases
+    f.Add("héllo 世界")
+
+    f.Fuzz(func(t *testing.T, s string) {
+        rev := Reverse(Reverse(s))
+        if rev != s {     // PROPERTY: reversing twice is the identity
+            t.Errorf("double reverse: got %q want %q", rev, s)
+        }
+        if !utf8.ValidString(s) { t.Skip() } // ignore invalid UTF-8 inputs
+    })
+}</code></pre>
+
+<pre><code># Run as a normal unit test (just the seed corpus):
+go test ./...
+
+# Actually fuzz — generate inputs until it finds a failure or you stop:
+go test -fuzz=FuzzReverse -fuzztime=30s</code></pre>
+
+<blockquote class="tip">Fuzzing shines on <strong>parsers, encoders/decoders, and anything with a round-trip property</strong> (encode→decode == original, parse→format == input). When it finds a crasher, Go writes the exact input to <code>testdata/fuzz/</code> and it becomes a permanent regression test automatically.</blockquote>
+
+<h2 id="table-driven-tests-done-right-beginner">Table-driven tests, done right <span class="level beginner">beginner</span></h2>
+
+<p>The idiomatic Go pattern — one slice of cases, one loop, a named subtest per case so failures point at the right row:</p>
+
+<pre><code>func TestAdd(t *testing.T) {
+    tests := []struct {
+        name     string
+        a, b     int
+        want     int
+    }{
+        {"positives", 2, 3, 5},
+        {"with zero", 0, 7, 7},
+        {"negatives", -2, -3, -5},
+    }
+    for _, tc := range tests {
+        t.Run(tc.name, func(t *testing.T) { // subtest: run/filter individually
+            if got := Add(tc.a, tc.b); got != tc.want {
+                t.Errorf("Add(%d,%d) = %d, want %d", tc.a, tc.b, got, tc.want)
+            }
+        })
+    }
+}</code></pre>
+
+<p>Run one row: <code>go test -run TestAdd/negatives</code>.</p>
+
+<h2 id="golden-file-tests-intermediate">Golden-file tests <span class="level intermediate">intermediate</span></h2>
+
+<p>When the expected output is large or complex (rendered HTML, formatted reports, generated code), inline strings become unreadable. Store the expected output in a <code>testdata/*.golden</code> file and regenerate it with a flag:</p>
+
+<pre><code>var update = flag.Bool("update", false, "update golden files")
+
+func TestRender(t *testing.T) {
+    got := Render(sampleInput)
+    golden := filepath.Join("testdata", "render.golden")
+
+    if *update {
+        os.WriteFile(golden, []byte(got), 0o644) // regenerate on demand
+        return
+    }
+    want, _ := os.ReadFile(golden)
+    if got != string(want) {
+        t.Errorf("output mismatch — run `go test -update` if intentional\n%s", got)
+    }
+}</code></pre>
+
+<pre><code># Intentionally changed the output? Regenerate and review the diff in git:
+go test -run TestRender -update</code></pre>
+
+<blockquote class="warn">Always <strong>review the git diff</strong> after <code>-update</code>. The whole point is that an unexpected change is visible — blindly updating goldens defeats the test.</blockquote>
+
+<h2 id="deterministic-concurrency-with-testingsynctest-advanced">Deterministic concurrency with testing/synctest <span class="level advanced">advanced</span></h2>
+
+<p>Testing time-based or concurrent code with real <code>time.Sleep</code> is slow and flaky. <code>testing/synctest</code> (Go 1.24+, now stable) runs a "bubble" with a <em>fake clock</em> that advances instantly when all goroutines are blocked — so a test of a 5-second timeout runs in microseconds and is fully deterministic:</p>
+
+<pre><code>import "testing/synctest"
+
+func TestTimeout(t *testing.T) {
+    synctest.Test(t, func(t *testing.T) {
+        ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+        defer cancel()
+
+        start := time.Now()
+        &lt;-ctx.Done()                 // fake clock jumps straight to 5s
+        synctest.Wait()              // let all goroutines settle
+
+        if d := time.Since(start); d != 5*time.Second {
+            t.Errorf("got %v, want exactly 5s", d) // deterministic, not "about 5s"
+        }
+    })
+}</code></pre>
+
+<h2 id="integration-tests-with-real-dependencies-advanced">Integration tests with real dependencies <span class="level advanced">advanced</span></h2>
+
+<p>Unit tests mock; integration tests use the real thing. Gate them behind <code>testing.Short()</code> so <code>go test -short</code> skips them in fast loops, and spin up real services with <a href="https://golang.testcontainers.org/">testcontainers-go</a>:</p>
+
+<pre><code>func TestUserRepo(t *testing.T) {
+    if testing.Short() { t.Skip("integration test") }
+
+    ctx := context.Background()
+    pg, err := postgres.Run(ctx, "postgres:16-alpine",
+        postgres.WithDatabase("test"), postgres.WithPassword("secret"))
+    if err != nil { t.Fatal(err) }
+    t.Cleanup(func() { pg.Terminate(ctx) }) // tears the container down after the test
+
+    dsn, _ := pg.ConnectionString(ctx)
+    db, _ := sql.Open("pgx", dsn)
+    // ... migrate, then test the repo against a REAL Postgres ...
+}</code></pre>
+
+<p>For simpler cases, prefer <strong>interfaces + fakes</strong> over heavy mocking libraries: define the dependency as an interface the consumer owns, and pass a hand-written fake in tests. It's clearer and survives refactors better than generated mocks.</p>
+
+<h2 id="coverage-parallelism-intermediate">Coverage &amp; parallelism <span class="level intermediate">intermediate</span></h2>
+
+<pre><code># Coverage with a visual report:
+go test -coverprofile=cover.out ./...
+go tool cover -html=cover.out    # open annotated source in the browser
+
+# Mark independent subtests parallel to speed up the suite:
+t.Parallel()  // inside t.Run; they interleave with other parallel subtests</code></pre>
+
+<blockquote class="warn">The classic parallel-subtest bug: capturing the loop variable. Before Go 1.22 you had to write <code>tc := tc</code> inside the loop or every parallel subtest saw the last case. Go 1.22+ gives each iteration its own variable, so the shadow is no longer needed — but check which Go version your module targets.</blockquote>
+
+<h2 id="common-mistakes">Common mistakes</h2>
+
+<ul>
+  <li><strong>Asserting <code>time.Since</code> is "about" a value.</strong> Real-clock timing tests are flaky under load. Use <code>testing/synctest</code> for exact, instant results.</li>
+  <li><strong>Blindly running <code>-update</code>.</strong> Golden files only catch regressions if you review the diff before committing the new golden.</li>
+  <li><strong>No seed corpus on a fuzz test.</strong> Without <code>f.Add</code> seeds the fuzzer starts cold; good seeds (edge cases, known-tricky inputs) find bugs far faster.</li>
+  <li><strong>Mixing integration tests into the fast loop.</strong> Not gating slow tests behind <code>testing.Short()</code> makes <code>go test ./...</code> painfully slow and discourages running it.</li>
+  <li><strong>Over-mocking.</strong> A pile of generated mocks for behavior you could cover with one hand-written fake makes tests brittle and hard to read.</li>
+  <li><strong>Forgetting <code>t.Cleanup</code>.</strong> Leaked containers/temp dirs/goroutines accumulate across a run; register teardown with <code>t.Cleanup</code> instead of hoping a <code>defer</code> in the right scope fires.</li>
+</ul>
+
+<h2 id="exercises">Exercises</h2>
+
+<ol>
+  <li>Write a <code>FuzzParse</code> for a small parser you have (or a JSON round-trip). Let it run 30s and turn any crasher it finds into a committed regression case.</li>
+  <li>Convert a test with a big inline expected string into a golden-file test with an <code>-update</code> flag. Change the output on purpose and confirm the diff is reviewable.</li>
+  <li>Test a function that waits on a <code>context</code> timeout using <code>testing/synctest</code> and assert the <em>exact</em> elapsed fake-time.</li>
+  <li>Add an integration test gated by <code>testing.Short()</code> that uses testcontainers-go (or a local service) and tears it down with <code>t.Cleanup</code>.</li>
+</ol>
+
+<h2 id="mini-project-break-your-own-encoder">Mini-project: break your own encoder</h2>
+
+<p>Take (or write) a function pair that encodes and decodes a small format — e.g. a URL query-string codec or a simple binary record. Write: (1) table-driven unit tests for the known cases, (2) a golden-file test for a representative encoded output, and (3) a fuzz test asserting the round-trip property <code>decode(encode(x)) == x</code>. Run the fuzzer until it finds a failing input (feed it tricky seeds — empty strings, unicode, embedded delimiters), fix the bug it exposes, and confirm the auto-saved corpus entry now passes. You'll have proven the difference between "my examples pass" and "no input breaks it."</p>
+
+<section class="further"><h2 id="further-reading">Further reading</h2>
+<p>Official documentation for the tools and APIs covered on this page:</p>
+<ul class="further-list"><li><a href="https://go.dev/doc/security/fuzz/" target="_blank" rel="noopener">Go fuzzing ↗</a></li>
+<li><a href="https://pkg.go.dev/testing" target="_blank" rel="noopener">testing package ↗</a></li>
+<li><a href="https://pkg.go.dev/testing/synctest" target="_blank" rel="noopener">testing/synctest ↗</a></li></ul></section>
+  <nav class="pager">
+<a class="prev" href="building-web-services.html"><small>Previous</small>🐹 Building Production Web Services</a>
+<a class="next" href="../bun/what-is-bun.html"><small>Next</small>🥟 What Bun Is &amp; When to Use It</a>
+  </nav>
+</main>
+<button type="button" class="fab top" id="fab-top" aria-label="Back to top">↑ Top</button>
+<div class="banner" id="update-banner" role="status">A new version is available.<button type="button">Reload</button></div>
+<div class="banner" id="offline-banner" role="status">You're offline — showing cached lessons.</div>
+<script src="../app.js" defer></script>
+</body>
+</html>

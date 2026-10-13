@@ -1,0 +1,118 @@
+<p class="lead">Go manages memory for you, but "managed" is not "free". Where a value lives — the stack or the heap — decides whether it costs the garbage collector anything at all. This lesson explains how Go decides, how its collector actually works, the two knobs that control it, and how to read a heap profile so you optimize the allocations that matter instead of guessing.</p>
+
+<h2>Stack vs heap <span class="level beginner">beginner</span></h2>
+
+<p>Every goroutine has a <strong>stack</strong> — a cheap, per-goroutine region that grows and shrinks as functions call and return. Allocating on the stack is nearly free: it is a pointer bump, and the memory is reclaimed automatically when the function returns. The <strong>heap</strong> is shared, and anything on it must eventually be found and freed by the garbage collector.</p>
+
+<p>In most languages <em>you</em> choose (<code>new</code> vs a local). In Go the <strong>compiler</strong> chooses, using <strong>escape analysis</strong>: if it can prove a value does not outlive the function, it stays on the stack; if the value might be referenced after the function returns, it <em>escapes</em> to the heap.</p>
+
+<blockquote class="tip">The practical rule: heap allocations are what the GC has to track. Fewer heap allocations ⇒ less GC work ⇒ lower latency and CPU. You rarely need zero allocations — you need to stop allocating in the hot path.</blockquote>
+
+<h2>Escape analysis in depth <span class="level intermediate">intermediate</span></h2>
+
+<p>Ask the compiler to show its decisions with <code>-gcflags=-m</code> (repeat <code>-m</code> for more detail):</p>
+
+<pre><code>go build -gcflags=-m ./... 2&gt;&amp;1 | grep -E 'escapes|moved to heap'</code></pre>
+
+<p>Three things force a value to the heap:</p>
+
+<pre><code>// 1. Returning a pointer to a local — it must outlive the function.
+func newUser() *User {
+    u := User{Name: "Ada"} // "moved to heap: u"
+    return &amp;u
+}
+
+// 2. Storing into an interface — the concrete value is boxed.
+func log(v any) {}          // v escapes: the callee could keep it
+log(User{})
+
+// 3. A value whose size isn't known at compile time (e.g. a slice
+//    that grows), or one captured by a closure that escapes.
+func counter() func() int {
+    n := 0                  // "moved to heap: n" — the closure outlives counter
+    return func() int { n++; return n }
+}</code></pre>
+
+<p>Common surprises the <code>-m</code> output reveals: passing a value to a function via an <code>interface</code> parameter (including <code>fmt.Println(x)</code>) usually escapes it, and taking the address of a loop variable that is stored somewhere escapes it.</p>
+
+<blockquote class="warn">Do <strong>not</strong> contort your code to avoid escapes you haven't measured. Escape analysis changes between Go releases, and a "clever" rewrite to keep something on the stack often hurts readability for zero real-world gain. Profile first; optimize the hot path only.</blockquote>
+
+<h2>How Go's garbage collector works <span class="level intermediate">intermediate</span></h2>
+
+<p>Go uses a <strong>concurrent, tri-color mark-and-sweep</strong> collector with a write barrier. The important properties for an application developer:</p>
+
+<ul>
+  <li><strong>Concurrent</strong> — most of the marking runs <em>alongside</em> your goroutines, not in a stop-the-world pause.</li>
+  <li><strong>Non-generational, non-compacting</strong> — it does not move objects, so pointers stay valid and <code>unsafe</code>/cgo interop is simpler.</li>
+  <li><strong>Pauses are tiny</strong> — the stop-the-world phases are sub-millisecond on modern Go; the cost shows up as <em>CPU</em> spent marking, not as long freezes.</li>
+  <li><strong>Pacing</strong> — the GC aims to finish a cycle before the heap doubles (by default). It trades CPU for memory: collect more often and use less RAM, or less often and use more.</li>
+</ul>
+
+<h2>The two knobs: GOGC and GOMEMLIMIT <span class="level advanced">advanced</span></h2>
+
+<p><strong><code>GOGC</code></strong> (default <code>100</code>) sets how much the heap may grow between collections, as a percentage of live data. <code>GOGC=100</code> means "collect when the heap reaches 2× the live set." Higher = fewer GCs, more RAM; lower = more GCs, less RAM. <code>GOGC=off</code> disables the GC entirely (only for short-lived batch jobs).</p>
+
+<p><strong><code>GOMEMLIMIT</code></strong> (Go 1.19+) is a <em>soft</em> memory limit. The GC will run more aggressively as the heap approaches it, trading CPU to stay under the cap — invaluable in containers with a hard memory limit, where the real killer is the OOM-killer.</p>
+
+<pre><code># Give a 512 MiB container some headroom and let GOGC stay default.
+GOMEMLIMIT=450MiB ./server
+
+# Or set it from code at startup:
+import "runtime/debug"
+debug.SetMemoryLimit(450 &lt;&lt; 20) // 450 MiB
+debug.SetGCPercent(100)         // == GOGC</code></pre>
+
+<blockquote class="warn"><code>GOMEMLIMIT</code> is a <em>soft</em> limit: if live data genuinely exceeds it, Go will spend ever more CPU on GC ("GC death spiral") rather than crash. Set it <em>below</em> the container's hard limit (leave ~10–20% headroom for stacks, goroutines, and off-heap memory), and keep <code>GOGC</code> on so the limit is a safety ceiling, not the normal trigger.</blockquote>
+
+<h2>Reading a heap profile <span class="level advanced">advanced</span></h2>
+
+<p>Guessing where allocations come from wastes time. Capture a profile and let the tool point at the lines:</p>
+
+<pre><code>// Expose pprof on a debug port (dev/staging only).
+import _ "net/http/pprof"
+go func() { http.ListenAndServe("localhost:6060", nil) }()</code></pre>
+
+<pre><code># Snapshot the live heap and open the interactive explorer.
+go tool pprof http://localhost:6060/debug/pprof/heap
+
+# Inside pprof:
+(pprof) top          # biggest allocators by in-use bytes
+(pprof) list myFunc  # per-line allocation annotations
+(pprof) web          # open a graph in the browser
+
+# For allocation RATE (what the GC actually chews on), use alloc_space:
+go tool pprof -alloc_space http://localhost:6060/debug/pprof/heap</code></pre>
+
+<p>Read <code>-inuse_space</code> to find memory leaks (what is still retained), and <code>-alloc_space</code> to find GC pressure (what churns, even if freed quickly). A classic hot-path fix once you've found it — reuse buffers with a <code>sync.Pool</code> instead of allocating per request:</p>
+
+<pre><code>var bufPool = sync.Pool{New: func() any { return new(bytes.Buffer) }}
+
+func handle(w http.ResponseWriter, r *http.Request) {
+    buf := bufPool.Get().(*bytes.Buffer)
+    buf.Reset()
+    defer bufPool.Put(buf)
+    // ... build the response in buf, no per-request allocation ...
+}</code></pre>
+
+<h2>Common mistakes</h2>
+
+<ul>
+  <li><strong>Micro-optimizing escapes without a profile.</strong> You rewrite readable code to shave stack/heap decisions that never showed up in CPU or allocation profiles. Measure, then optimize the top entries only.</li>
+  <li><strong>Setting <code>GOMEMLIMIT</code> equal to the container limit.</strong> With no headroom, off-heap and stack memory push you past the hard cap and the OOM-killer fires anyway. Set it below, with margin.</li>
+  <li><strong>Turning <code>GOGC</code> off in a long-running service.</strong> It never collects and the heap grows without bound. <code>GOGC=off</code> is only for short batch jobs that exit.</li>
+  <li><strong>Reading <code>inuse_space</code> when you meant allocation rate.</strong> A function can allocate megabytes per second that are immediately freed — invisible in in-use, but it dominates GC CPU. Use <code>-alloc_space</code> for pressure.</li>
+  <li><strong>Keeping a huge slice alive by sub-slicing it.</strong> <code>small := big[:10]</code> still pins the whole backing array. Copy if you need to let the big one go.</li>
+</ul>
+
+<h2>Exercises</h2>
+
+<ol>
+  <li>Write a function that returns <code>*T</code> and one that returns <code>T</code>. Build both with <code>-gcflags=-m</code> and confirm which moves to the heap and why.</li>
+  <li>Pass the same struct to a function once by concrete type and once through an <code>any</code> parameter. Observe the escape in the <code>-m</code> output.</li>
+  <li>Run a small allocation-heavy loop, capture an <code>-alloc_space</code> heap profile, and use <code>list</code> to find the exact line responsible.</li>
+  <li>Take a service, set <code>GOGC=50</code> then <code>GOGC=200</code>, and compare GC CPU% (via <code>GODEBUG=gctrace=1</code>) and RSS. Explain the trade-off you observe.</li>
+</ol>
+
+<h2>Mini-project: tune a leaky request handler</h2>
+
+<p>Build a tiny HTTP service with a handler that allocates a new large buffer and a new slice on every request. Add <code>net/http/pprof</code>, drive load with <code>hey</code> or a loop, and capture <code>-alloc_space</code>. Then: (1) introduce a <code>sync.Pool</code> for the buffer, (2) pre-size the slice with <code>make([]T, 0, n)</code>, and (3) set a sensible <code>GOMEMLIMIT</code>. Re-profile and record the before/after allocation rate and GC CPU% from <code>GODEBUG=gctrace=1</code>. Your deliverable is a short note showing the numbers moved — proof you optimized by measurement, not by guesswork.</p>

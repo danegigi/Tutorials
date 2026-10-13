@@ -235,6 +235,46 @@ export const SECTIONS = [
           ref("google.golang.org/grpc", "https://pkg.go.dev/google.golang.org/grpc"),
         ],
       },
+      {
+        slug: "memory-and-garbage-collection",
+        title: "Memory & the Garbage Collector",
+        blurb: "Stack vs heap, escape analysis in depth, how Go's concurrent GC works, GOGC and GOMEMLIMIT tuning, reading a heap profile, and cutting allocations on the hot path.",
+        further: [
+          ref("A Guide to the Go GC", "https://go.dev/doc/gc-guide"),
+          ref("GOMEMLIMIT soft memory limit", "https://go.dev/doc/gc-guide#Memory_limit"),
+          ref("Profiling Go programs (pprof)", "https://go.dev/blog/pprof"),
+        ],
+      },
+      {
+        slug: "generics-in-practice",
+        title: "Generics in Practice",
+        blurb: "Beyond the theory: shipping real generic code — constraints packages, type sets, generic data structures and helpers, the slices/maps stdlib packages, and when a plain interface is still the better call.",
+        further: [
+          ref("Tutorial: Generics", "https://go.dev/doc/tutorial/generics"),
+          ref("golang.org/x/exp constraints", "https://pkg.go.dev/golang.org/x/exp/constraints"),
+          ref("slices & maps packages", "https://pkg.go.dev/slices"),
+        ],
+      },
+      {
+        slug: "building-web-services",
+        title: "Building Production Web Services",
+        blurb: "Production net/http: the Go 1.22 method+pattern router, composable middleware, graceful shutdown, server & request timeouts, structured logging with slog, and threading context through handlers.",
+        further: [
+          ref("net/http package", "https://pkg.go.dev/net/http"),
+          ref("Routing enhancements (1.22)", "https://go.dev/blog/routing-enhancements"),
+          ref("log/slog package", "https://pkg.go.dev/log/slog"),
+        ],
+      },
+      {
+        slug: "fuzzing-and-advanced-testing",
+        title: "Fuzzing & Advanced Testing",
+        blurb: "Native fuzzing with go test -fuzz, table-driven and golden-file tests, deterministic concurrency with testing/synctest, coverage, parallel subtests, and integration tests with real dependencies.",
+        further: [
+          ref("Go fuzzing", "https://go.dev/doc/security/fuzz/"),
+          ref("testing package", "https://pkg.go.dev/testing"),
+          ref("testing/synctest", "https://pkg.go.dev/testing/synctest"),
+        ],
+      },
     ],
   },
 

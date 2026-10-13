@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en" data-base="../">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0d1117">
+<title>Generics in Practice — Golang</title>
+<meta name="description" content="Beyond the theory: shipping real generic code — constraints packages, type sets, generic data structures and helpers, the slices/maps stdlib packages, and when a plain interface is still the better call.">
+<link rel="canonical" href="https://danegigi.github.io/Tutorials/golang/generics-in-practice.html">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Dev Tutorials">
+<meta property="og:title" content="Generics in Practice — Golang">
+<meta property="og:description" content="Beyond the theory: shipping real generic code — constraints packages, type sets, generic data structures and helpers, the slices/maps stdlib packages, and when a plain interface is still the better call.">
+<meta property="og:url" content="https://danegigi.github.io/Tutorials/golang/generics-in-practice.html">
+<meta property="og:image" content="https://danegigi.github.io/Tutorials/icon-512.png">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Generics in Practice — Golang">
+<meta name="twitter:description" content="Beyond the theory: shipping real generic code — constraints packages, type sets, generic data structures and helpers, the slices/maps stdlib packages, and when a plain interface is still the better call.">
+<meta name="twitter:image" content="https://danegigi.github.io/Tutorials/icon-512.png">
+<link rel="manifest" href="../manifest.webmanifest">
+<link rel="icon" href="../icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="../icon-192.png">
+<link rel="stylesheet" href="../app.css">
+<script>/* set theme before paint to avoid flash */(function(){try{var t=localStorage.getItem('tut.theme');document.documentElement.setAttribute('data-theme',t||'dark');}catch(e){document.documentElement.setAttribute('data-theme','dark');}})();</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"LearningResource","name":"Generics in Practice","description":"Beyond the theory: shipping real generic code — constraints packages, type sets, generic data structures and helpers, the slices/maps stdlib packages, and when a plain interface is still the better call.","url":"https://danegigi.github.io/Tutorials/golang/generics-in-practice.html","inLanguage":"en","isPartOf":{"@type":"Course","name":"Golang — Dev Tutorials","url":"https://danegigi.github.io/Tutorials/golang/"},"learningResourceType":"Tutorial"},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Dev Tutorials","item":"https://danegigi.github.io/Tutorials/"},{"@type":"ListItem","position":2,"name":"Golang","item":"https://danegigi.github.io/Tutorials/golang/"},{"@type":"ListItem","position":3,"name":"Generics in Practice","item":"https://danegigi.github.io/Tutorials/golang/generics-in-practice.html"}]}]}</script>
+
+</head>
+<body class="lesson">
+<header class="nav">
+  <a class="brand" href="../index.html">📚 Dev Tutorials</a>
+  <span class="crumb">Generics in Practice — Golang</span>
+  <span class="spacer"></span>
+  <a class="navbtn" href="../search.html">🔎 Search</a>
+  <button class="navbtn" id="install-btn" type="button">⬇️ Install</button>
+  <button class="navbtn" id="theme-btn" type="button" aria-label="Toggle theme">🌙 Dark</button>
+</header>
+<main class="wrap lesson-body">
+  <h1 class="page-title">Generics in Practice</h1>
+  <div class="lesson-tools" data-lesson-id="golang/generics-in-practice">
+    <button id="done-btn" type="button" aria-pressed="false">○ Mark complete</button>
+    <button id="mark-btn" type="button" aria-pressed="false">☆ Bookmark</button>
+    <a class="navbtn" href="index.html" style="margin-left:auto">All Golang lessons →</a>
+  </div>
+<nav class="toc" aria-label="On this page"><strong>On this page</strong><ul>
+<li class="lvl2"><a href="#start-with-the-stdlib-most-generic-code-is-already-written-beginner">Start with the stdlib — most generic code is already written beginner</a></li>
+<li class="lvl2"><a href="#constraints-packages-type-sets-intermediate">Constraints packages &amp; type sets intermediate</a></li>
+<li class="lvl2"><a href="#the-three-patterns-that-pay-off-intermediate">The three patterns that pay off intermediate</a></li>
+<li class="lvl2"><a href="#when-not-to-use-generics-advanced">When NOT to use generics advanced</a></li>
+<li class="lvl2"><a href="#common-mistakes">Common mistakes</a></li>
+<li class="lvl2"><a href="#exercises">Exercises</a></li>
+<li class="lvl2"><a href="#mini-project-a-type-safe-in-memory-cache">Mini-project: a type-safe in-memory cache</a></li>
+</ul></nav>
+<p class="lead">The Generics Deep Dive covered the mechanics — constraints, the tilde, inference. This lesson is about <em>shipping</em> generic code: the small set of patterns that actually earn their keep in real codebases, the standard-library packages that already give you most of what you'd reach for generics to build, and the honest cases where a plain interface or even a little duplication is the better engineering call.</p>
+
+<h2 id="start-with-the-stdlib-most-generic-code-is-already-written-beginner">Start with the stdlib — most generic code is already written <span class="level beginner">beginner</span></h2>
+
+<p>Before writing a generic function, check whether Go 1.21+ already ships it. The <code>slices</code> and <code>maps</code> packages replace a huge amount of hand-rolled generic plumbing:</p>
+
+<pre><code>import (
+    "slices"
+    "maps"
+    "cmp"
+)
+
+nums := []int{3, 1, 2}
+slices.Sort(nums)                      // [1 2 3]
+i, ok := slices.BinarySearch(nums, 2)  // 1, true
+slices.Contains(nums, 3)               // true
+max := slices.Max(nums)                // 3
+
+// Sort structs by a field without writing a Less func:
+type User struct{ Name string; Age int }
+users := []User{{"Ada", 36}, {"Linus", 25}}
+slices.SortFunc(users, func(a, b User) int { return cmp.Compare(a.Age, b.Age) })
+
+keys := slices.Collect(maps.Keys(m)) // iterator → slice (Go 1.23+)</code></pre>
+
+<blockquote class="tip">Reach for <code>slices</code>, <code>maps</code>, and <code>cmp</code> first. Writing your own generic <code>Contains</code> or <code>Map</code> helper in 2026 is usually re-inventing something the stdlib already optimized and tested.</blockquote>
+
+<h2 id="constraints-packages-type-sets-intermediate">Constraints packages & type sets <span class="level intermediate">intermediate</span></h2>
+
+<p>A constraint is an interface describing which types are allowed. <code>cmp.Ordered</code> covers everything comparable with <code>&lt;</code>; for arithmetic you define a type set with the <code>~</code> (tilde) operator so it also matches named types whose underlying type matches:</p>
+
+<pre><code>type Number interface {
+    ~int | ~int64 | ~float64 // ~ ⇒ also matches `type Celsius float64`
+}
+
+func Sum[T Number](xs []T) T {
+    var total T // zero value of whatever T is
+    for _, x := range xs {
+        total += x
+    }
+    return total
+}
+
+Sum([]int{1, 2, 3})          // 6
+type Celsius float64
+Sum([]Celsius{20.5, 21.0})   // works thanks to ~float64</code></pre>
+
+<p>Type inference means callers almost never write the type argument explicitly — <code>Sum([]int{...})</code>, not <code>Sum[int]([]int{...})</code>.</p>
+
+<h2 id="the-three-patterns-that-pay-off-intermediate">The three patterns that pay off <span class="level intermediate">intermediate</span></h2>
+
+<p><strong>1. Generic containers</strong> — a type-safe stack/set/queue with no <code>any</code> boxing and no per-call type assertions:</p>
+
+<pre><code>type Set[T comparable] struct{ m map[T]struct{} }
+
+func NewSet[T comparable]() *Set[T] { return &amp;Set[T]{m: make(map[T]struct{})} }
+func (s *Set[T]) Add(v T)           { s.m[v] = struct{}{} }
+func (s *Set[T]) Has(v T) bool      { _, ok := s.m[v]; return ok }
+func (s *Set[T]) Len() int          { return len(s.m) }
+
+ints := NewSet[int]()
+ints.Add(1); ints.Has(1) // true — fully type-checked, no interface{} </code></pre>
+
+<p><strong>2. Transform helpers</strong> — <code>Map</code>/<code>Filter</code>/<code>Reduce</code> over slices (only when the stdlib doesn't already have it):</p>
+
+<pre><code>func Map[T, U any](in []T, f func(T) U) []U {
+    out := make([]U, len(in))
+    for i, v := range in { out[i] = f(v) }
+    return out
+}
+names := Map(users, func(u User) string { return u.Name })</code></pre>
+
+<p><strong>3. Removing "copy-paste for each type" code</strong> — the single best reason to use generics. If you have <code>Int64Ptr</code>, <code>StringPtr</code>, <code>BoolPtr</code> helpers, collapse them:</p>
+
+<pre><code>func Ptr[T any](v T) *T { return &amp;v } // one func replaces N</code></pre>
+
+<h2 id="when-not-to-use-generics-advanced">When NOT to use generics <span class="level advanced">advanced</span></h2>
+
+<p>Generics are a tool, not a goal. Prefer a plain <code>interface</code> when behavior — not the concrete type — is what varies:</p>
+
+<pre><code>// Generics: WRONG tool. You only call a method; the type doesn't matter.
+func WriteAll[T io.Writer](ws []T, p []byte) { for _, w := range ws { w.Write(p) } }
+
+// Interface: RIGHT. Simpler, and accepts a heterogeneous slice.
+func WriteAll(ws []io.Writer, p []byte) { for _, w := range ws { w.Write(p) } }</code></pre>
+
+<p>Rules of thumb from the Go team's own guidance:</p>
+
+<ul>
+  <li>Use generics when the function body is <strong>identical</strong> across types and only the type differs (containers, <code>Map</code>, numeric helpers).</li>
+  <li>Use an <strong>interface</strong> when different types need different <em>behavior</em> for the same operation.</li>
+  <li>If you'd write a generic function with a single type parameter used only as a method receiver — you want an interface.</li>
+  <li>A little duplication is cheaper than a confusing generic signature. Don't make callers read <code>func F[T C1, U C2, V comparable](...)</code> to save three lines.</li>
+</ul>
+
+<blockquote class="warn">You <strong>cannot</strong> write generic methods with their <em>own</em> type parameters (only the receiver type can be parameterized), and generics do not give you specialization/overloading. If you find yourself fighting the type system to express "this but faster for ints", stop — that's a sign generics is the wrong fit.</blockquote>
+
+<h2 id="common-mistakes">Common mistakes</h2>
+
+<ul>
+  <li><strong>Re-implementing <code>slices</code>/<code>maps</code>.</strong> Your hand-rolled <code>Contains[T]</code> is slower to maintain and no faster than <code>slices.Contains</code>.</li>
+  <li><strong>Forgetting the tilde.</strong> <code>int | float64</code> rejects <code>type Celsius float64</code>; <code>~int | ~float64</code> accepts it. Named types are common in real code.</li>
+  <li><strong>Using generics where an interface is clearer.</strong> If the body only calls methods, you wanted an interface all along.</li>
+  <li><strong>Over-parameterizing.</strong> Three type parameters with three constraints is usually a design smell; split the function or accept a small amount of duplication.</li>
+  <li><strong>Assuming zero-value equals "empty".</strong> <code>var zero T</code> is the zero value, which for pointers is <code>nil</code> and for structs is all-fields-zero — handle it explicitly if "unset" matters.</li>
+</ul>
+
+<h2 id="exercises">Exercises</h2>
+
+<ol>
+  <li>Rewrite a set of <code>FooPtr</code>/<code>BarPtr</code> helpers in a codebase (or invent three) into a single generic <code>Ptr[T]</code>.</li>
+  <li>Implement <code>Filter[T any](in []T, keep func(T) bool) []T</code> and a <code>Reduce[T, U any]</code>. Then find out how many of your use cases <code>slices</code> already covers.</li>
+  <li>Build a generic <code>OrderedMap[K cmp.Ordered, V any]</code> that iterates keys in sorted order. Decide where generics help and where a plain <code>map</code> + <code>slices.Sort</code> on the keys is simpler.</li>
+  <li>Take a generic function you wrote and argue, in two sentences, whether an interface would have been clearer. Rewrite it if the answer is yes.</li>
+</ol>
+
+<h2 id="mini-project-a-type-safe-in-memory-cache">Mini-project: a type-safe in-memory cache</h2>
+
+<p>Build <code>Cache[K comparable, V any]</code> with <code>Get(k) (V, bool)</code>, <code>Set(k, v)</code>, <code>Delete(k)</code>, and a <code>GetOrCompute(k, func() V) V</code> that fills misses atomically (guard with a <code>sync.Mutex</code>). Make it work for <code>Cache[string, User]</code> and <code>Cache[int, []byte]</code> with no changes. Then write a short note: which parts genuinely needed generics (the typed <code>V</code> return with no assertion) and which could have been a plain <code>map[string]any</code> — and why the generic version is worth it here.</p>
+
+<section class="further"><h2 id="further-reading">Further reading</h2>
+<p>Official documentation for the tools and APIs covered on this page:</p>
+<ul class="further-list"><li><a href="https://go.dev/doc/tutorial/generics" target="_blank" rel="noopener">Tutorial: Generics ↗</a></li>
+<li><a href="https://pkg.go.dev/golang.org/x/exp/constraints" target="_blank" rel="noopener">golang.org/x/exp constraints ↗</a></li>
+<li><a href="https://pkg.go.dev/slices" target="_blank" rel="noopener">slices &amp; maps packages ↗</a></li></ul></section>
+  <nav class="pager">
+<a class="prev" href="memory-and-garbage-collection.html"><small>Previous</small>🐹 Memory &amp; the Garbage Collector</a>
+<a class="next" href="building-web-services.html"><small>Next</small>🐹 Building Production Web Services</a>
+  </nav>
+</main>
+<button type="button" class="fab top" id="fab-top" aria-label="Back to top">↑ Top</button>
+<div class="banner" id="update-banner" role="status">A new version is available.<button type="button">Reload</button></div>
+<div class="banner" id="offline-banner" role="status">You're offline — showing cached lessons.</div>
+<script src="../app.js" defer></script>
+</body>
+</html>
