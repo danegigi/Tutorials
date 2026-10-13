@@ -1,0 +1,99 @@
+<p class="lead">Bun can serve a complete full-stack app from one process with no separate bundler, dev-server, or build config: you point <code>Bun.serve</code> at an HTML file, and Bun automatically bundles the <code>&lt;script&gt;</code> and <code>&lt;link&gt;</code> it references — TypeScript, JSX, CSS and all — with hot reloading in dev and an optimized build for production. This lesson shows the HTML-import model, mixing API routes with the frontend, and shipping it.</p>
+
+<h2>The idea: HTML as the entry point</h2>
+<p><span class="level intermediate">Intermediate</span> In most stacks the frontend build (Vite/webpack) and the backend server are two separate tools you wire together. Bun collapses that: an <code>.html</code> file <em>is</em> a route, and Bun treats the assets it references as a bundle graph it builds for you. One command runs both the API and the frontend.</p>
+<pre><code>// index.html
+&lt;!doctype html&gt;
+&lt;html&gt;
+  &lt;head&gt;&lt;link rel="stylesheet" href="./styles.css"&gt;&lt;/head&gt;
+  &lt;body&gt;
+    &lt;div id="root"&gt;&lt;/div&gt;
+    &lt;script type="module" src="./app.tsx"&gt;&lt;/script&gt;  &lt;!-- TSX, bundled automatically --&gt;
+  &lt;/body&gt;
+&lt;/html&gt;</code></pre>
+
+<h2>Serving it</h2>
+<pre><code>// server.ts
+import index from "./index.html";   // importing HTML gives you a routable asset
+
+const server = Bun.serve({
+  routes: {
+    "/": index,                      // serves the HTML + its bundled assets
+    "/api/hello": () =&gt; Response.json({ msg: "hi from the API" }),
+    "/api/users/:id": (req) =&gt; Response.json({ id: req.params.id }),
+  },
+  development: true,                  // hot reload + detailed errors
+});
+console.log(`→ http://localhost:${server.port}`);</code></pre>
+<pre><code>bun run server.ts
+# Bun bundles app.tsx + styles.css on the fly; editing either hot-reloads the page.</code></pre>
+<blockquote class="tip">No <code>vite.config</code>, no <code>webpack.config</code>, no concurrently-run dev servers. The import <code>index from "./index.html"</code> is the whole wiring — Bun resolves and bundles everything the HTML references, and serves your API from the same <code>routes</code> table.</blockquote>
+
+<h2>The frontend code is just modules</h2>
+<pre><code>// app.tsx — TypeScript + JSX, no separate build step
+import { createRoot } from "react-dom/client";
+
+function App() {
+  const [msg, setMsg] = (globalThis as any).React?.useState?.("…") ?? ["", () =&gt; {}];
+  // fetch the SAME server's API:
+  fetch("/api/hello").then(r =&gt; r.json()).then(d =&gt; console.log(d.msg));
+  return &lt;h1&gt;Hello from a bundled TSX app&lt;/h1&gt;;
+}
+createRoot(document.getElementById("root")!).render(&lt;App /&gt;);</code></pre>
+<p>Because the frontend and API share an origin and a process, there's no CORS to configure and no proxy — the browser calls <code>/api/...</code> on the same server that served the page.</p>
+
+<h2>Hot reloading in development</h2>
+<p>With <code>development: true</code>, Bun watches the asset graph: editing <code>app.tsx</code> or <code>styles.css</code> pushes an update to the browser without a full reload, and server errors render with a readable overlay instead of a blank page. Flip it off (or set <code>NODE_ENV=production</code>) and the same code serves optimized, cached bundles.</p>
+
+<h2>Multiple pages &amp; assets</h2>
+<pre><code>import home from "./index.html";
+import about from "./about.html";
+
+Bun.serve({
+  routes: {
+    "/": home,
+    "/about": about,
+    "/api/*": apiHandler,            // wildcard for an API surface
+  },
+});
+// Each HTML entry gets its own bundle; shared imports are de-duplicated.</code></pre>
+
+<h2>Building for production</h2>
+<pre><code># Produce static, hashed, minified assets for deploy:
+bun build ./index.html --outdir=dist --minify
+# → dist/index.html referencing dist/app-[hash].js, dist/styles-[hash].css
+# Serve dist/ from any static host or CDN, and run the API separately,
+# OR keep the single-process model and serve with development:false.</code></pre>
+<p>You choose the deployment shape: single process (API + frontend from <code>Bun.serve</code>) for simplicity, or split (static <code>dist/</code> on a CDN + the API as its own service) for scale. The same source supports both.</p>
+
+<h2>How it compares</h2>
+<table>
+<tr><th>Concern</th><th>Vite + separate API</th><th>Bun full-stack</th></tr>
+<tr><td>Processes in dev</td><td>two (dev server + API)</td><td>one</td></tr>
+<tr><td>Config files</td><td>vite.config + more</td><td>none required</td></tr>
+<tr><td>CORS/proxy in dev</td><td>proxy config needed</td><td>same origin, none</td></tr>
+<tr><td>Build tool</td><td>Vite/Rollup/esbuild</td><td>built into Bun</td></tr>
+</table>
+<blockquote class="warn">The trade-off: Vite's plugin ecosystem is larger and some framework meta-frameworks assume it. Bun's full-stack server is excellent for apps you control end to end; reach for the established toolchain when you need a specific plugin or a framework that's tightly coupled to it.</blockquote>
+
+<h2>Common mistakes</h2>
+<blockquote class="warn"><ul>
+<li><strong>Leaving <code>development: true</code> in production</strong> — you ship unminified bundles and error overlays. Gate it on <code>NODE_ENV</code>.</li>
+<li><strong>Adding a bundler config "just in case"</strong> — Bun bundles the HTML's asset graph itself; extra tooling fights it.</li>
+<li><strong>Hardcoding an API origin</strong> in the frontend when it's same-origin — just call <code>/api/...</code>.</li>
+<li><strong>Expecting every Vite plugin to have an equivalent</strong> — check feature coverage before porting a plugin-heavy app.</li>
+<li><strong>Not hashing assets for production</strong> — use <code>bun build --outdir</code> so clients cache correctly.</li>
+<li><strong>Mixing route styles</strong> — prefer the <code>routes</code> object (with <code>:params</code> and wildcards) over hand-rolled <code>fetch</code> switch statements.</li>
+</ul></blockquote>
+
+<h2>Exercises</h2>
+<ul>
+<li>Serve a single <code>index.html</code> that imports a TSX file and a CSS file, and confirm Bun bundles both with no config.</li>
+<li>Add an <code>/api/time</code> route returning JSON and fetch it from the frontend — note there's no CORS setup.</li>
+<li>Turn on <code>development: true</code>, edit the CSS, and watch the page hot-update without a full reload.</li>
+<li>Add a second HTML page and a parameterized API route (<code>/api/users/:id</code>), and exercise both.</li>
+<li>Run <code>bun build ./index.html --outdir=dist --minify</code> and inspect the hashed output; serve <code>dist/</code> statically.</li>
+</ul>
+
+<h2>Mini-project</h2>
+<p>Build a small full-stack task tracker in one Bun process: an <code>index.html</code> importing a TSX frontend and a stylesheet, a <code>routes</code> table with REST endpoints (<code>GET/POST/DELETE /api/tasks</code>) backed by <code>bun:sqlite</code>, same-origin fetches from the frontend, and hot reloading in dev. Then produce two deployment artifacts from the same code: a single-process build (<code>development:false</code>) and a split build (static <code>dist/</code> via <code>bun build</code> + the API served separately), and document the trade-offs you observed between them.</p>

@@ -1,0 +1,90 @@
+<p class="lead">Bun is designed as a drop-in Node.js replacement: it implements the Node APIs, reads <code>package.json</code>, and runs most existing projects unchanged. But "most" isn't "all," and the real win comes from replacing the pile of tools Node needs (nodemon, ts-node, jest, dotenv) with Bun's built-ins. This lesson is a staged, low-risk migration path with the compatibility gotchas called out.</p>
+
+<h2>Why migrate — and the honest caveat</h2>
+<p><span class="level intermediate">Intermediate</span> Bun gives you a faster install, native TypeScript/JSX with no build step, a built-in test runner, bundler, and <code>.env</code> loading — one binary instead of a toolchain. The caveat: Bun targets Node compatibility but a few native-addon-heavy or deep-internals packages still differ. So the strategy is <strong>incremental</strong>: run your existing app under Bun first, fix what breaks, then adopt Bun-native features where they pay off.</p>
+
+<h2>Step 1: just run it under Bun</h2>
+<pre><code>bun install          # reads your existing package.json; writes bun.lockb
+bun run start        # runs your "start" script with Bun instead of node
+# or run the entry directly:
+bun run src/index.ts  # no ts-node / tsc needed — Bun runs TS natively</code></pre>
+<p>A large fraction of Node apps work on the first try. Where they don't, the errors point at specific APIs — fix those, don't rewrite.</p>
+
+<h2>Step 2: the compatibility gotchas</h2>
+<table>
+<tr><th>Area</th><th>What to know</th></tr>
+<tr><td>Built-in modules</td><td><code>fs</code>, <code>path</code>, <code>http</code>, <code>crypto</code>, <code>stream</code>, <code>os</code> etc. are implemented. Import with or without the <code>node:</code> prefix.</td></tr>
+<tr><td><code>process</code></td><td><code>process.env</code>, <code>argv</code>, <code>cwd()</code> all work; a few rarely-used fields may differ.</td></tr>
+<tr><td>Native addons</td><td>N-API addons work in many cases; some C++-heavy packages may not. Test them specifically.</td></tr>
+<tr><td>Worker threads</td><td>Use the Web <code>Worker</code> API (Bun's model) — <code>node:worker_threads</code> is also supported.</td></tr>
+<tr><td>ESM/CJS</td><td>Bun runs both and lets them interop more freely than Node, but keep your <code>type</code> field honest.</td></tr>
+</table>
+<blockquote class="warn"><strong>Don't assume — verify the packages that matter.</strong> The failures that stop a migration are almost always one or two native/low-level dependencies (certain database drivers, native crypto, instrumentation agents). Run your test suite under Bun early; a green suite is the real compatibility signal, not a clean <code>bun install</code>.</blockquote>
+
+<h2>Step 3: replace the toolchain</h2>
+<p><span class="level beginner">Beginner</span> This is where migrating earns its keep — delete dev dependencies and their config:</p>
+<table>
+<tr><th>Node tool</th><th>Bun built-in</th></tr>
+<tr><td><code>nodemon</code> / <code>node --watch</code></td><td><code>bun --watch src/index.ts</code></td></tr>
+<tr><td><code>ts-node</code> / <code>tsx</code></td><td>nothing — <code>bun run file.ts</code> runs TS directly</td></tr>
+<tr><td><code>jest</code> / <code>vitest</code></td><td><code>bun test</code> (Jest-compatible matchers)</td></tr>
+<tr><td><code>dotenv</code></td><td>built-in: Bun auto-loads <code>.env</code> / <code>.env.local</code></td></tr>
+<tr><td><code>webpack</code> / <code>esbuild</code> / <code>rollup</code></td><td><code>bun build</code></td></tr>
+<tr><td><code>bcrypt</code></td><td><code>Bun.password</code> (argon2/bcrypt, native)</td></tr>
+</table>
+<pre><code>// package.json — scripts rewritten for Bun
+{
+  "scripts": {
+    "dev":   "bun --watch src/index.ts",
+    "start": "bun run src/index.ts",
+    "test":  "bun test"
+  }
+}</code></pre>
+
+<h2>Step 4: config files</h2>
+<pre><code># bunfig.toml — Bun's config (optional)
+[install]
+# registry, caching, etc.
+[test]
+coverage = true</code></pre>
+<p>Keep <code>package.json</code> as-is for metadata/dependencies; add <code>bunfig.toml</code> only for Bun-specific settings. <code>.env</code> files are loaded automatically — remove the <code>require("dotenv").config()</code> call.</p>
+<blockquote class="tip">Adopt Bun-native APIs opportunistically, not all at once: swap <code>fs.readFile</code> for <code>Bun.file()</code>, <code>http.createServer</code> for <code>Bun.serve</code>, and <code>bcrypt</code> for <code>Bun.password</code> as you touch that code. They're faster and simpler, but your Node-API code keeps working in the meantime — so the migration never has to be a big-bang rewrite.</blockquote>
+
+<h2>Step 5: CI and deployment</h2>
+<pre><code># GitHub Actions
+- uses: oven-sh/setup-bun@v2
+- run: bun install --frozen-lockfile
+- run: bun test
+- run: bun run build</code></pre>
+<p>Use the official <code>oven-sh/bun</code> Docker image for containers, and <code>--frozen-lockfile</code> in CI so an unexpected dependency change fails the build instead of silently resolving.</p>
+
+<h2>A staged migration checklist</h2>
+<ol>
+<li><code>bun install</code> &amp; run your test suite under Bun — fix compatibility failures (usually 1–2 native deps).</li>
+<li>Rewrite <code>package.json</code> scripts to use <code>bun</code> / <code>bun --watch</code> / <code>bun test</code>.</li>
+<li>Delete <code>nodemon</code>, <code>ts-node</code>/<code>tsx</code>, <code>dotenv</code>, and (if you adopt <code>bun test</code>) the old test runner.</li>
+<li>Point CI/Docker at Bun with a frozen lockfile.</li>
+<li>Opportunistically swap hot-path code to Bun-native APIs.</li>
+</ol>
+
+<h2>Common mistakes</h2>
+<blockquote class="warn"><ul>
+<li><strong>Declaring success after a clean <code>bun install</code></strong> — run the TEST SUITE; that's what reveals real incompatibilities.</li>
+<li><strong>Big-bang rewriting to Bun-native APIs</strong> instead of running Node-compatible code first and migrating incrementally.</li>
+<li><strong>Leaving <code>dotenv</code>/<code>ts-node</code>/<code>nodemon</code> in</strong> after switching — you keep the overhead you came to remove.</li>
+<li><strong>Not using <code>--frozen-lockfile</code> in CI</strong>, so a drifting dependency resolves differently than locally.</li>
+<li><strong>Assuming every native addon works</strong> — test the specific packages your app depends on.</li>
+<li><strong>Committing both <code>package-lock.json</code> and <code>bun.lockb</code></strong> — pick Bun's lockfile and remove the npm one.</li>
+</ul></blockquote>
+
+<h2>Exercises</h2>
+<ul>
+<li>Take an existing small Node+TypeScript project, run it under Bun with no changes, and record what (if anything) breaks.</li>
+<li>Rewrite its <code>package.json</code> scripts to Bun equivalents and delete <code>ts-node</code>/<code>nodemon</code>.</li>
+<li>Port its Jest tests to <code>bun test</code> and confirm the matchers work unchanged.</li>
+<li>Remove <code>dotenv</code> and prove Bun auto-loads <code>.env</code>; then swap a <code>bcrypt</code> call for <code>Bun.password</code>.</li>
+<li>Set up a CI workflow with <code>setup-bun</code> + <code>--frozen-lockfile</code> and a Dockerfile on the Bun image.</li>
+</ul>
+
+<h2>Mini-project</h2>
+<p>Migrate a real Express+TypeScript API from Node to Bun end to end and write the migration as a documented PR: run it unchanged under Bun and fix any failing dependencies, rewrite the scripts, replace nodemon/ts-node/dotenv/jest/bcrypt with Bun built-ins, switch CI and the Dockerfile to Bun with a frozen lockfile, and finally port the hottest route to <code>Bun.serve</code>-native handling. Benchmark install time, cold start, and request throughput before and after, and list exactly which compatibility issues you hit and how you resolved each.</p>

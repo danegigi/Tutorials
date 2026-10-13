@@ -1,0 +1,118 @@
+<p class="lead">JavaScript runs on one thread, so a CPU-heavy task — parsing a huge file, hashing, image processing — blocks everything, including the event loop that serves requests. Workers give you real parallelism: separate threads with their own event loop that communicate by message passing. This lesson covers when a Worker is the right tool, how to move data between threads cheaply, and how to build a reusable worker pool.</p>
+
+<h2>The problem Workers solve</h2>
+<p><span class="level intermediate">Intermediate</span> Bun (like Node and browsers) runs your code on a single main thread. Async I/O (<code>fetch</code>, file reads) doesn't block it — the event loop juggles those. But a <em>synchronous</em> CPU task does: a 2-second JSON parse freezes your server for 2 seconds. A Worker moves that work to another thread so the main thread stays responsive.</p>
+<blockquote class="warn"><strong>Workers are for CPU-bound work, not I/O-bound work.</strong> If your task is "await a database/HTTP call," a Worker buys you nothing — async already handles it. Reach for a Worker only when the thing blocking you is computation. Spawning a Worker has real cost (memory, startup), so it must pay for itself.</blockquote>
+
+<h2>A basic Worker</h2>
+<pre><code>// main.ts
+const worker = new Worker(new URL("./worker.ts", import.meta.url).href);
+
+worker.postMessage({ cmd: "fib", n: 42 });
+worker.onmessage = (e) =&gt; {
+  console.log("result:", e.data);   // result: 267914296
+  worker.terminate();
+};</code></pre>
+<pre><code>// worker.ts — its own global scope, its own event loop
+self.onmessage = (e) =&gt; {
+  const { cmd, n } = e.data;
+  if (cmd === "fib") {
+    const fib = (x: number): number =&gt; (x &lt; 2 ? x : fib(x - 1) + fib(x - 2));
+    self.postMessage(fib(n));   // the heavy work runs OFF the main thread
+  }
+};</code></pre>
+<pre><code>bun run main.ts   # the main thread never froze while fib(42) ran</code></pre>
+
+<h2>Message passing: structured clone</h2>
+<p>Threads don't share variables; they exchange <em>copies</em>. <code>postMessage</code> serializes its argument with the structured-clone algorithm — objects, arrays, Maps, Sets, typed arrays, Dates all survive; functions, class instances' methods, and DOM nodes do not.</p>
+<table>
+<tr><th>Travels fine</th><th>Does NOT</th></tr>
+<tr><td>plain objects, arrays, Map/Set</td><td>functions, closures</td></tr>
+<tr><td>typed arrays, ArrayBuffer, Date, RegExp</td><td>class methods (only own data copies)</td></tr>
+<tr><td>null, numbers, strings, bigint</td><td>DOM nodes, sockets</td></tr>
+</table>
+
+<h2>Transferables: move, don't copy</h2>
+<p><span class="level advanced">Advanced</span> Copying a 100MB buffer across threads is slow. <strong>Transferables</strong> hand ownership of the underlying memory to the other thread with zero copy — but the sender loses access:</p>
+<pre><code>const buf = new ArrayBuffer(100_000_000);
+worker.postMessage({ buf }, [buf]);   // 2nd arg = transfer list
+console.log(buf.byteLength);           // 0 — ownership MOVED to the worker</code></pre>
+<blockquote class="warn"><strong>After transfer, the buffer is detached in the sender</strong> (<code>byteLength === 0</code>). Reading it is a bug. Transfer when you're done with the data on this side; copy (plain <code>postMessage</code>) when both sides need it.</blockquote>
+
+<h2>SharedArrayBuffer & Atomics</h2>
+<p>When threads must share the <em>same</em> memory (not copy, not transfer), <code>SharedArrayBuffer</code> + <code>Atomics</code> provide it with lock-free coordination:</p>
+<pre><code>const shared = new SharedArrayBuffer(8);
+const counter = new Int32Array(shared);
+worker.postMessage(shared);            // both threads see the SAME memory
+
+// in either thread — atomic, race-free increment:
+Atomics.add(counter, 0, 1);
+Atomics.load(counter, 0);
+Atomics.wait(counter, 0, 0);           // block until the value changes (worker only)
+Atomics.notify(counter, 0);</code></pre>
+<blockquote class="warn">Shared memory reintroduces data races — the reason JS avoided threads for years. Use <code>Atomics</code> for every read/write of shared cells; a plain <code>counter[0]++</code> across threads is a race. Reserve <code>SharedArrayBuffer</code> for genuine high-throughput coordination; message passing is simpler and safer for most work.</blockquote>
+
+<h2>A worker pool</h2>
+<p>Workers are expensive to spawn, so a pool reuses a fixed set across many tasks — the same bounded-parallelism idea as a server's connection pool:</p>
+<pre><code>class WorkerPool {
+  private workers: Worker[] = [];
+  private queue: { task: any; resolve: (v: any) =&gt; void }[] = [];
+  private idle: Worker[] = [];
+
+  constructor(size: number, url: string) {
+    for (let i = 0; i &lt; size; i++) {
+      const w = new Worker(url);
+      w.onmessage = (e) =&gt; this.onDone(w, e.data);
+      this.workers.push(w); this.idle.push(w);
+    }
+  }
+  run(task: any) {
+    return new Promise((resolve) =&gt; {
+      this.queue.push({ task, resolve });
+      this.pump();
+    });
+  }
+  private pump() {
+    while (this.idle.length &amp;&amp; this.queue.length) {
+      const w = this.idle.pop()!; const job = this.queue.shift()!;
+      (w as any)._resolve = job.resolve;
+      w.postMessage(job.task);
+    }
+  }
+  private onDone(w: Worker, result: any) {
+    (w as any)._resolve(result);
+    this.idle.push(w); this.pump();
+  }
+}
+// const pool = new WorkerPool(navigator.hardwareConcurrency, "./worker.ts");</code></pre>
+<p>Size the pool to <code>navigator.hardwareConcurrency</code> (CPU count) — more workers than cores just adds overhead for CPU-bound work.</p>
+
+<h2>Worker vs Bun.spawn</h2>
+<table>
+<tr><th>Use a Worker when</th><th>Use Bun.spawn when</th></tr>
+<tr><td>parallel JS/TS, shared code, message passing</td><td>running a separate program/binary (ffmpeg, git)</td></tr>
+<tr><td>you want shared memory (SharedArrayBuffer)</td><td>process isolation / a crash shouldn't take you down</td></tr>
+<tr><td>fast, in-process communication</td><td>the work is in another language</td></tr>
+</table>
+
+<h2>Common mistakes</h2>
+<blockquote class="warn"><ul>
+<li><strong>Using a Worker for I/O-bound work</strong> — async already frees the main thread; the Worker just adds overhead.</li>
+<li><strong>Reading a transferred buffer in the sender</strong> — it's detached (<code>byteLength 0</code>).</li>
+<li><strong>Spawning a Worker per task</strong> — startup cost dominates; pool and reuse them.</li>
+<li><strong>Unsynchronized access to a SharedArrayBuffer</strong> — a data race; use <code>Atomics</code>.</li>
+<li><strong>Expecting functions/class instances to survive <code>postMessage</code></strong> — only cloneable data crosses.</li>
+<li><strong>Never calling <code>worker.terminate()</code></strong> — leaked workers hold memory for the process lifetime.</li>
+</ul></blockquote>
+
+<h2>Exercises</h2>
+<ul>
+<li>Move a deliberately slow function (a big fibonacci or a tight hashing loop) into a Worker and prove the main thread stays responsive (log a timer every 100ms during the computation).</li>
+<li>Transfer a large <code>ArrayBuffer</code> to a Worker and confirm the sender's copy is detached afterward.</li>
+<li>Share an <code>Int32Array</code> over a <code>SharedArrayBuffer</code> and increment it from both threads 100k times with and without <code>Atomics</code>; observe the difference.</li>
+<li>Build the worker pool above and feed it 1000 tasks, confirming only N workers run and the queue drains.</li>
+<li>Compare a Worker to <code>Bun.spawn</code> for the same CPU task and note the startup/communication differences.</li>
+</ul>
+
+<h2>Mini-project</h2>
+<p>Build a parallel image-thumbnail generator: an HTTP server (<code>Bun.serve</code>) that accepts a batch of image paths and resizes each off the main thread using a Worker pool sized to the CPU count. Pass image bytes in as transferable <code>ArrayBuffer</code>s to avoid copies, return the thumbnails, and keep the server responsive to a <code>/health</code> endpoint throughout a heavy batch. Measure throughput with 1 worker vs N, and document when the pool stops scaling (CPU saturation) — proving you understand that Workers parallelize CPU work, not magic.</p>

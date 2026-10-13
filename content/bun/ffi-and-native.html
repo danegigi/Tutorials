@@ -1,0 +1,83 @@
+<p class="lead">Sometimes the capability you need already exists as a C library, or a hot loop would be far faster in a compiled language. Bun lets you call native code from JavaScript three ways: <code>bun:ffi</code> to call into an existing shared library, <code>Bun.CC</code> to compile and call C inline, and N-API addons for the Node ecosystem. This lesson shows each, with the sharp edges that make native interop risky.</p>
+
+<h2>When native code is worth it (and when it isn't)</h2>
+<p><span class="level advanced">Advanced</span> FFI shines when you need to reuse a mature C/Rust/Zig library (image codecs, crypto, a database driver), or when a measured hot path is CPU-bound enough that the per-call FFI overhead is dwarfed by the work done. It is the wrong tool for ordinary application logic: you lose memory safety, portability, and the type checker, and a mistake crashes the whole process instead of throwing. <strong>Profile first</strong> — most code is fast enough in JS, and Bun's own built-ins are already native.</p>
+<blockquote class="warn">Every FFI call has fixed overhead (marshalling arguments across the JS/native boundary). A function called millions of times with tiny work per call can be <em>slower</em> through FFI than pure JS. FFI pays off for coarse-grained calls that do a lot per invocation, not fine-grained ones.</blockquote>
+
+<h2>bun:ffi — call an existing shared library</h2>
+<pre><code>import { dlopen, FFIType, suffix } from "bun:ffi";
+
+// `suffix` resolves to .so / .dylib / .dll for the current OS
+const { symbols: libm } = dlopen(`libm.${suffix}`, {
+  sqrt: { args: [FFIType.f64], returns: FFIType.f64 },
+  pow:  { args: [FFIType.f64, FFIType.f64], returns: FFIType.f64 },
+});
+
+console.log(libm.sqrt(144));     // 12
+console.log(libm.pow(2, 10));    // 1024</code></pre>
+<p>You declare each symbol's signature with <code>FFIType</code> so Bun knows how to marshal arguments and the return value. Common types: <code>i32</code>, <code>u32</code>, <code>i64</code>, <code>f64</code>, <code>bool</code>, <code>ptr</code>, <code>cstring</code>, <code>void</code>.</p>
+
+<h2>Pointers, strings, and buffers</h2>
+<pre><code>import { CString, ptr, FFIType } from "bun:ffi";
+
+// Pass a JS buffer to C as a pointer:
+const buf = Buffer.from("hello\0");       // NUL-terminate C strings yourself
+someLib.takesString(ptr(buf));
+
+// Read a C string the library returned (a pointer):
+const result = new CString(returnedPtr);  // decodes until the NUL
+console.log(String(result));</code></pre>
+<blockquote class="warn"><strong>This is where FFI gets dangerous.</strong> You are responsible for memory the way C is: NUL-terminate strings, keep JS buffers alive while C holds a pointer to them (or the GC frees memory C is still using → use-after-free → crash), and free anything the library allocated for you. A wrong signature or a dangling pointer doesn't throw — it segfaults the process. Treat every pointer as unsafe.</blockquote>
+
+<h2>Bun.CC — compile C inline</h2>
+<pre><code>import { cc } from "bun:ffi";
+
+const { symbols } = cc({
+  source: `
+    int add(int a, int b) { return a + b; }
+    double scale(double x) { return x * 1.5; }
+  `,
+  symbols: {
+    add:   { args: ["int", "int"], returns: "int" },
+    scale: { args: ["double"], returns: "double" },
+  },
+});
+console.log(symbols.add(2, 3));   // 5</code></pre>
+<p><code>Bun.CC</code> compiles the C with the system toolchain (clang/tinycc) at runtime and gives you callable symbols — handy for a small performance-critical kernel without a separate build step. It needs a C compiler available on the machine.</p>
+
+<h2>N-API addons</h2>
+<p>Bun also implements <strong>Node-API (N-API)</strong>, the stable ABI Node uses for native addons. Many existing npm packages ship prebuilt <code>.node</code> addons; Bun can load a lot of them unchanged:</p>
+<pre><code>import addon from "./build/Release/addon.node";
+// or a package that bundles a prebuilt addon:
+import sharp from "sharp";   // works in Bun via N-API in many versions</code></pre>
+<p>N-API is the path when you want the Node ecosystem's native modules rather than writing your own FFI bindings. Coverage is broad but not total — test the specific package.</p>
+
+<h2>Choosing among the three</h2>
+<table>
+<tr><th>Use</th><th>When</th></tr>
+<tr><td><code>bun:ffi</code> + dlopen</td><td>a prebuilt shared library (C/Rust/Zig) exists and you want to call it directly</td></tr>
+<tr><td><code>Bun.CC</code></td><td>a small, self-contained C kernel you want to compile and call inline</td></tr>
+<tr><td>N-API addon</td><td>consuming an existing npm native module, or targeting Node compatibility</td></tr>
+</table>
+
+<h2>Common mistakes</h2>
+<blockquote class="warn"><ul>
+<li><strong>Reaching for FFI before profiling</strong> — most JS is fast enough and Bun's built-ins are already native.</li>
+<li><strong>Fine-grained FFI calls</strong> where per-call overhead exceeds the work — benchmark against pure JS.</li>
+<li><strong>Wrong <code>FFIType</code> signature</strong> — misreads memory and segfaults with no stack trace.</li>
+<li><strong>Letting the GC free a buffer C still points to</strong> — keep a reference alive for the pointer's whole lifetime.</li>
+<li><strong>Forgetting to NUL-terminate C strings</strong> or to free library-allocated memory → corruption / leaks.</li>
+<li><strong>Assuming every N-API addon loads</strong> — compatibility is high but not universal; test the exact package/version.</li>
+</ul></blockquote>
+
+<h2>Exercises</h2>
+<ul>
+<li>Use <code>dlopen</code> on the system math library and call <code>sqrt</code>, <code>pow</code>, and <code>floor</code> with correct <code>FFIType</code> signatures.</li>
+<li>Compile a C <code>add</code> and a C string-length function with <code>Bun.CC</code>, calling both from JS.</li>
+<li>Pass a JS <code>Buffer</code> into a C function as a pointer and read back a C string with <code>CString</code>.</li>
+<li>Benchmark a tiny FFI call (e.g. <code>add</code>) in a tight loop against the equivalent JS, and find the crossover where FFI overhead dominates.</li>
+<li>Load an existing npm native module (e.g. an image or crypto package) and confirm it works under Bun via N-API.</li>
+</ul>
+
+<h2>Mini-project</h2>
+<p>Build a small checksum/hashing utility that computes a CRC32 (or similar) over a file three ways and benchmarks them: pure TypeScript, a <code>Bun.CC</code>-compiled C kernel, and a <code>dlopen</code> call into a system library if one is available. Pass the file bytes as a pointer to the native versions, handle the buffer-lifetime safety correctly, verify all three produce identical checksums, and write up the throughput numbers plus a clear recommendation on when the native path is worth the complexity for this workload.</p>

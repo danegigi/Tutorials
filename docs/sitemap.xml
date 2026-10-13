@@ -211,6 +211,26 @@
     <priority>0.7</priority>
   </url>
   <url>
+    <loc>https://danegigi.github.io/Tutorials/bun/workers-and-threads.html</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://danegigi.github.io/Tutorials/bun/ffi-and-native.html</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://danegigi.github.io/Tutorials/bun/fullstack-dev-server.html</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://danegigi.github.io/Tutorials/bun/migrating-from-node.html</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
     <loc>https://danegigi.github.io/Tutorials/web/html-fundamentals.html</loc>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
@@ -327,6 +347,26 @@
   </url>
   <url>
     <loc>https://danegigi.github.io/Tutorials/web/react-advanced.html</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://danegigi.github.io/Tutorials/web/web-components.html</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://danegigi.github.io/Tutorials/web/websockets-and-realtime.html</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://danegigi.github.io/Tutorials/web/web-animations.html</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://danegigi.github.io/Tutorials/web/graphql.html</loc>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>

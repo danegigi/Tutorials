@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en" data-base="../">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0d1117">
+<title>WebSockets &amp; Real-Time — Web Development</title>
+<meta name="description" content="Pushing data to the browser: the WebSocket API, Server-Sent Events (and when each fits), reconnection &amp; heartbeats, broadcasting, and scaling real-time across servers.">
+<link rel="canonical" href="https://danegigi.github.io/Tutorials/web/websockets-and-realtime.html">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Dev Tutorials">
+<meta property="og:title" content="WebSockets &amp; Real-Time — Web Development">
+<meta property="og:description" content="Pushing data to the browser: the WebSocket API, Server-Sent Events (and when each fits), reconnection &amp; heartbeats, broadcasting, and scaling real-time across servers.">
+<meta property="og:url" content="https://danegigi.github.io/Tutorials/web/websockets-and-realtime.html">
+<meta property="og:image" content="https://danegigi.github.io/Tutorials/icon-512.png">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="WebSockets &amp; Real-Time — Web Development">
+<meta name="twitter:description" content="Pushing data to the browser: the WebSocket API, Server-Sent Events (and when each fits), reconnection &amp; heartbeats, broadcasting, and scaling real-time across servers.">
+<meta name="twitter:image" content="https://danegigi.github.io/Tutorials/icon-512.png">
+<link rel="manifest" href="../manifest.webmanifest">
+<link rel="icon" href="../icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="../icon-192.png">
+<link rel="stylesheet" href="../app.css">
+<script>/* set theme before paint to avoid flash */(function(){try{var t=localStorage.getItem('tut.theme');document.documentElement.setAttribute('data-theme',t||'dark');}catch(e){document.documentElement.setAttribute('data-theme','dark');}})();</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"LearningResource","name":"WebSockets & Real-Time","description":"Pushing data to the browser: the WebSocket API, Server-Sent Events (and when each fits), reconnection & heartbeats, broadcasting, and scaling real-time across servers.","url":"https://danegigi.github.io/Tutorials/web/websockets-and-realtime.html","inLanguage":"en","isPartOf":{"@type":"Course","name":"Web Development — Dev Tutorials","url":"https://danegigi.github.io/Tutorials/web/"},"learningResourceType":"Tutorial"},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Dev Tutorials","item":"https://danegigi.github.io/Tutorials/"},{"@type":"ListItem","position":2,"name":"Web Development","item":"https://danegigi.github.io/Tutorials/web/"},{"@type":"ListItem","position":3,"name":"WebSockets & Real-Time","item":"https://danegigi.github.io/Tutorials/web/websockets-and-realtime.html"}]}]}</script>
+
+</head>
+<body class="lesson">
+<header class="nav">
+  <a class="brand" href="../index.html">📚 Dev Tutorials</a>
+  <span class="crumb">WebSockets &amp; Real-Time — Web Development</span>
+  <span class="spacer"></span>
+  <a class="navbtn" href="../search.html">🔎 Search</a>
+  <button class="navbtn" id="install-btn" type="button">⬇️ Install</button>
+  <button class="navbtn" id="theme-btn" type="button" aria-label="Toggle theme">🌙 Dark</button>
+</header>
+<main class="wrap lesson-body">
+  <h1 class="page-title">WebSockets &amp; Real-Time</h1>
+  <div class="lesson-tools" data-lesson-id="web/websockets-and-realtime">
+    <button id="done-btn" type="button" aria-pressed="false">○ Mark complete</button>
+    <button id="mark-btn" type="button" aria-pressed="false">☆ Bookmark</button>
+    <a class="navbtn" href="index.html" style="margin-left:auto">All Web Development lessons →</a>
+  </div>
+<nav class="toc" aria-label="On this page"><strong>On this page</strong><ul>
+<li class="lvl2"><a href="#websockets-vs-sse-pick-the-right-one">WebSockets vs SSE: pick the right one</a></li>
+<li class="lvl2"><a href="#server-sent-events">Server-Sent Events</a></li>
+<li class="lvl2"><a href="#websockets">WebSockets</a></li>
+<li class="lvl2"><a href="#reconnection-the-thing-tutorials-skip">Reconnection: the thing tutorials skip</a></li>
+<li class="lvl2"><a href="#heartbeats-detect-dead-connections">Heartbeats: detect dead connections</a></li>
+<li class="lvl2"><a href="#scaling-across-servers">Scaling across servers</a></li>
+<li class="lvl2"><a href="#security">Security</a></li>
+<li class="lvl2"><a href="#common-mistakes">Common mistakes</a></li>
+<li class="lvl2"><a href="#exercises">Exercises</a></li>
+<li class="lvl2"><a href="#mini-project">Mini-project</a></li>
+</ul></nav>
+<p class="lead">HTTP request/response can't push: the server can only answer when asked. Real-time features — chat, live dashboards, notifications, collaborative editing — need the server to send data to the browser whenever it has some. This lesson covers the two tools for that, WebSockets and Server-Sent Events, when each fits, and the production concerns (reconnection, heartbeats, scaling) that tutorials usually skip.</p>
+
+<h2 id="websockets-vs-sse-pick-the-right-one">WebSockets vs SSE: pick the right one</h2>
+<p><span class="level intermediate">Intermediate</span></p>
+<table>
+<tr><th></th><th>WebSocket</th><th>Server-Sent Events (SSE)</th></tr>
+<tr><td>Direction</td><td>full-duplex (both ways)</td><td>server → client only</td></tr>
+<tr><td>Protocol</td><td>ws:// (its own, after HTTP upgrade)</td><td>plain HTTP (<code>text/event-stream</code>)</td></tr>
+<tr><td>Reconnect</td><td>you implement it</td><td>built in (automatic)</td></tr>
+<tr><td>Data</td><td>text or binary</td><td>text (UTF-8) only</td></tr>
+<tr><td>Best for</td><td>chat, games, collaboration</td><td>live feeds, notifications, progress</td></tr>
+</table>
+<blockquote class="tip"><strong>Default to SSE when the client only needs to receive.</strong> It's plain HTTP (works through proxies/firewalls, no special infra), reconnects itself, and is simpler. Reach for WebSockets when the client must also <em>send</em> frequently and with low latency.</blockquote>
+
+<h2 id="server-sent-events">Server-Sent Events</h2>
+<pre><code>// client
+const es = new EventSource("/api/stream");
+es.onmessage = (e) =&gt; console.log("tick:", e.data);
+es.addEventListener("price", (e) =&gt; update(JSON.parse(e.data)));  // named event
+es.onerror = () =&gt; { /* EventSource auto-reconnects; this just notifies */ };</code></pre>
+<pre><code>// server (Bun.serve) — the wire format is dead simple text
+return new Response(
+  new ReadableStream({
+    start(controller) {
+      const send = (data, event) =&gt;
+        controller.enqueue(`${event ? `event: ${event}\n` : ""}data: ${data}\n\n`);
+      const id = setInterval(() =&gt; send(new Date().toISOString()), 1000);
+      // clean up when the client disconnects:
+      // (store id; clear it on stream cancel)
+    },
+  }),
+  { headers: { "Content-Type": "text/event-stream", "Cache-Control": "no-cache" } }
+);</code></pre>
+<blockquote class="warn">The SSE wire format is exact: each message is <code>data: &lt;payload&gt;\n\n</code> (blank line terminates). Miss the double newline and the browser buffers forever. The browser auto-reconnects and sends <code>Last-Event-ID</code> — honor it server-side to resume without gaps.</blockquote>
+
+<h2 id="websockets">WebSockets</h2>
+<pre><code>// client
+const ws = new WebSocket(`wss://${location.host}/chat`);
+ws.onopen = () =&gt; ws.send(JSON.stringify({ type: "join", room: "general" }));
+ws.onmessage = (e) =&gt; render(JSON.parse(e.data));
+ws.onclose = (e) =&gt; scheduleReconnect(e.code);   // YOU must reconnect</code></pre>
+<pre><code>// server (Bun has first-class WS with pub/sub built in)
+Bun.serve({
+  fetch(req, server) {
+    if (server.upgrade(req)) return;             // upgrade HTTP → WS
+    return new Response("expected a websocket", { status: 426 });
+  },
+  websocket: {
+    open(ws) { ws.subscribe("general"); },        // topic-based broadcast
+    message(ws, msg) { ws.publish("general", msg); }, // send to everyone in the topic
+    close(ws) { ws.unsubscribe("general"); },
+  },
+});</code></pre>
+
+<h2 id="reconnection-the-thing-tutorials-skip">Reconnection: the thing tutorials skip</h2>
+<p><span class="level advanced">Advanced</span> Networks drop. A WebSocket client MUST reconnect, and naively reconnecting in a tight loop hammers the server when it's already struggling. Use exponential backoff with jitter:</p>
+<pre><code>let delay = 1000;
+function connect() {
+  const ws = new WebSocket(url);
+  ws.onopen = () =&gt; { delay = 1000; };            // reset on success
+  ws.onclose = () =&gt; {
+    const wait = Math.min(delay, 30000) * (0.5 + Math.random());  // cap + jitter
+    setTimeout(connect, wait);
+    delay *= 2;
+  };
+}</code></pre>
+<blockquote class="warn"><strong>Jitter is not optional.</strong> If every client reconnects on the exact same backoff schedule after an outage, they all hit the recovering server simultaneously — a thundering herd that knocks it back down. Randomizing the delay spreads the reconnections out.</blockquote>
+
+<h2 id="heartbeats-detect-dead-connections">Heartbeats: detect dead connections</h2>
+<p>A TCP connection can be silently dead (a NAT timed out, Wi-Fi dropped) while both ends think it's open. A periodic ping/pong detects it: the client sends a ping every N seconds; if the server misses several, it closes the socket and frees resources. Without heartbeats you accumulate zombie connections.</p>
+
+<h2 id="scaling-across-servers">Scaling across servers</h2>
+<p>One server holds its own connections in memory — fine until you run two. When a user on server A sends a message, users connected to server B must receive it. The standard fix is a <strong>pub/sub backplane</strong> (Redis pub/sub, NATS): each server publishes incoming messages to the backplane and forwards backplane messages to its local sockets. Also configure sticky sessions / proper WS support on your load balancer, since the connection is long-lived.</p>
+
+<h2 id="security">Security</h2>
+<ul>
+<li>Always <code>wss://</code> (TLS) in production — <code>ws://</code> is plaintext.</li>
+<li>Authenticate on connect (a token in the upgrade request / first message) — the WS handshake isn't automatically authed.</li>
+<li>Validate and rate-limit incoming messages; a socket is an open door for abuse.</li>
+<li>Check the <code>Origin</code> header to prevent cross-site WebSocket hijacking.</li>
+</ul>
+
+<h2 id="common-mistakes">Common mistakes</h2>
+<blockquote class="warn"><ul>
+<li><strong>Reaching for WebSockets when SSE would do</strong> — if it's server→client only, SSE is simpler and auto-reconnects.</li>
+<li><strong>No reconnection logic on a WebSocket</strong>, or reconnecting with no backoff/jitter → thundering herd.</li>
+<li><strong>Malformed SSE frames</strong> (missing the blank line) so the browser never fires <code>onmessage</code>.</li>
+<li><strong>No heartbeat</strong>, so dead connections pile up and consume memory.</li>
+<li><strong>In-memory state with multiple servers</strong> and no pub/sub backplane — messages don't cross instances.</li>
+<li><strong>No auth/origin check on the upgrade</strong>, leaving the socket open to hijacking and abuse.</li>
+</ul></blockquote>
+
+<h2 id="exercises">Exercises</h2>
+<ul>
+<li>Build an SSE endpoint that streams a server clock and consume it with <code>EventSource</code>; kill the server and watch the browser auto-reconnect.</li>
+<li>Add a named SSE event (<code>event: price</code>) and handle it separately on the client.</li>
+<li>Build a WebSocket echo server with Bun's pub/sub and a two-tab chat that broadcasts between them.</li>
+<li>Add exponential-backoff-with-jitter reconnection to the WS client and simulate drops.</li>
+<li>Add a ping/pong heartbeat and prove a silently-dropped connection is detected and cleaned up.</li>
+</ul>
+
+<h2 id="mini-project">Mini-project</h2>
+<p>Build a real-time collaborative presence board: a WebSocket server (Bun pub/sub) where clients join a room, broadcast cursor positions and short messages, and see a live list of who's online. Implement robust client reconnection (backoff + jitter), server heartbeats to evict zombies, auth on the upgrade with an origin check, and <code>wss://</code>. Then add a read-only live stats panel delivered over <strong>SSE</strong> (connection count, messages/sec) to practice choosing the right transport per feature. Document how you'd add a Redis backplane to run two instances behind a load balancer.</p>
+
+<section class="further"><h2 id="further-reading">Further reading</h2>
+<p>Official documentation for the tools and APIs covered on this page:</p>
+<ul class="further-list"><li><a href="https://developer.mozilla.org/en-US/docs/Web/API/WebSockets_API" target="_blank" rel="noopener">WebSockets API (MDN) ↗</a></li>
+<li><a href="https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events" target="_blank" rel="noopener">Server-Sent Events (MDN) ↗</a></li>
+<li><a href="https://bun.com/docs/api/websockets" target="_blank" rel="noopener">Bun WebSockets (server) ↗</a></li></ul></section>
+  <nav class="pager">
+<a class="prev" href="web-components.html"><small>Previous</small>🌐 Web Components</a>
+<a class="next" href="web-animations.html"><small>Next</small>🌐 Animation on the Web</a>
+  </nav>
+</main>
+<button type="button" class="fab top" id="fab-top" aria-label="Back to top">↑ Top</button>
+<div class="banner" id="update-banner" role="status">A new version is available.<button type="button">Reload</button></div>
+<div class="banner" id="offline-banner" role="status">You're offline — showing cached lessons.</div>
+<script src="../app.js" defer></script>
+</body>
+</html>

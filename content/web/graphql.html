@@ -1,0 +1,98 @@
+<p class="lead">GraphQL is a query language for APIs: instead of many fixed REST endpoints each returning a fixed shape, you expose one endpoint and a typed schema, and the client asks for exactly the fields it needs in one request. This lesson covers queries, mutations, variables and fragments from the frontend's view, the trade-offs against REST, client-side caching, and the N+1 trap that bites on the server.</p>
+
+<h2>One endpoint, you choose the shape</h2>
+<p><span class="level intermediate">Intermediate</span> With REST, <code>GET /users/1</code> returns whatever the server decided — maybe too much (over-fetching) or not enough, forcing a second call to <code>/users/1/posts</code> (under-fetching). GraphQL inverts this: there's one URL (<code>/graphql</code>), and the <em>query</em> declares the fields and relationships you want, delivered in a single round trip.</p>
+<pre><code># a query — ask for exactly these fields, including nested relations
+query {
+  user(id: "1") {
+    name
+    email
+    posts(last: 3) {
+      title
+      comments { author }
+    }
+  }
+}
+# the response mirrors the query's shape, nothing more:
+# { "data": { "user": { "name": "Ada", "posts": [ ... ] } } }</code></pre>
+
+<h2>The schema is the contract</h2>
+<pre><code>type User {
+  id: ID!          # ! means non-nullable
+  name: String!
+  posts: [Post!]!  # a non-null list of non-null Posts
+}
+type Query    { user(id: ID!): User }       # read entry points
+type Mutation { createPost(input: PostInput!): Post }  # write entry points</code></pre>
+<p>The schema is strongly typed and introspectable — which is why GraphQL tooling (autocomplete, the GraphiQL explorer, codegen) is so good: the client can discover the whole API from the server.</p>
+
+<h2>Variables and mutations</h2>
+<pre><code># parameterize with variables — never string-interpolate user input into the query
+query GetUser($id: ID!) {
+  user(id: $id) { name email }
+}
+# variables (sent as JSON alongside):  { "id": "1" }
+
+# a mutation writes and returns the fields you want back
+mutation AddPost($input: PostInput!) {
+  createPost(input: $input) { id title }
+}</code></pre>
+<pre><code>// a plain fetch — GraphQL is "just" a POST
+const res = await fetch("/graphql", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ query: GET_USER, variables: { id: "1" } }),
+});
+const { data, errors } = await res.json();   // note: errors is a SIBLING of data</code></pre>
+<blockquote class="warn"><strong>GraphQL returns HTTP 200 even on errors.</strong> A failed field shows up in the <code>errors</code> array while <code>data</code> may be partially populated — you must check <code>errors</code>, not just the status code. This trips up anyone treating it like REST where non-2xx signals failure.</blockquote>
+
+<h2>Fragments: reusable field sets</h2>
+<pre><code>fragment UserCard on User { id name avatarUrl }
+
+query {
+  me       { ...UserCard }
+  friends  { ...UserCard }   # same fields, declared once
+}</code></pre>
+<p>Fragments keep queries DRY and are the unit most client codegen tools build typed hooks around.</p>
+
+<h2>Client-side caching: the real reason to use a client</h2>
+<p><span class="level advanced">Advanced</span> You <em>can</em> use <code>fetch</code>, but a GraphQL client (Apollo Client, urql, Relay) earns its place with a <strong>normalized cache</strong>: it stores each object by its ID, so a user fetched in one query is reused everywhere, and a mutation that returns the updated object updates every view automatically. That's hard to replicate with ad-hoc fetching.</p>
+<pre><code>// urql example
+const [{ data, fetching, error }] = useQuery({ query: GET_USER, variables: { id } });
+// the cache dedupes identical queries and updates views when a mutation returns changed objects.</code></pre>
+
+<h2>The N+1 trap (server side)</h2>
+<p>GraphQL's nested queries make a classic performance bug easy to hit: resolving <code>users { posts }</code> naively runs one query for the users, then one query <em>per user</em> for their posts — N+1 database round trips. The standard fix is a <strong>DataLoader</strong>: it batches and dedupes the per-item fetches within a tick into a single <code>WHERE id IN (...)</code> query.</p>
+<blockquote class="warn">If a GraphQL API feels slow, suspect N+1 first. The query looks innocent to the client, but a resolver without batching turns one request into hundreds of DB calls. DataLoader (or your ORM's batching) is essential, not optional, for any list-of-things-with-relations.</blockquote>
+
+<h2>GraphQL vs REST</h2>
+<table>
+<tr><th>GraphQL wins</th><th>REST wins</th></tr>
+<tr><td>many clients needing different field sets</td><td>simple CRUD, few consumers</td></tr>
+<tr><td>deeply related data in one request</td><td>HTTP caching / CDN by URL</td></tr>
+<tr><td>a strongly-typed, introspectable contract</td><td>file uploads, binary, simplicity</td></tr>
+<tr><td>rapidly evolving frontend needs</td><td>minimal server complexity</td></tr>
+</table>
+<p>It's not all-or-nothing: plenty of systems expose REST for simple resources and GraphQL for the complex, relational, client-driven surface.</p>
+
+<h2>Common mistakes</h2>
+<blockquote class="warn"><ul>
+<li><strong>Checking only the HTTP status</strong> — GraphQL returns 200 with an <code>errors</code> array; inspect it.</li>
+<li><strong>String-interpolating input into the query</strong> instead of using <code>$variables</code> — brittle and unsafe.</li>
+<li><strong>N+1 resolvers</strong> with no DataLoader/batching — the top GraphQL performance killer.</li>
+<li><strong>Over-asking</strong> because you can — request only the fields the view renders; huge nested queries are expensive to resolve.</li>
+<li><strong>Expecting URL-based HTTP caching</strong> — one POST endpoint means you rely on the client cache (or persisted queries) instead.</li>
+<li><strong>No query depth/complexity limits on the server</strong> — a malicious deeply-nested query can DoS you.</li>
+</ul></blockquote>
+
+<h2>Exercises</h2>
+<ul>
+<li>Write a query that fetches a user with two levels of nested relations and only the fields you need, via a plain <code>fetch</code> POST.</li>
+<li>Convert it to use <code>$variables</code>, and handle the <code>errors</code> array explicitly.</li>
+<li>Extract a repeated field set into a fragment and use it in two places.</li>
+<li>Write a mutation that creates an object and returns the new <code>id</code>, then update the UI from the result.</li>
+<li>On a tiny server (any GraphQL lib), demonstrate the N+1 problem by logging DB calls, then fix it with a DataLoader and show the call count drop.</li>
+</ul>
+
+<h2>Mini-project</h2>
+<p>Build a small blog explorer against a GraphQL API: a schema with <code>User</code>, <code>Post</code>, and <code>Comment</code> types and nested relations; a frontend that fetches a user with their recent posts and each post's comment count in a single query (using variables and a shared fragment), creates a post via a mutation and updates the view from the returned object, and handles the <code>errors</code> array properly. On the server, implement the resolvers with a DataLoader to eliminate N+1 and add a query-depth limit. Finish with a short write-up comparing the GraphQL version to the equivalent REST endpoints you'd have needed.</p>

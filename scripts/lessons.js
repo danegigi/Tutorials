@@ -392,6 +392,46 @@ export const SECTIONS = [
           ref("Node profiling (applies to Bun)", "https://nodejs.org/en/learn/getting-started/profiling"),
         ],
       },
+      {
+        slug: "workers-and-threads",
+        title: "Workers & Parallelism",
+        blurb: "Web Workers for CPU-bound work off the main thread, message passing & transferables, SharedArrayBuffer & Atomics, worker pools, and when to use a Worker vs Bun.spawn.",
+        further: [
+          ref("Bun: Workers", "https://bun.com/docs/api/workers"),
+          ref("Web Workers (MDN)", "https://developer.mozilla.org/en-US/docs/Web/API/Web_Workers_API"),
+          ref("Transferable objects", "https://developer.mozilla.org/en-US/docs/Web/API/Web_Workers_API/Transferable_objects"),
+        ],
+      },
+      {
+        slug: "ffi-and-native",
+        title: "FFI & Native Code",
+        blurb: "Calling C libraries from JS with bun:ffi (dlopen, FFIType, pointers & CString), writing native code with Bun.CC, N-API addons, and when FFI is worth it.",
+        further: [
+          ref("bun:ffi", "https://bun.com/docs/api/ffi"),
+          ref("Bun.CC (compile C)", "https://bun.com/docs/api/cc"),
+          ref("Node-API (N-API)", "https://nodejs.org/api/n-api.html"),
+        ],
+      },
+      {
+        slug: "fullstack-dev-server",
+        title: "Full-Stack with Bun",
+        blurb: "Bun's full-stack dev server: importing .html as routes, automatic bundling of TSX/CSS, hot reloading, API routes alongside the frontend, and building for production.",
+        further: [
+          ref("Bun: full-stack dev server", "https://bun.com/docs/bundler/fullstack"),
+          ref("HTML imports & routing", "https://bun.com/docs/api/http#routing"),
+          ref("Bun bundler", "https://bun.com/docs/bundler"),
+        ],
+      },
+      {
+        slug: "migrating-from-node",
+        title: "Migrating from Node.js",
+        blurb: "Node compatibility in Bun, the APIs that differ, package.json & scripts, bunfig.toml, replacing nodemon/ts-node/jest/dotenv, and a staged migration checklist.",
+        further: [
+          ref("Node.js compatibility", "https://bun.com/docs/runtime/nodejs-apis"),
+          ref("Migrating from Node", "https://bun.com/guides/migrate-from-npm"),
+          ref("bunfig.toml", "https://bun.com/docs/runtime/bunfig"),
+        ],
+      },
     ],
   },
 
@@ -635,6 +675,47 @@ export const SECTIONS = [
           ref("Scaling up with reducer and context", "https://react.dev/learn/scaling-up-with-reducer-and-context"),
           ref("useMemo", "https://react.dev/reference/react/useMemo"),
           ref("React Router", "https://reactrouter.com/en/main"),
+        ],
+      },
+      {
+        slug: "web-components",
+        title: "Web Components",
+        blurb: "Framework-free reusable elements: custom elements & the lifecycle callbacks, Shadow DOM encapsulation, <template> & slots, attributes vs properties, and interop with any framework.",
+        further: [
+          ref("Web Components (MDN)", "https://developer.mozilla.org/en-US/docs/Web/API/Web_components"),
+          ref("Using custom elements", "https://developer.mozilla.org/en-US/docs/Web/API/Web_components/Using_custom_elements"),
+          ref("Using shadow DOM", "https://developer.mozilla.org/en-US/docs/Web/API/Web_components/Using_shadow_DOM"),
+        ],
+      },
+      {
+        slug: "websockets-and-realtime",
+        title: "WebSockets & Real-Time",
+        blurb: "Pushing data to the browser: the WebSocket API, Server-Sent Events (and when each fits), reconnection & heartbeats, broadcasting, and scaling real-time across servers.",
+        further: [
+          ref("WebSockets API (MDN)", "https://developer.mozilla.org/en-US/docs/Web/API/WebSockets_API"),
+          ref("Server-Sent Events (MDN)", "https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events"),
+          ref("Bun WebSockets (server)", "https://bun.com/docs/api/websockets"),
+        ],
+      },
+      {
+        slug: "web-animations",
+        title: "Animation on the Web",
+        blurb: "CSS transitions & keyframes, the Web Animations API, transform/opacity for 60fps, scroll-driven animations, and respecting prefers-reduced-motion.",
+        further: [
+          ref("CSS animations (MDN)", "https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_animations"),
+          ref("Web Animations API (MDN)", "https://developer.mozilla.org/en-US/docs/Web/API/Web_Animations_API"),
+          ref("Animations guide (web.dev)", "https://web.dev/articles/animations-guide"),
+          ref("prefers-reduced-motion (MDN)", "https://developer.mozilla.org/en-US/docs/Web/CSS/@media/prefers-reduced-motion"),
+        ],
+      },
+      {
+        slug: "graphql",
+        title: "GraphQL for the Frontend",
+        blurb: "Queries, mutations & variables, the single-endpoint model vs REST, fragments, over/under-fetching, caching with a client, and the N+1 trap on the server.",
+        further: [
+          ref("Introduction to GraphQL", "https://graphql.org/learn/"),
+          ref("Queries & mutations", "https://graphql.org/learn/queries/"),
+          ref("Apollo Client (caching)", "https://www.apollographql.com/docs/react/"),
         ],
       },
     ],

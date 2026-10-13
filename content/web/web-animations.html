@@ -1,0 +1,90 @@
+<p class="lead">Good animation is fast, purposeful, and respectful of users who don't want it. The web gives you three layers — CSS transitions, CSS keyframe animations, and the JavaScript Web Animations API — plus a hard rule about which properties are cheap to animate. This lesson covers all three, the 60fps path, scroll-driven effects, and the accessibility obligation that <code>prefers-reduced-motion</code> enforces.</p>
+
+<h2>The 60fps rule: animate transform and opacity</h2>
+<p><span class="level intermediate">Intermediate</span> The browser renders in a pipeline: style → layout → paint → composite. Animating a property that triggers <strong>layout</strong> (<code>width</code>, <code>height</code>, <code>top</code>, <code>margin</code>) forces the browser to recompute positions every frame — janky. Animating <code>transform</code> and <code>opacity</code> only touches the <strong>composite</strong> step, which the GPU handles cheaply.</p>
+<pre><code>/* JANKY — animates layout every frame */
+.bad { transition: left 0.3s, width 0.3s; }
+
+/* SMOOTH — composite only, GPU-accelerated */
+.good { transition: transform 0.3s, opacity 0.3s; }
+.good:hover { transform: translateX(20px) scale(1.05); }</code></pre>
+<blockquote class="warn"><strong>"Animate transform/opacity, not layout" is the single most important performance rule here.</strong> Move with <code>translate</code> (not <code>top/left</code>), resize with <code>scale</code> (not <code>width/height</code>), fade with <code>opacity</code> (not <code>visibility</code> steps). The <em>look</em> is identical; the frame cost is not.</blockquote>
+
+<h2>CSS transitions: state A → state B</h2>
+<pre><code>.btn {
+  background: #4f46e5;
+  transition: transform 150ms ease-out, box-shadow 150ms ease-out;
+}
+.btn:hover  { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,.2); }
+.btn:active { transform: translateY(0); }</code></pre>
+<p>Transitions animate <em>between two states</em> when a property changes (hover, a toggled class). Specify the property, duration, and easing. They're the right tool for the vast majority of UI motion.</p>
+
+<h2>CSS keyframe animations: multi-step &amp; looping</h2>
+<pre><code>@keyframes pulse {
+  0%   { transform: scale(1);    opacity: 1; }
+  50%  { transform: scale(1.08); opacity: .7; }
+  100% { transform: scale(1);    opacity: 1; }
+}
+.badge {
+  animation: pulse 1.5s ease-in-out infinite;
+}
+/* a one-shot entrance */
+@keyframes slide-in { from { transform: translateY(12px); opacity: 0; } to { transform: none; opacity: 1; } }
+.card { animation: slide-in 300ms ease-out both; }  /* `both` keeps the end state */</code></pre>
+<p>Use keyframes for anything with more than two steps, loops, or an independent entrance/exit — things a transition can't express.</p>
+
+<h2>The Web Animations API (WAAPI)</h2>
+<p><span class="level advanced">Advanced</span> When animation must be dynamic — computed values, sequencing, pause/reverse, awaiting completion — drive it from JavaScript with <code>element.animate()</code>. It uses the same compositor path as CSS, so it's just as fast.</p>
+<pre><code>const anim = el.animate(
+  [{ transform: "translateY(0)", opacity: 1 },
+   { transform: "translateY(-40px)", opacity: 0 }],
+  { duration: 300, easing: "ease-out", fill: "forwards" }
+);
+await anim.finished;      // a Promise — sequence animations cleanly
+anim.pause(); anim.reverse(); anim.playbackRate = 2;</code></pre>
+<blockquote class="tip">WAAPI's <code>animation.finished</code> Promise is what makes complex sequences readable — <code>await</code> one animation, then start the next, no <code>animationend</code> listener juggling. Reach for WAAPI when values are dynamic or you need control; stay in CSS for static, declarative motion.</blockquote>
+
+<h2>Scroll-driven animations</h2>
+<pre><code>/* Modern CSS: tie an animation's timeline to scroll — no JS, no scroll listener */
+@keyframes reveal { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; } }
+.section {
+  animation: reveal linear both;
+  animation-timeline: view();   /* progresses as the element scrolls into view */
+}</code></pre>
+<p>Where scroll-timeline isn't supported, the <strong>IntersectionObserver</strong> is the robust fallback — observe elements and add an "in-view" class to trigger a CSS transition, instead of a <code>scroll</code> event handler (which fires constantly and janks).</p>
+
+<h2>Respect prefers-reduced-motion</h2>
+<p>Motion can cause nausea, dizziness, and migraines for users with vestibular disorders. The OS exposes their preference, and honoring it is an accessibility requirement, not a nicety:</p>
+<pre><code>@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+// WAAPI: check it in JS too
+if (!matchMedia("(prefers-reduced-motion: reduce)").matches) el.animate(frames, opts);</code></pre>
+<blockquote class="warn"><strong>Reduce, don't necessarily remove.</strong> The goal is to kill large motion (slides, parallax, auto-playing loops) while keeping subtle, essential feedback (a quick opacity change). An all-or-nothing kill switch is a fine default; a thoughtful reduced variant is better. Either way, never ignore the query.</blockquote>
+
+<h2>Common mistakes</h2>
+<blockquote class="warn"><ul>
+<li><strong>Animating layout properties</strong> (<code>width</code>, <code>top</code>, <code>margin</code>) instead of <code>transform</code>/<code>opacity</code> — guaranteed jank.</li>
+<li><strong>Ignoring <code>prefers-reduced-motion</code></strong> — an accessibility failure that can physically harm users.</li>
+<li><strong>Driving animation from a <code>scroll</code> event handler</strong> instead of IntersectionObserver / scroll-timeline — fires constantly, drops frames.</li>
+<li><strong>Overusing <code>will-change</code></strong> — it promotes layers; applied to everything it exhausts GPU memory and backfires. Use sparingly, remove after.</li>
+<li><strong>Forgetting <code>animation-fill-mode</code></strong> (<code>both</code>/<code>forwards</code>), so an element snaps back to its start state when the animation ends.</li>
+<li><strong>Too-long or gratuitous durations</strong> — UI motion should be ~150–300ms; longer feels sluggish.</li>
+</ul></blockquote>
+
+<h2>Exercises</h2>
+<ul>
+<li>Build the same "move 100px right" effect two ways — animating <code>left</code> vs <code>transform: translateX</code> — and compare in the devtools performance panel.</li>
+<li>Create a looping <code>pulse</code> keyframe animation and a one-shot entrance with <code>animation-fill-mode: both</code>.</li>
+<li>Sequence two animations with WAAPI using <code>await anim.finished</code> between them.</li>
+<li>Reveal cards on scroll with IntersectionObserver adding an in-view class; then try the CSS <code>animation-timeline: view()</code> version.</li>
+<li>Add a <code>prefers-reduced-motion</code> block and verify (OS setting or devtools emulation) that large motion is suppressed while essential feedback remains.</li>
+</ul>
+
+<h2>Mini-project</h2>
+<p>Build an animated product card gallery that is both smooth and accessible: cards fade/slide into view on scroll (IntersectionObserver with a scroll-timeline enhancement), hover and focus states animated purely with <code>transform</code>/<code>opacity</code>, a WAAPI-driven "add to cart" micro-interaction sequenced with <code>await finished</code>, and a looping subtle attention pulse on a sale badge. Then add a complete <code>prefers-reduced-motion</code> variant that strips the large motion while keeping essential feedback, and profile the gallery to prove every animation stays on the compositor (no layout thrash).</p>

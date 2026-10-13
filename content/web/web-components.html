@@ -1,0 +1,88 @@
+<p class="lead">Web Components are the browser's own answer to reusable UI: a set of standards — Custom Elements, Shadow DOM, and <code>&lt;template&gt;</code> — that let you define new HTML tags with encapsulated markup, style, and behavior, with no framework. The payoff is a component that drops into React, Vue, plain HTML, or nothing at all, and whose styles can't leak in or out.</p>
+
+<h2>The three standards</h2>
+<p><span class="level intermediate">Intermediate</span></p>
+<table>
+<tr><th>Standard</th><th>Gives you</th></tr>
+<tr><td>Custom Elements</td><td>define a new tag (<code>&lt;user-card&gt;</code>) backed by a class, with lifecycle callbacks</td></tr>
+<tr><td>Shadow DOM</td><td>an encapsulated subtree whose styles and markup are isolated from the page</td></tr>
+<tr><td><code>&lt;template&gt;</code> &amp; slots</td><td>inert markup to clone, and holes (<code>&lt;slot&gt;</code>) where the user's content goes</td></tr>
+</table>
+
+<h2>A custom element</h2>
+<pre><code>class CounterButton extends HTMLElement {
+  #count = 0;
+  connectedCallback() {        // runs when inserted into the DOM
+    this.render();
+    this.addEventListener("click", () =&gt; { this.#count++; this.render(); });
+  }
+  render() { this.textContent = `Clicked ${this.#count}×`; }
+}
+customElements.define("counter-button", CounterButton);  // name MUST contain a hyphen</code></pre>
+<pre><code>&lt;counter-button&gt;&lt;/counter-button&gt;   &lt;!-- now a real element --&gt;</code></pre>
+<blockquote class="warn"><strong>The tag name must contain a hyphen</strong> (<code>counter-button</code>, not <code>counter</code>). That's the spec's rule to guarantee custom elements never collide with current or future built-in HTML tags. A one-word name silently fails to register.</blockquote>
+
+<h2>The lifecycle callbacks</h2>
+<table>
+<tr><th>Callback</th><th>When</th></tr>
+<tr><td><code>constructor()</code></td><td>element created — set up state, but DON'T touch attributes/children yet</td></tr>
+<tr><td><code>connectedCallback()</code></td><td>inserted into the DOM — render, add listeners, start work here</td></tr>
+<tr><td><code>disconnectedCallback()</code></td><td>removed — clean up listeners, timers, subscriptions</td></tr>
+<tr><td><code>attributeChangedCallback(name, old, new)</code></td><td>a watched attribute changed</td></tr>
+</table>
+<pre><code>static observedAttributes = ["label"];   // only these fire attributeChangedCallback
+attributeChangedCallback(name, _old, value) {
+  if (name === "label") this.render();
+}</code></pre>
+<blockquote class="warn"><strong>Clean up in <code>disconnectedCallback</code>.</strong> A listener on <code>window</code>, a <code>setInterval</code>, or an observer started in <code>connectedCallback</code> but never torn down keeps the (removed) element alive — a memory leak. Elements can be connected and disconnected multiple times, so the two callbacks must balance.</blockquote>
+
+<h2>Shadow DOM: real encapsulation</h2>
+<pre><code>class UserCard extends HTMLElement {
+  connectedCallback() {
+    const shadow = this.attachShadow({ mode: "open" });
+    shadow.innerHTML = `
+      &lt;style&gt;
+        /* scoped to THIS component — can't leak out, page CSS can't leak in */
+        .name { font-weight: 700; color: var(--card-fg, #111); }
+        :host { display: block; padding: 12px; border: 1px solid #ddd; }
+      &lt;/style&gt;
+      &lt;div class="name"&gt;&lt;slot name="name"&gt;Anonymous&lt;/slot&gt;&lt;/div&gt;
+      &lt;slot&gt;&lt;/slot&gt;
+    `;
+  }
+}
+customElements.define("user-card", UserCard);</code></pre>
+<pre><code>&lt;user-card&gt;
+  &lt;span slot="name"&gt;Ada Lovelace&lt;/span&gt;
+  &lt;p&gt;First programmer.&lt;/p&gt;   &lt;!-- lands in the default &lt;slot&gt; --&gt;
+&lt;/user-card&gt;</code></pre>
+<p><code>:host</code> styles the element itself; <code>&lt;slot&gt;</code> projects the user's light-DOM content into the shadow tree. A page-wide <code>.name { color: red }</code> cannot reach inside — that's the encapsulation.</p>
+<blockquote class="tip">Styling across the boundary is deliberate and limited: expose <strong>CSS custom properties</strong> (<code>--card-fg</code> above) and <code>::part()</code> for the hooks you <em>want</em> themeable, and everything else stays private. This is the opposite of normal cascade — isolation by default, opt-in theming.</blockquote>
+
+<h2>Attributes vs properties</h2>
+<p><span class="level advanced">Advanced</span> HTML attributes are always strings (<code>&lt;x-el count="5"&gt;</code> → <code>"5"</code>); JS properties can be any type (<code>el.count = 5</code> → number). A robust component reflects between them: parse attributes into typed state, and optionally write state back to attributes so the DOM reflects it. Pass rich data (objects, arrays) as properties, not attributes.</p>
+
+<h2>Framework interop</h2>
+<p>Because a custom element is just a DOM element, it works anywhere HTML does. In React, pass primitives as attributes and listen via refs (React's attribute handling improved in React 19); in Vue, custom elements are first-class. This is why design systems (Shoelace, Material Web, Adobe Spectrum) ship as Web Components — one implementation, every framework.</p>
+
+<h2>Common mistakes</h2>
+<blockquote class="warn"><ul>
+<li><strong>A tag name without a hyphen</strong> — registration silently fails.</li>
+<li><strong>Touching attributes/children in the <code>constructor</code></strong> — they aren't ready; do it in <code>connectedCallback</code>.</li>
+<li><strong>No cleanup in <code>disconnectedCallback</code></strong> — leaked listeners/timers keep removed elements alive.</li>
+<li><strong>Expecting page CSS to style shadow content</strong> — it can't; expose custom properties / <code>::part()</code> instead.</li>
+<li><strong>Passing objects as attributes</strong> — attributes are strings; use properties for non-string data.</li>
+<li><strong>Forgetting <code>observedAttributes</code></strong> — <code>attributeChangedCallback</code> never fires for an unwatched attribute.</li>
+</ul></blockquote>
+
+<h2>Exercises</h2>
+<ul>
+<li>Build a <code>&lt;counter-button&gt;</code> with click state and confirm it works dropped into plain HTML.</li>
+<li>Add an <code>observedAttributes</code> + <code>attributeChangedCallback</code> so <code>&lt;counter-button start="10"&gt;</code> initializes the count.</li>
+<li>Create a <code>&lt;user-card&gt;</code> with Shadow DOM, a named slot, and scoped styles; prove page CSS can't restyle its internals.</li>
+<li>Expose a <code>--card-fg</code> custom property and theme two instances differently from page CSS.</li>
+<li>Add <code>disconnectedCallback</code> cleanup for a <code>setInterval</code> and prove (via devtools) the element is GC'd after removal.</li>
+</ul>
+
+<h2>Mini-project</h2>
+<p>Build a small framework-free component library: a <code>&lt;star-rating&gt;</code> (attribute-driven value, emits a <code>change</code> event, keyboard-accessible), a <code>&lt;toast-stack&gt;</code> (a method to push dismissable toasts with timers cleaned up on disconnect), and a <code>&lt;tab-group&gt;</code> using slots for panels. Each uses Shadow DOM with scoped styles, exposes CSS custom properties + <code>::part()</code> for theming, reflects attributes↔properties correctly, and emits custom events. Then drop the same components, unchanged, into both a plain HTML page and a React or Vue app to prove the interop promise.</p>
