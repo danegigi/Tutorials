@@ -1,0 +1,80 @@
+<p class="lead">The modules lesson covered <code>go.mod</code> and adding dependencies. This one handles the situations that trip up real projects: pointing a dependency at a fork or local copy, vendoring for reproducible builds, pulling private modules through auth, understanding how Go picks versions, the major-version suffix rule, and publishing your own module.</p>
+
+<h2>How Go actually selects versions</h2>
+<p><span class="level intermediate">Intermediate</span> Go uses <strong>Minimal Version Selection (MVS)</strong>: for each dependency, it picks the <em>highest version required by anything in the build graph</em> — not the newest that exists. This makes builds reproducible: adding a new dependency can't silently upgrade an unrelated one. <code>go.sum</code> records cryptographic hashes so a tampered or changed module is rejected.</p>
+<pre><code>go list -m all              # the full resolved build list (what MVS chose)
+go mod graph                # the dependency graph (who requires what)
+go mod why golang.org/x/text   # why is this module in my build?</code></pre>
+<blockquote class="warn"><strong><code>go.sum</code> is not a lockfile</strong> in the npm sense — <code>go.mod</code>'s <code>require</code> lines + MVS already make the build deterministic. <code>go.sum</code> is an integrity record. Commit both; never hand-edit <code>go.sum</code>.</blockquote>
+
+<h2>replace: fork, fix, or go local</h2>
+<pre><code>// go.mod
+require github.com/some/lib v1.4.0
+
+replace github.com/some/lib =&gt; github.com/myfork/lib v1.4.1-patch
+replace github.com/some/lib =&gt; ../lib          // a local checkout, for development
+replace github.com/some/lib =&gt; github.com/some/lib v1.3.0  // pin DOWN a transitive dep</code></pre>
+<p>Use <code>replace</code> to test a fix in a dependency before it's released, develop two modules side by side, or force a transitive dependency to a specific version. <code>exclude</code> blocks a specific bad version from selection.</p>
+<blockquote class="warn"><strong>A <code>replace</code> pointing at a local path does not travel</strong> — anyone who imports your module gets no benefit and a path that doesn't exist on their machine. <code>replace</code> is for <em>your</em> builds; remove local-path replaces before tagging a release. For side-by-side local dev, prefer a <code>go.work</code> workspace (see the Modules & Packages lesson) which keeps the replaces out of <code>go.mod</code> entirely.</blockquote>
+
+<h2>Vendoring</h2>
+<pre><code>go mod vendor      # copies all deps into ./vendor
+go build           # auto-uses ./vendor when it exists (or -mod=vendor)
+go mod verify      # confirm vendored copies match go.sum</code></pre>
+<p>Vendoring commits your dependencies' source into the repo. Trade-off: builds work with zero network and you can audit exactly what ships, at the cost of a larger repo and manual <code>go mod vendor</code> after dependency changes. Common in regulated/air-gapped environments and some monorepos; many teams skip it and rely on the module proxy + <code>go.sum</code>.</p>
+
+<h2>Private modules</h2>
+<p><span class="level advanced">Advanced</span> By default Go fetches modules through the public proxy (<code>proxy.golang.org</code>) and checks them against the checksum database (<code>sum.golang.org</code>). Private repos must bypass both:</p>
+<pre><code># Tell Go these paths are private: skip proxy AND sumdb
+go env -w GOPRIVATE=github.com/mycompany/*,gitlab.internal/*
+
+# Make git use SSH / a token for the fetch
+git config --global url."git@github.com:".insteadOf "https://github.com/"
+# or a token:  ~/.netrc  with machine github.com login x password &lt;TOKEN&gt;</code></pre>
+<p>Related knobs: <code>GONOPROXY</code> (fetch directly, not via proxy), <code>GONOSUMCHECK</code>/<code>GONOSUMDB</code> via <code>GONOSUMCHECK</code>→<code>GONOSUMDB</code>→<code>GOFLAGS</code>; in practice <code>GOPRIVATE</code> sets sensible defaults for both <code>GONOPROXY</code> and <code>GONOSUMDB</code>.</p>
+<blockquote class="warn"><strong>The classic private-module failure</strong> is a <code>410 Gone</code> or <code>verifying module: ... checksum database</code> error — Go tried the public proxy/sumdb for your private repo. Setting <code>GOPRIVATE</code> is what fixes it, plus git auth for the actual clone.</blockquote>
+
+<h2>Major versions: the v2+ rule</h2>
+<p>Go's "import compatibility rule": a breaking change means a new major version, and <strong>v2+ carries the major in both the module path and the import path</strong>.</p>
+<pre><code>// go.mod of the LIBRARY, at v2+
+module github.com/me/lib/v2
+
+// consumers import it WITH the suffix
+import "github.com/me/lib/v2"
+require github.com/me/lib/v2 v2.1.0</code></pre>
+<blockquote class="tip">This is why you'll see <code>/v2</code>, <code>/v3</code> in import paths. v0 and v1 use no suffix. The suffix lets a build depend on v1 and v2 of the same library simultaneously (they're different module paths), which is how large upgrades happen incrementally.</blockquote>
+
+<h2>Publishing a module</h2>
+<pre><code># 1. Make the module path match the repo URL
+module github.com/me/greet
+
+# 2. Tag a semver release and push the tag
+git tag v1.0.0
+git push origin v1.0.0
+
+# 3. Consumers just: go get github.com/me/greet@v1.0.0
+# 4. (optional) warm the proxy / docs:
+GOPROXY=proxy.golang.org go list -m github.com/me/greet@v1.0.0</code></pre>
+<p>No registry upload step — Go modules are fetched straight from your tagged VCS repo (via the proxy's cache). The tag <em>is</em> the release. Follow semver strictly: breaking change → new major (with the path suffix).</p>
+
+<h2>Common mistakes</h2>
+<blockquote class="warn"><ul>
+<li><strong>Leaving a local-path <code>replace</code> in a tagged release</strong> — it breaks every consumer. Use <code>go.work</code> for local dev instead.</li>
+<li><strong>Forgetting the <code>/v2</code> suffix</strong> on both the module path and imports when releasing v2 — consumers can't get the new major, or get v1 forever.</li>
+<li><strong>Not setting <code>GOPRIVATE</code></strong> for internal modules, then fighting proxy/sumdb 410 errors.</li>
+<li><strong>Hand-editing <code>go.mod</code>/<code>go.sum</code></strong> instead of letting <code>go get</code>/<code>go mod tidy</code> manage them.</li>
+<li><strong>Expecting <code>go get -u</code> to behave like npm</strong> — MVS picks minimal versions; <code>-u</code> is an explicit opt-in to upgrade.</li>
+<li><strong>A module path that doesn't match the repo</strong> — then <code>go get</code> can't find it.</li>
+</ul></blockquote>
+
+<h2>Exercises</h2>
+<ul>
+<li>Add a dependency, then run <code>go mod why</code> and <code>go mod graph</code> to trace why a transitive dependency is in your build.</li>
+<li>Fork a small library, make a one-line fix, and use a <code>replace</code> to build your program against the fork; then switch the replace to a local path.</li>
+<li>Run <code>go mod vendor</code>, delete your module cache, disconnect from the network, and confirm the build still works from <code>./vendor</code>.</li>
+<li>Create a private repo, set <code>GOPRIVATE</code> + git auth, and successfully <code>go get</code> it from another module.</li>
+<li>Publish a trivial module: tag <code>v1.0.0</code>, consume it from a second module, then make a breaking change and release it correctly as <code>v2</code> with the path suffix.</li>
+</ul>
+
+<h2>Mini-project</h2>
+<p>Create and publish a small reusable library module (e.g. a <code>greet</code> package) to a public repo: write it, document it, tag <code>v1.0.0</code>, and consume it from a separate program via <code>go get</code>. Then evolve it: ship a backward-compatible <code>v1.1.0</code>, and a breaking <code>v2.0.0</code> done correctly (module path <code>/v2</code>, import path updated), proving a single consumer can depend on both majors at once. Finally, set up a private variant: a second module in a private repo reachable only with <code>GOPRIVATE</code> + git auth, and document the exact env/config a teammate needs to build it.</p>

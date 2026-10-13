@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en" data-base="../">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0d1117">
+<title>Concurrency Patterns — Golang</title>
+<meta name="description" content="Beyond go + channels: worker pools, fan-in/fan-out, pipelines, context cancellation, errgroup, rate limiting, and detecting leaks with the race detector.">
+<link rel="canonical" href="https://danegigi.github.io/Tutorials/golang/concurrency-patterns.html">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Dev Tutorials">
+<meta property="og:title" content="Concurrency Patterns — Golang">
+<meta property="og:description" content="Beyond go + channels: worker pools, fan-in/fan-out, pipelines, context cancellation, errgroup, rate limiting, and detecting leaks with the race detector.">
+<meta property="og:url" content="https://danegigi.github.io/Tutorials/golang/concurrency-patterns.html">
+<meta property="og:image" content="https://danegigi.github.io/Tutorials/icon-512.png">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Concurrency Patterns — Golang">
+<meta name="twitter:description" content="Beyond go + channels: worker pools, fan-in/fan-out, pipelines, context cancellation, errgroup, rate limiting, and detecting leaks with the race detector.">
+<meta name="twitter:image" content="https://danegigi.github.io/Tutorials/icon-512.png">
+<link rel="manifest" href="../manifest.webmanifest">
+<link rel="icon" href="../icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="../icon-192.png">
+<link rel="stylesheet" href="../app.css">
+<script>/* set theme before paint to avoid flash */(function(){try{var t=localStorage.getItem('tut.theme');document.documentElement.setAttribute('data-theme',t||'dark');}catch(e){document.documentElement.setAttribute('data-theme','dark');}})();</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"LearningResource","name":"Concurrency Patterns","description":"Beyond go + channels: worker pools, fan-in/fan-out, pipelines, context cancellation, errgroup, rate limiting, and detecting leaks with the race detector.","url":"https://danegigi.github.io/Tutorials/golang/concurrency-patterns.html","inLanguage":"en","isPartOf":{"@type":"Course","name":"Golang — Dev Tutorials","url":"https://danegigi.github.io/Tutorials/golang/"},"learningResourceType":"Tutorial"},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Dev Tutorials","item":"https://danegigi.github.io/Tutorials/"},{"@type":"ListItem","position":2,"name":"Golang","item":"https://danegigi.github.io/Tutorials/golang/"},{"@type":"ListItem","position":3,"name":"Concurrency Patterns","item":"https://danegigi.github.io/Tutorials/golang/concurrency-patterns.html"}]}]}</script>
+
+</head>
+<body class="lesson">
+<header class="nav">
+  <a class="brand" href="../index.html">📚 Dev Tutorials</a>
+  <span class="crumb">Concurrency Patterns — Golang</span>
+  <span class="spacer"></span>
+  <a class="navbtn" href="../search.html">🔎 Search</a>
+  <button class="navbtn" id="install-btn" type="button">⬇️ Install</button>
+  <button class="navbtn" id="theme-btn" type="button" aria-label="Toggle theme">🌙 Dark</button>
+</header>
+<main class="wrap lesson-body">
+  <h1 class="page-title">Concurrency Patterns</h1>
+  <div class="lesson-tools" data-lesson-id="golang/concurrency-patterns">
+    <button id="done-btn" type="button" aria-pressed="false">○ Mark complete</button>
+    <button id="mark-btn" type="button" aria-pressed="false">☆ Bookmark</button>
+    <a class="navbtn" href="index.html" style="margin-left:auto">All Golang lessons →</a>
+  </div>
+<nav class="toc" aria-label="On this page"><strong>On this page</strong><ul>
+<li class="lvl2"><a href="#the-guiding-rules">The guiding rules</a></li>
+<li class="lvl2"><a href="#worker-pool-bound-your-parallelism">Worker pool: bound your parallelism</a></li>
+<li class="lvl2"><a href="#fan-out-fan-in">Fan-out / fan-in</a></li>
+<li class="lvl2"><a href="#pipelines">Pipelines</a></li>
+<li class="lvl2"><a href="#cancellation-with-context">Cancellation with context</a></li>
+<li class="lvl2"><a href="#errgroup-coordinate-failure">errgroup: coordinate failure</a></li>
+<li class="lvl2"><a href="#rate-limiting">Rate limiting</a></li>
+<li class="lvl2"><a href="#prove-its-correct-the-race-detector">Prove it's correct: the race detector</a></li>
+<li class="lvl2"><a href="#common-mistakes">Common mistakes</a></li>
+<li class="lvl2"><a href="#exercises">Exercises</a></li>
+<li class="lvl2"><a href="#mini-project">Mini-project</a></li>
+</ul></nav>
+<p class="lead">The concurrency lesson introduced goroutines and channels; this one is the toolbox you reach for in real code. Worker pools to bound parallelism, fan-out/fan-in to split and merge work, pipelines to stream it, <code>context</code> to cancel it, <code>errgroup</code> to coordinate failure, and the race detector to prove it's correct.</p>
+
+<h2 id="the-guiding-rules">The guiding rules</h2>
+<p><span class="level intermediate">Intermediate</span> Two Go proverbs decide most designs: <strong>"Don't communicate by sharing memory; share memory by communicating,"</strong> and <strong>"the goroutine that creates a channel owns closing it."</strong> A reader never closes a channel; a writer closes it exactly once to signal "no more values." Violating the second rule is how you get <code>panic: close of closed channel</code> and <code>send on closed channel</code>.</p>
+
+<h2 id="worker-pool-bound-your-parallelism">Worker pool: bound your parallelism</h2>
+<p>Spawning one goroutine per task sounds great until a million tasks spawn a million goroutines and exhaust memory or a downstream API. A worker pool fixes the count:</p>
+<pre><code>func workerPool(tasks []int, workers int) []int {
+    in := make(chan int)
+    out := make(chan int)
+
+    var wg sync.WaitGroup
+    for i := 0; i &lt; workers; i++ {
+        wg.Add(1)
+        go func() {
+            defer wg.Done()
+            for t := range in {        // ranges until `in` is closed
+                out &lt;- t * t           // the actual work
+            }
+        }()
+    }
+
+    go func() { for _, t := range tasks { in &lt;- t }; close(in) }() // feed, then close
+    go func() { wg.Wait(); close(out) }()                          // close out when all workers done
+
+    var results []int
+    for r := range out { results = append(results, r) }
+    return results
+}</code></pre>
+<blockquote class="warn"><strong>The classic deadlock:</strong> forgetting <code>close(in)</code> — the workers' <code>range</code> never ends, <code>wg.Wait()</code> blocks forever, and <code>out</code> is never closed, so the final <code>range out</code> hangs. Every channel a <code>range</code> reads from must eventually be closed by its owner.</blockquote>
+
+<h2 id="fan-out-fan-in">Fan-out / fan-in</h2>
+<p>Fan-out = multiple goroutines read from one channel (that's the pool above). Fan-in = merge multiple channels into one:</p>
+<pre><code>func fanIn(chans ...&lt;-chan int) &lt;-chan int {
+    out := make(chan int)
+    var wg sync.WaitGroup
+    for _, c := range chans {
+        wg.Add(1)
+        go func(c &lt;-chan int) { defer wg.Done(); for v := range c { out &lt;- v } }(c)
+    }
+    go func() { wg.Wait(); close(out) }()
+    return out
+}</code></pre>
+
+<h2 id="pipelines">Pipelines</h2>
+<p>Each stage is a function that takes an input channel and returns an output channel, so stages compose and stream — stage N starts producing before stage N-1 finishes.</p>
+<pre><code>func gen(nums ...int) &lt;-chan int {
+    out := make(chan int)
+    go func() { for _, n := range nums { out &lt;- n }; close(out) }()
+    return out
+}
+func sq(in &lt;-chan int) &lt;-chan int {
+    out := make(chan int)
+    go func() { for n := range in { out &lt;- n * n }; close(out) }()
+    return out
+}
+// usage: for v := range sq(sq(gen(2, 3))) { fmt.Println(v) }  // 16, 81</code></pre>
+
+<h2 id="cancellation-with-context">Cancellation with context</h2>
+<p><span class="level advanced">Advanced</span> A long pipeline needs a way to stop early (caller gave up, timeout). Thread a <code>context.Context</code> and <code>select</code> on <code>ctx.Done()</code> alongside every send, so a goroutine never blocks forever on a reader that's gone:</p>
+<pre><code>func sqCtx(ctx context.Context, in &lt;-chan int) &lt;-chan int {
+    out := make(chan int)
+    go func() {
+        defer close(out)
+        for n := range in {
+            select {
+            case out &lt;- n * n:
+            case &lt;-ctx.Done():   // caller cancelled — stop, don't leak
+                return
+            }
+        }
+    }()
+    return out
+}</code></pre>
+<blockquote class="warn"><strong>Goroutine leak:</strong> a goroutine blocked forever on <code>out &lt;- v</code> because the consumer stopped reading is never garbage-collected — it leaks for the life of the process. The <code>select</code>-on-<code>ctx.Done()</code> above is the standard guard. Leaks are invisible until you watch goroutine count climb under load.</blockquote>
+
+<h2 id="errgroup-coordinate-failure">errgroup: coordinate failure</h2>
+<p>When you launch N concurrent operations and want "wait for all, but abort everything if one fails," <code>golang.org/x/sync/errgroup</code> is the idiomatic answer — it bundles a <code>WaitGroup</code>, a shared cancellable context, and first-error capture:</p>
+<pre><code>g, ctx := errgroup.WithContext(ctx)
+for _, url := range urls {
+    url := url
+    g.Go(func() error {
+        req, _ := http.NewRequestWithContext(ctx, "GET", url, nil)
+        resp, err := http.DefaultClient.Do(req)
+        if err != nil { return err }           // first error cancels ctx for the rest
+        defer resp.Body.Close()
+        return nil
+    })
+}
+if err := g.Wait(); err != nil { return err }  // returns the first error
+g.SetLimit(8)  // cap concurrency, like a pool</code></pre>
+
+<h2 id="rate-limiting">Rate limiting</h2>
+<pre><code>limiter := time.NewTicker(200 * time.Millisecond) // 5 req/sec
+defer limiter.Stop()
+for _, req := range requests {
+    &lt;-limiter.C         // block until the next tick
+    go handle(req)
+}
+// For bursts, use golang.org/x/time/rate.Limiter (token bucket).</code></pre>
+
+<h2 id="prove-its-correct-the-race-detector">Prove it's correct: the race detector</h2>
+<pre><code>go test -race ./...
+go run -race .
+# WARNING: DATA RACE
+#   Write at 0x... by goroutine 7:
+#   Previous read at 0x... by goroutine 6:</code></pre>
+<blockquote class="tip">A data race is undefined behavior, not "usually fine" — run <code>-race</code> in CI. It catches unsynchronized access to shared variables (the kind you avoid by passing data through channels or guarding with a <code>sync.Mutex</code>).</blockquote>
+
+<h2 id="common-mistakes">Common mistakes</h2>
+<blockquote class="warn"><ul>
+<li><strong>Not closing a channel a <code>range</code> depends on</strong> → deadlock. The owner (writer) closes, once.</li>
+<li><strong>Closing from the reader side</strong>, or closing twice → panic.</li>
+<li><strong>Goroutine leaks</strong> from a send that blocks forever after the consumer left — guard sends with <code>select { case out&lt;-v: case &lt;-ctx.Done(): return }</code>.</li>
+<li><strong>Capturing the loop variable</strong> in a goroutine (pre-Go 1.22) — shadow it with <code>x := x</code>. Go 1.22+ fixed the loop-var semantics, but the habit is still worth knowing.</li>
+<li><strong>Unbounded goroutine spawning</strong> — one per request with no pool exhausts memory under load.</li>
+<li><strong>Assuming a passing test means no race</strong> — races are nondeterministic; only <code>-race</code> reliably finds them.</li>
+</ul></blockquote>
+
+<h2 id="exercises">Exercises</h2>
+<ul>
+<li>Build a worker pool that fetches a list of URLs with a fixed concurrency of 5, then rewrite it with <code>errgroup.SetLimit</code> and compare.</li>
+<li>Write a three-stage pipeline (generate → filter even → square) and confirm with prints that values stream rather than batch.</li>
+<li>Deliberately create a goroutine leak (a send with no reader), observe the hung goroutine, then fix it with a <code>context</code> guard.</li>
+<li>Write code with an intentional data race on a shared counter, confirm <code>go run -race</code> flags it, then fix it two ways: a <code>sync.Mutex</code> and a channel.</li>
+<li>Implement a token-bucket rate limiter with <code>golang.org/x/time/rate</code> capping an API client to 10 req/s with bursts of 3.</li>
+</ul>
+
+<h2 id="mini-project">Mini-project</h2>
+<p>Build a concurrent web crawler: given a seed URL and a max depth, fetch pages with a bounded worker pool, parse links with the stdlib, deduplicate visited URLs behind a mutex-guarded set, and respect a context deadline so the whole crawl can be cancelled. Use <code>errgroup</code> for per-page fetches, a rate limiter to stay polite, and run the whole thing under <code>-race</code> to prove the shared visited-set is synchronized correctly. Report pages crawled, links found, and whether it finished or was cancelled.</p>
+
+<section class="further"><h2 id="further-reading">Further reading</h2>
+<p>Official documentation for the tools and APIs covered on this page:</p>
+<ul class="further-list"><li><a href="https://go.dev/blog/pipelines" target="_blank" rel="noopener">Go Concurrency Patterns (blog) ↗</a></li>
+<li><a href="https://pkg.go.dev/golang.org/x/sync/errgroup" target="_blank" rel="noopener">golang.org/x/sync/errgroup ↗</a></li>
+<li><a href="https://go.dev/blog/codelab-share" target="_blank" rel="noopener">Share Memory By Communicating ↗</a></li>
+<li><a href="https://go.dev/doc/articles/race_detector" target="_blank" rel="noopener">Data Race Detector ↗</a></li></ul></section>
+  <nav class="pager">
+<a class="prev" href="project-layout-and-patterns.html"><small>Previous</small>🐹 Project Layout &amp; Patterns</a>
+<a class="next" href="reflection-and-struct-tags.html"><small>Next</small>🐹 Reflection &amp; Struct Tags</a>
+  </nav>
+</main>
+<button type="button" class="fab top" id="fab-top" aria-label="Back to top">↑ Top</button>
+<div class="banner" id="update-banner" role="status">A new version is available.<button type="button">Reload</button></div>
+<div class="banner" id="offline-banner" role="status">You're offline — showing cached lessons.</div>
+<script src="../app.js" defer></script>
+</body>
+</html>

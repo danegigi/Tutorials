@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en" data-base="../">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0d1117">
+<title>Networking Deep Dive — Linux</title>
+<meta name="description" content="The packet's journey: ip/routing tables, the DNS resolution path, nftables/iptables firewalls, NAT, sockets with ss, and tracing with tcpdump.">
+<link rel="canonical" href="https://danegigi.github.io/Tutorials/linux/networking-deep-dive.html">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Dev Tutorials">
+<meta property="og:title" content="Networking Deep Dive — Linux">
+<meta property="og:description" content="The packet's journey: ip/routing tables, the DNS resolution path, nftables/iptables firewalls, NAT, sockets with ss, and tracing with tcpdump.">
+<meta property="og:url" content="https://danegigi.github.io/Tutorials/linux/networking-deep-dive.html">
+<meta property="og:image" content="https://danegigi.github.io/Tutorials/icon-512.png">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Networking Deep Dive — Linux">
+<meta name="twitter:description" content="The packet's journey: ip/routing tables, the DNS resolution path, nftables/iptables firewalls, NAT, sockets with ss, and tracing with tcpdump.">
+<meta name="twitter:image" content="https://danegigi.github.io/Tutorials/icon-512.png">
+<link rel="manifest" href="../manifest.webmanifest">
+<link rel="icon" href="../icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="../icon-192.png">
+<link rel="stylesheet" href="../app.css">
+<script>/* set theme before paint to avoid flash */(function(){try{var t=localStorage.getItem('tut.theme');document.documentElement.setAttribute('data-theme',t||'dark');}catch(e){document.documentElement.setAttribute('data-theme','dark');}})();</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"LearningResource","name":"Networking Deep Dive","description":"The packet's journey: ip/routing tables, the DNS resolution path, nftables/iptables firewalls, NAT, sockets with ss, and tracing with tcpdump.","url":"https://danegigi.github.io/Tutorials/linux/networking-deep-dive.html","inLanguage":"en","isPartOf":{"@type":"Course","name":"Linux — Dev Tutorials","url":"https://danegigi.github.io/Tutorials/linux/"},"learningResourceType":"Tutorial"},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Dev Tutorials","item":"https://danegigi.github.io/Tutorials/"},{"@type":"ListItem","position":2,"name":"Linux","item":"https://danegigi.github.io/Tutorials/linux/"},{"@type":"ListItem","position":3,"name":"Networking Deep Dive","item":"https://danegigi.github.io/Tutorials/linux/networking-deep-dive.html"}]}]}</script>
+
+</head>
+<body class="lesson">
+<header class="nav">
+  <a class="brand" href="../index.html">📚 Dev Tutorials</a>
+  <span class="crumb">Networking Deep Dive — Linux</span>
+  <span class="spacer"></span>
+  <a class="navbtn" href="../search.html">🔎 Search</a>
+  <button class="navbtn" id="install-btn" type="button">⬇️ Install</button>
+  <button class="navbtn" id="theme-btn" type="button" aria-label="Toggle theme">🌙 Dark</button>
+</header>
+<main class="wrap lesson-body">
+  <h1 class="page-title">Networking Deep Dive</h1>
+  <div class="lesson-tools" data-lesson-id="linux/networking-deep-dive">
+    <button id="done-btn" type="button" aria-pressed="false">○ Mark complete</button>
+    <button id="mark-btn" type="button" aria-pressed="false">☆ Bookmark</button>
+    <a class="navbtn" href="index.html" style="margin-left:auto">All Linux lessons →</a>
+  </div>
+<nav class="toc" aria-label="On this page"><strong>On this page</strong><ul>
+<li class="lvl2"><a href="#interfaces-and-addresses-with-ip">Interfaces and addresses with ip</a></li>
+<li class="lvl2"><a href="#the-routing-table-where-does-a-packet-go">The routing table: where does a packet go?</a></li>
+<li class="lvl2"><a href="#the-dns-resolution-path">The DNS resolution path</a></li>
+<li class="lvl2"><a href="#sockets-whats-actually-listeningconnected">Sockets: what's actually listening/connected</a></li>
+<li class="lvl2"><a href="#firewalls-nftables-and-iptables">Firewalls: nftables (and iptables)</a></li>
+<li class="lvl2"><a href="#nat-and-connection-tracking">NAT and connection tracking</a></li>
+<li class="lvl2"><a href="#capturing-traffic-tcpdump">Capturing traffic: tcpdump</a></li>
+<li class="lvl2"><a href="#a-debugging-ladder">A debugging ladder</a></li>
+<li class="lvl2"><a href="#common-mistakes">Common mistakes</a></li>
+<li class="lvl2"><a href="#exercises">Exercises</a></li>
+<li class="lvl2"><a href="#mini-project">Mini-project</a></li>
+</ul></nav>
+<p class="lead">When a server "can't reach" something, the fix lives in Linux's networking stack: interfaces, routing tables, the DNS resolution path, firewall rules, and the sockets a process actually opened. This lesson follows a packet from your application down to the wire and back, with the modern tools (<code>ip</code>, <code>ss</code>, <code>nft</code>, <code>tcpdump</code>) — not the deprecated <code>ifconfig</code>/<code>netstat</code>.</p>
+
+<h2 id="interfaces-and-addresses-with-ip">Interfaces and addresses with ip</h2>
+<p><span class="level beginner">Beginner</span> The <code>ip</code> command (from iproute2) replaced <code>ifconfig</code>. Learn its subcommands:</p>
+<pre><code>ip addr                     # interfaces and their IPs (alias: ip a)
+ip -br -c addr              # brief, coloured — great at a glance
+ip link set eth0 up        # bring an interface up/down
+ip addr add 10.0.0.5/24 dev eth0   # add an address (not persistent)</code></pre>
+<pre><code>$ ip -br a
+lo       UNKNOWN   127.0.0.1/8 ::1/128
+eth0     UP        10.0.0.5/24 fe80::.../64</code></pre>
+<blockquote class="tip">Changes made with <code>ip</code> are <strong>not persistent</strong> — they vanish on reboot. Persistent config lives in your distro's network manager (netplan on Ubuntu, NetworkManager/<code>nmcli</code> on RHEL/Fedora, systemd-networkd). Use <code>ip</code> for diagnosis and temporary tweaks; edit the manager's config for permanent changes.</blockquote>
+
+<h2 id="the-routing-table-where-does-a-packet-go">The routing table: where does a packet go?</h2>
+<pre><code>ip route                    # the routing table
+# default via 10.0.0.1 dev eth0        ← the gateway for "everything else"
+# 10.0.0.0/24 dev eth0 proto kernel scope link src 10.0.0.5
+
+ip route get 8.8.8.8        # ask the kernel WHICH route a destination uses
+# 8.8.8.8 via 10.0.0.1 dev eth0 src 10.0.0.5</code></pre>
+<p>For any destination, the kernel picks the <em>most specific</em> matching route; <code>default</code> (0.0.0.0/0) catches everything else and sends it to the gateway. <code>ip route get</code> is the fastest way to answer "why is this traffic going out the wrong interface?"</p>
+
+<h2 id="the-dns-resolution-path">The DNS resolution path</h2>
+<p><span class="level intermediate">Intermediate</span> A name becomes an IP through a specific chain — know every link because any one can be the culprit:</p>
+<ol>
+<li><code>/etc/nsswitch.conf</code> — the <code>hosts:</code> line decides the ORDER (files, then DNS).</li>
+<li><code>/etc/hosts</code> — static overrides, checked first (this is where a stale hand-edit bites).</li>
+<li><code>/etc/resolv.conf</code> — the nameservers to query. On systemd-resolved systems this points at <code>127.0.0.53</code>, a local stub.</li>
+<li>The resolver queries those nameservers over UDP/TCP 53 (or DoT).</li>
+</ol>
+<pre><code>resolvectl status           # systemd-resolved: per-link DNS servers, DNSSEC
+resolvectl query example.com
+dig example.com +short      # the query tool; +trace to follow from the root
+getent hosts example.com    # resolve the way the SYSTEM does (honours nsswitch)</code></pre>
+<blockquote class="warn"><strong><code>dig</code> talks straight to DNS; <code>getent hosts</code> uses the full nsswitch path.</strong> If <code>dig</code> resolves a name but your app doesn't, the difference is usually <code>/etc/hosts</code> or an nsswitch rule — <code>getent</code> reproduces what the application sees.</blockquote>
+
+<h2 id="sockets-whats-actually-listeningconnected">Sockets: what's actually listening/connected</h2>
+<pre><code>ss -tlnp                    # TCP, Listening, Numeric, with Process (needs sudo for names)
+# State   Recv-Q  Local Address:Port   Process
+# LISTEN  0       0.0.0.0:8080         users:(("myapp",pid=1234,fd=3))
+
+ss -tn state established    # current connections
+ss -s                       # summary counts</code></pre>
+<p><code>ss</code> replaced <code>netstat</code> (faster, same info). Reading for "is my service even listening?": a <code>LISTEN</code> on <code>0.0.0.0:8080</code> accepts from anywhere; on <code>127.0.0.1:8080</code> it's localhost-only — a very common "works locally, refused remotely" cause.</p>
+
+<h2 id="firewalls-nftables-and-iptables">Firewalls: nftables (and iptables)</h2>
+<p><span class="level advanced">Advanced</span> The kernel's packet filter is <strong>nftables</strong> (<code>nft</code>), the successor to iptables. Most distros ship a friendlier front end (<code>ufw</code> on Ubuntu, <code>firewalld</code> on RHEL) that drives it for you.</p>
+<pre><code>nft list ruleset            # the whole active firewall
+# a minimal inbound policy:
+nft add table inet filter
+nft 'add chain inet filter input { type filter hook input priority 0; policy drop; }'
+nft add rule inet filter input ct state established,related accept
+nft add rule inet filter input iif lo accept
+nft add rule inet filter input tcp dport {22, 80, 443} accept</code></pre>
+<pre><code># The ufw equivalent (what you'll usually use):
+ufw default deny incoming
+ufw allow 22/tcp &amp;&amp; ufw allow 80,443/tcp
+ufw enable &amp;&amp; ufw status verbose</code></pre>
+<blockquote class="warn"><strong>Lock yourself out drill:</strong> a <code>policy drop</code> input chain with no SSH-allow rule, applied over SSH, cuts your own connection instantly. Always allow <code>established,related</code> and your management port (22) <em>before</em> flipping the default to drop — and keep a console/out-of-band way in. The <code>established,related accept</code> rule is what keeps existing connections (including your SSH session) alive.</blockquote>
+
+<h2 id="nat-and-connection-tracking">NAT and connection tracking</h2>
+<p>Linux can rewrite addresses (SNAT/masquerade for outbound sharing, DNAT for port-forwarding) via the <code>nat</code> hooks, tracked by conntrack:</p>
+<pre><code># forward host port 8080 to a container/VM at 10.0.0.9:80 (DNAT)
+nft add rule inet nat prerouting tcp dport 8080 dnat to 10.0.0.9:80
+conntrack -L                # live connection-tracking table (needs conntrack-tools)
+cat /proc/sys/net/ipv4/ip_forward   # must be 1 to route between interfaces</code></pre>
+
+<h2 id="capturing-traffic-tcpdump">Capturing traffic: tcpdump</h2>
+<pre><code>tcpdump -ni eth0 port 443 and host 10.0.0.9   # filter: don't drown in packets
+tcpdump -ni any icmp                           # are pings arriving at all?
+tcpdump -w cap.pcap port 80                    # write to a file, open in Wireshark</code></pre>
+<blockquote class="tip">When "connection refused" vs "connection timed out" vs "no route" is unclear, <code>tcpdump</code> settles it: you SEE whether the SYN leaves, whether a reply comes back, or whether nothing happens at all — each points at a different layer (firewall drop, nothing listening, routing/DNS).</blockquote>
+
+<h2 id="a-debugging-ladder">A debugging ladder</h2>
+<ol>
+<li><code>ip a</code> — do I have an address on the right interface?</li>
+<li><code>ip route get &lt;dest&gt;</code> — which route/gateway will this use?</li>
+<li><code>getent hosts &lt;name&gt;</code> / <code>dig</code> — does the name resolve, the way the app resolves it?</li>
+<li><code>ss -tlnp</code> — is the service listening, and on the right address?</li>
+<li><code>nft list ruleset</code> / <code>ufw status</code> — is a firewall dropping it?</li>
+<li><code>tcpdump</code> — watch the actual packets to localize the failure.</li>
+</ol>
+
+<h2 id="common-mistakes">Common mistakes</h2>
+<blockquote class="warn"><ul>
+<li><strong>Expecting <code>ip</code>/<code>nft</code> changes to persist</strong> — they don't; edit the network manager / firewall config for permanence.</li>
+<li><strong>A service bound to <code>127.0.0.1</code></strong> when you need remote access — it must bind <code>0.0.0.0</code> (or a specific external IP).</li>
+<li><strong>A stale <code>/etc/hosts</code> entry</strong> overriding real DNS, invisible to <code>dig</code> but seen by the app (<code>getent</code> reveals it).</li>
+<li><strong>Flipping a firewall to default-drop over SSH</strong> without an <code>established,related</code> + port-22 allow — instant lockout.</li>
+<li><strong>Forgetting <code>ip_forward=1</code></strong> when the box is supposed to route/NAT between interfaces.</li>
+<li><strong>Using deprecated <code>ifconfig</code>/<code>netstat</code></strong> — often not installed, and they miss namespaces and some state; use <code>ip</code>/<code>ss</code>.</li>
+</ul></blockquote>
+
+<h2 id="exercises">Exercises</h2>
+<ul>
+<li>Use <code>ip route get</code> to find which interface and gateway your traffic to a public IP uses, and explain the matching route.</li>
+<li>Add a line to <code>/etc/hosts</code>, then show the discrepancy between <code>dig</code> and <code>getent hosts</code>; remove it afterward.</li>
+<li>Start a service bound to <code>127.0.0.1</code>, confirm <code>ss -tlnp</code> shows it, fail to reach it remotely, rebind to <code>0.0.0.0</code>, and succeed.</li>
+<li>In a VM, write an nftables input policy that allows SSH + HTTP and drops the rest — safely, with an <code>established,related</code> rule — and verify with <code>nft list ruleset</code>.</li>
+<li>Use <code>tcpdump</code> to tell apart a firewall-dropped connection (SYN leaves, no reply) from a nothing-listening one (RST comes back).</li>
+</ul>
+
+<h2 id="mini-project">Mini-project</h2>
+<p>In a VM, build and document a small router/firewall host: give it two interfaces, enable IP forwarding, write an nftables ruleset with a default-drop input policy (safely allowing SSH + established), SNAT/masquerade so a second machine reaches the internet through it, and a DNAT rule forwarding a public port to an internal service. Prove each piece with the debugging ladder — <code>ip route get</code>, <code>ss</code>, <code>conntrack -L</code>, and a <code>tcpdump</code> capture of a forwarded connection — and write up how you'd diagnose it if one layer were broken.</p>
+
+<section class="further"><h2 id="further-reading">Further reading</h2>
+<p>Official documentation for the tools and APIs covered on this page:</p>
+<ul class="further-list"><li><a href="https://man7.org/linux/man-pages/man8/ip.8.html" target="_blank" rel="noopener">ip (man) ↗</a></li>
+<li><a href="https://wiki.nftables.org/wiki-nftables/index.php/Main_Page" target="_blank" rel="noopener">nftables wiki ↗</a></li>
+<li><a href="https://man7.org/linux/man-pages/man8/ss.8.html" target="_blank" rel="noopener">ss (man) ↗</a></li>
+<li><a href="https://beej.us/guide/bgnet/" target="_blank" rel="noopener">Beej's Guide to Network Programming ↗</a></li></ul></section>
+  <nav class="pager">
+<a class="prev" href="systemd-deep-dive.html"><small>Previous</small>🐧 systemd Deep Dive</a>
+<a class="next" href="security-hardening.html"><small>Next</small>🐧 Security Hardening</a>
+  </nav>
+</main>
+<button type="button" class="fab top" id="fab-top" aria-label="Back to top">↑ Top</button>
+<div class="banner" id="update-banner" role="status">A new version is available.<button type="button">Reload</button></div>
+<div class="banner" id="offline-banner" role="status">You're offline — showing cached lessons.</div>
+<script src="../app.js" defer></script>
+</body>
+</html>

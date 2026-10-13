@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en" data-base="../">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0d1117">
+<title>systemd Deep Dive — Linux</title>
+<meta name="description" content="Units &amp; unit files, targets vs runlevels, dependencies &amp; ordering, timers, journald, resource control with cgroups, and writing a hardened service.">
+<link rel="canonical" href="https://danegigi.github.io/Tutorials/linux/systemd-deep-dive.html">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Dev Tutorials">
+<meta property="og:title" content="systemd Deep Dive — Linux">
+<meta property="og:description" content="Units &amp; unit files, targets vs runlevels, dependencies &amp; ordering, timers, journald, resource control with cgroups, and writing a hardened service.">
+<meta property="og:url" content="https://danegigi.github.io/Tutorials/linux/systemd-deep-dive.html">
+<meta property="og:image" content="https://danegigi.github.io/Tutorials/icon-512.png">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="systemd Deep Dive — Linux">
+<meta name="twitter:description" content="Units &amp; unit files, targets vs runlevels, dependencies &amp; ordering, timers, journald, resource control with cgroups, and writing a hardened service.">
+<meta name="twitter:image" content="https://danegigi.github.io/Tutorials/icon-512.png">
+<link rel="manifest" href="../manifest.webmanifest">
+<link rel="icon" href="../icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="../icon-192.png">
+<link rel="stylesheet" href="../app.css">
+<script>/* set theme before paint to avoid flash */(function(){try{var t=localStorage.getItem('tut.theme');document.documentElement.setAttribute('data-theme',t||'dark');}catch(e){document.documentElement.setAttribute('data-theme','dark');}})();</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"LearningResource","name":"systemd Deep Dive","description":"Units & unit files, targets vs runlevels, dependencies & ordering, timers, journald, resource control with cgroups, and writing a hardened service.","url":"https://danegigi.github.io/Tutorials/linux/systemd-deep-dive.html","inLanguage":"en","isPartOf":{"@type":"Course","name":"Linux — Dev Tutorials","url":"https://danegigi.github.io/Tutorials/linux/"},"learningResourceType":"Tutorial"},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Dev Tutorials","item":"https://danegigi.github.io/Tutorials/"},{"@type":"ListItem","position":2,"name":"Linux","item":"https://danegigi.github.io/Tutorials/linux/"},{"@type":"ListItem","position":3,"name":"systemd Deep Dive","item":"https://danegigi.github.io/Tutorials/linux/systemd-deep-dive.html"}]}]}</script>
+
+</head>
+<body class="lesson">
+<header class="nav">
+  <a class="brand" href="../index.html">📚 Dev Tutorials</a>
+  <span class="crumb">systemd Deep Dive — Linux</span>
+  <span class="spacer"></span>
+  <a class="navbtn" href="../search.html">🔎 Search</a>
+  <button class="navbtn" id="install-btn" type="button">⬇️ Install</button>
+  <button class="navbtn" id="theme-btn" type="button" aria-label="Toggle theme">🌙 Dark</button>
+</header>
+<main class="wrap lesson-body">
+  <h1 class="page-title">systemd Deep Dive</h1>
+  <div class="lesson-tools" data-lesson-id="linux/systemd-deep-dive">
+    <button id="done-btn" type="button" aria-pressed="false">○ Mark complete</button>
+    <button id="mark-btn" type="button" aria-pressed="false">☆ Bookmark</button>
+    <a class="navbtn" href="index.html" style="margin-left:auto">All Linux lessons →</a>
+  </div>
+<nav class="toc" aria-label="On this page"><strong>On this page</strong><ul>
+<li class="lvl2"><a href="#units-everything-is-a-unit">Units: everything is a unit</a></li>
+<li class="lvl2"><a href="#anatomy-of-a-service-unit">Anatomy of a service unit</a></li>
+<li class="lvl2"><a href="#service-types">Service types</a></li>
+<li class="lvl2"><a href="#targets-the-runlevel-replacement">Targets: the runlevel replacement</a></li>
+<li class="lvl2"><a href="#timers-cron-but-observable">Timers: cron, but observable</a></li>
+<li class="lvl2"><a href="#journald-the-logs">journald: the logs</a></li>
+<li class="lvl2"><a href="#hardening-a-service-with-sandboxing">Hardening a service with sandboxing</a></li>
+<li class="lvl2"><a href="#debugging-a-failed-service">Debugging a failed service</a></li>
+<li class="lvl2"><a href="#common-mistakes">Common mistakes</a></li>
+<li class="lvl2"><a href="#exercises">Exercises</a></li>
+<li class="lvl2"><a href="#mini-project">Mini-project</a></li>
+</ul></nav>
+<p class="lead">systemd is the init system and service manager on nearly every modern Linux distribution — PID 1, the first process the kernel starts, and the thing that boots the machine, supervises every service, collects logs, and schedules timers. This lesson goes past "start/stop a service" into writing robust unit files, understanding targets and ordering, journald, and locking a service down with its built-in sandboxing.</p>
+
+<h2 id="units-everything-is-a-unit">Units: everything is a unit</h2>
+<p><span class="level beginner">Beginner</span> systemd models everything it manages as a <strong>unit</strong>, typed by file extension:</p>
+<table>
+<tr><th>Type</th><th>Manages</th></tr>
+<tr><td><code>.service</code></td><td>a process (a daemon, a one-shot script)</td></tr>
+<tr><td><code>.socket</code></td><td>a socket that activates a service on first connection</td></tr>
+<tr><td><code>.timer</code></td><td>a scheduled trigger (the cron replacement)</td></tr>
+<tr><td><code>.target</code></td><td>a group of units (the runlevel replacement)</td></tr>
+<tr><td><code>.mount</code> / <code>.automount</code></td><td>filesystem mounts</td></tr>
+</table>
+<pre><code>systemctl status nginx           # state, recent logs, PID, cgroup
+systemctl start|stop|restart nginx
+systemctl reload nginx           # SIGHUP — reload config without dropping connections
+systemctl enable --now nginx     # start now AND on boot
+systemctl list-units --type=service --state=running</code></pre>
+
+<h2 id="anatomy-of-a-service-unit">Anatomy of a service unit</h2>
+<pre><code># /etc/systemd/system/myapp.service
+[Unit]
+Description=My App
+After=network-online.target postgresql.service   # ORDER: start after these
+Wants=network-online.target                       # WEAK dep: want it, don't fail without it
+
+[Service]
+Type=simple                 # the ExecStart process IS the service
+ExecStart=/usr/local/bin/myapp --port 8080
+Restart=on-failure          # auto-restart if it crashes
+RestartSec=5
+User=myapp                  # drop privileges — never run as root unless required
+Environment=LOG_LEVEL=info
+EnvironmentFile=/etc/myapp/env   # or load from a file
+
+[Install]
+WantedBy=multi-user.target  # enable = symlink into this target's .wants</code></pre>
+<pre><code>systemctl daemon-reload          # ALWAYS run after editing a unit file
+systemctl enable --now myapp</code></pre>
+<blockquote class="warn"><strong>The two mistakes that make a service "not start after I edited it":</strong> (1) forgetting <code>systemctl daemon-reload</code> — systemd caches units and won't see your edit until you reload; (2) confusing <code>After=</code> (ordering) with <code>Requires=</code>/<code>Wants=</code> (dependency). <code>After=</code> only sequences; it does NOT pull the other unit in. You usually want both an ordering AND a dependency directive.</blockquote>
+
+<h2 id="service-types">Service types</h2>
+<table>
+<tr><th>Type</th><th>Meaning</th></tr>
+<tr><td><code>simple</code></td><td>ExecStart is the main process (default)</td></tr>
+<tr><td><code>exec</code></td><td>like simple, but "started" only once exec() succeeds</td></tr>
+<tr><td><code>forking</code></td><td>the process daemonizes (old-style); set <code>PIDFile=</code></td></tr>
+<tr><td><code>oneshot</code></td><td>runs to completion (a script); pair with <code>RemainAfterExit=yes</code></td></tr>
+<tr><td><code>notify</code></td><td>the service tells systemd when it's truly ready (sd_notify)</td></tr>
+</table>
+<blockquote class="tip">Prefer <code>Type=notify</code> or <code>Type=exec</code> for your own daemons over <code>forking</code> — systemd tracks the process directly instead of guessing via a PID file, so <code>Restart=</code> and dependency ordering actually work.</blockquote>
+
+<h2 id="targets-the-runlevel-replacement">Targets: the runlevel replacement</h2>
+<p><span class="level intermediate">Intermediate</span> A target is a synchronization point / unit group. The old numeric runlevels map to targets:</p>
+<pre><code>systemctl get-default                 # graphical.target or multi-user.target
+systemctl set-default multi-user.target   # boot to CLI (no GUI)
+systemctl isolate rescue.target       # switch now (single-user-ish)
+systemctl list-dependencies multi-user.target</code></pre>
+<p><code>multi-user.target</code> ≈ old runlevel 3 (networked, no GUI); <code>graphical.target</code> ≈ runlevel 5. Your service's <code>WantedBy=multi-user.target</code> is what makes <code>enable</code> start it at boot.</p>
+
+<h2 id="timers-cron-but-observable">Timers: cron, but observable</h2>
+<pre><code># backup.timer
+[Timer]
+OnCalendar=*-*-* 02:00:00    # daily at 02:00
+Persistent=true              # if the machine was off, run on next boot
+RandomizedDelaySec=300       # spread load
+[Install]
+WantedBy=timers.target
+# backup.service (Type=oneshot) does the work; the timer triggers it.</code></pre>
+<pre><code>systemctl enable --now backup.timer
+systemctl list-timers            # next/last run for every timer
+journalctl -u backup.service     # the run's output — this is why timers beat cron</code></pre>
+<p>Timers win over cron because the work is a normal service: you get logs in the journal, dependency ordering, resource limits, and <code>Persistent=</code> catch-up — none of which cron offers.</p>
+
+<h2 id="journald-the-logs">journald: the logs</h2>
+<pre><code>journalctl -u myapp              # one service's logs
+journalctl -u myapp -f           # follow (like tail -f)
+journalctl -u myapp --since "1 hour ago" -p err   # time + priority filter
+journalctl -b                    # this boot;  -b -1 = previous boot
+journalctl --disk-usage
+journalctl --vacuum-time=7d      # trim to 7 days</code></pre>
+<p>Anything your service writes to stdout/stderr lands in the journal automatically — you don't need to configure log files. For persistence across reboots, ensure <code>/var/log/journal</code> exists (<code>Storage=persistent</code> in <code>journald.conf</code>).</p>
+
+<h2 id="hardening-a-service-with-sandboxing">Hardening a service with sandboxing</h2>
+<p><span class="level advanced">Advanced</span> systemd can confine a service using the kernel's own facilities — often more cheaply than containers:</p>
+<pre><code>[Service]
+# ... ExecStart etc.
+DynamicUser=yes              # ephemeral user, no account to manage
+NoNewPrivileges=yes          # can't gain privileges via setuid
+ProtectSystem=strict         # / is read-only to this service
+ProtectHome=yes              # /home, /root hidden
+PrivateTmp=yes               # private /tmp
+ReadWritePaths=/var/lib/myapp
+CapabilityBoundingSet=       # drop ALL capabilities
+MemoryMax=512M               # cgroup resource limit
+CPUQuota=50%</code></pre>
+<pre><code>systemd-analyze security myapp.service    # scores your hardening, flags gaps</code></pre>
+<blockquote class="tip"><code>systemd-analyze security</code> gives each service an exposure score and tells you exactly which directives would lock it down further — a concrete, prioritized hardening checklist generated for you.</blockquote>
+
+<h2 id="debugging-a-failed-service">Debugging a failed service</h2>
+<pre><code>systemctl status myapp           # Active: failed (Result: exit-code) — and why
+journalctl -u myapp -e           # jump to the end of its logs
+systemd-analyze blame            # what slowed the boot
+systemd-analyze verify myapp.service   # lint the unit file</code></pre>
+
+<h2 id="common-mistakes">Common mistakes</h2>
+<blockquote class="warn"><ul>
+<li><strong>Editing a unit without <code>daemon-reload</code></strong> — systemd keeps running the old definition.</li>
+<li><strong>Confusing <code>After=</code> with <code>Requires=</code></strong> — ordering is not a dependency; you usually need both.</li>
+<li><strong>Running services as root</strong> when a dedicated <code>User=</code> (or <code>DynamicUser=yes</code>) would do.</li>
+<li><strong>Editing distro-shipped units in <code>/lib/systemd</code></strong> — a package update overwrites them. Override with <code>systemctl edit</code> (drop-in in <code>/etc/systemd/system/*.d/</code>) instead.</li>
+<li><strong>Using <code>Type=forking</code> for a modern app</strong> that doesn't actually fork, so systemd thinks it died.</li>
+<li><strong>Reaching for cron for scheduled jobs</strong> when a timer gives you logs, ordering, and catch-up.</li>
+</ul></blockquote>
+
+<h2 id="exercises">Exercises</h2>
+<ul>
+<li>Write a <code>.service</code> for a simple script, enable it, crash it on purpose, and confirm <code>Restart=on-failure</code> brings it back (watch with <code>journalctl -f</code>).</li>
+<li>Create a <code>.timer</code> + <code>oneshot</code> service that runs every 2 minutes, then inspect it with <code>systemctl list-timers</code> and read a run's output in the journal.</li>
+<li>Use <code>systemctl edit</code> to add a drop-in override that changes an environment variable on an existing service, without touching the original unit.</li>
+<li>Harden your service with <code>ProtectSystem</code>, <code>PrivateTmp</code>, <code>NoNewPrivileges</code>, and a <code>MemoryMax</code>, then run <code>systemd-analyze security</code> and improve the score.</li>
+<li>Change the default target to <code>multi-user.target</code>, reboot (in a VM), and confirm no GUI starts; then switch back.</li>
+</ul>
+
+<h2 id="mini-project">Mini-project</h2>
+<p>Package a small web app as a production-grade systemd service: a <code>.service</code> with a dedicated <code>DynamicUser</code>, <code>Restart=on-failure</code>, an <code>EnvironmentFile</code> for config, full sandboxing (<code>ProtectSystem=strict</code>, <code>PrivateTmp</code>, dropped capabilities, <code>ReadWritePaths</code> for its data dir) and cgroup limits (<code>MemoryMax</code>, <code>CPUQuota</code>). Add a <code>.timer</code> + <code>oneshot</code> companion that backs up its data nightly with <code>Persistent=true</code>, verify everything through <code>journalctl</code>, score it with <code>systemd-analyze security</code>, and write the override as a drop-in so a package update can't clobber it.</p>
+
+<section class="further"><h2 id="further-reading">Further reading</h2>
+<p>Official documentation for the tools and APIs covered on this page:</p>
+<ul class="further-list"><li><a href="https://man7.org/linux/man-pages/man5/systemd.unit.5.html" target="_blank" rel="noopener">systemd.unit (man) ↗</a></li>
+<li><a href="https://man7.org/linux/man-pages/man5/systemd.service.5.html" target="_blank" rel="noopener">systemd.service (man) ↗</a></li>
+<li><a href="https://man7.org/linux/man-pages/man1/journalctl.1.html" target="_blank" rel="noopener">journalctl (man) ↗</a></li></ul></section>
+  <nav class="pager">
+<a class="prev" href="containers-and-namespaces.html"><small>Previous</small>🐧 Containers &amp; Namespaces</a>
+<a class="next" href="networking-deep-dive.html"><small>Next</small>🐧 Networking Deep Dive</a>
+  </nav>
+</main>
+<button type="button" class="fab top" id="fab-top" aria-label="Back to top">↑ Top</button>
+<div class="banner" id="update-banner" role="status">A new version is available.<button type="button">Reload</button></div>
+<div class="banner" id="offline-banner" role="status">You're offline — showing cached lessons.</div>
+<script src="../app.js" defer></script>
+</body>
+</html>

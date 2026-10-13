@@ -193,6 +193,48 @@ export const SECTIONS = [
           ref("Standard Go Project Layout (community)", "https://github.com/golang-standards/project-layout"),
         ],
       },
+      {
+        slug: "concurrency-patterns",
+        title: "Concurrency Patterns",
+        blurb: "Beyond go + channels: worker pools, fan-in/fan-out, pipelines, context cancellation, errgroup, rate limiting, and detecting leaks with the race detector.",
+        further: [
+          ref("Go Concurrency Patterns (blog)", "https://go.dev/blog/pipelines"),
+          ref("golang.org/x/sync/errgroup", "https://pkg.go.dev/golang.org/x/sync/errgroup"),
+          ref("Share Memory By Communicating", "https://go.dev/blog/codelab-share"),
+          ref("Data Race Detector", "https://go.dev/doc/articles/race_detector"),
+        ],
+      },
+      {
+        slug: "reflection-and-struct-tags",
+        title: "Reflection & Struct Tags",
+        blurb: "How encoding/json works: reflect.Type/Value, reading struct tags, writing a generic validator, and the heavy cost that makes reflection a last resort.",
+        further: [
+          ref("The Laws of Reflection", "https://go.dev/blog/laws-of-reflection"),
+          ref("reflect package", "https://pkg.go.dev/reflect"),
+          ref("Struct tags (spec)", "https://pkg.go.dev/reflect#StructTag"),
+        ],
+      },
+      {
+        slug: "modules-advanced",
+        title: "Modules: Advanced",
+        blurb: "replace & exclude directives, vendoring, private modules with GOPRIVATE, version selection & go.sum, major-version suffixes, and publishing a module.",
+        further: [
+          ref("Go Modules Reference", "https://go.dev/ref/mod"),
+          ref("Publishing a module", "https://go.dev/doc/modules/publishing"),
+          ref("Private modules (GOPRIVATE)", "https://go.dev/ref/mod#private-modules"),
+          ref("Module version numbering", "https://go.dev/doc/modules/version-numbers"),
+        ],
+      },
+      {
+        slug: "grpc-and-protobuf",
+        title: "gRPC & Protocol Buffers",
+        blurb: "Defining services in .proto, generating Go code with protoc, implementing a server & client, the four RPC types, interceptors, and gRPC vs REST.",
+        further: [
+          ref("gRPC Go quick start", "https://grpc.io/docs/languages/go/quickstart/"),
+          ref("Protocol Buffers (proto3)", "https://protobuf.dev/programming-guides/proto3/"),
+          ref("google.golang.org/grpc", "https://pkg.go.dev/google.golang.org/grpc"),
+        ],
+      },
     ],
   },
 
@@ -758,6 +800,47 @@ export const SECTIONS = [
           ref("namespaces (man)", "https://man7.org/linux/man-pages/man7/namespaces.7.html"),
           ref("cgroups (man)", "https://man7.org/linux/man-pages/man7/cgroups.7.html"),
           ref("unshare (man)", "https://man7.org/linux/man-pages/man1/unshare.1.html"),
+        ],
+      },
+      {
+        slug: "systemd-deep-dive",
+        title: "systemd Deep Dive",
+        blurb: "Units & unit files, targets vs runlevels, dependencies & ordering, timers, journald, resource control with cgroups, and writing a hardened service.",
+        further: [
+          ref("systemd.unit (man)", "https://man7.org/linux/man-pages/man5/systemd.unit.5.html"),
+          ref("systemd.service (man)", "https://man7.org/linux/man-pages/man5/systemd.service.5.html"),
+          ref("journalctl (man)", "https://man7.org/linux/man-pages/man1/journalctl.1.html"),
+        ],
+      },
+      {
+        slug: "networking-deep-dive",
+        title: "Networking Deep Dive",
+        blurb: "The packet's journey: ip/routing tables, the DNS resolution path, nftables/iptables firewalls, NAT, sockets with ss, and tracing with tcpdump.",
+        further: [
+          ref("ip (man)", "https://man7.org/linux/man-pages/man8/ip.8.html"),
+          ref("nftables wiki", "https://wiki.nftables.org/wiki-nftables/index.php/Main_Page"),
+          ref("ss (man)", "https://man7.org/linux/man-pages/man8/ss.8.html"),
+          ref("Beej's Guide to Network Programming", "https://beej.us/guide/bgnet/"),
+        ],
+      },
+      {
+        slug: "security-hardening",
+        title: "Security Hardening",
+        blurb: "Reducing attack surface: SSH hardening, firewalls (ufw/nftables), SELinux vs AppArmor, fail2ban, auditd, automatic updates, and a hardening checklist.",
+        further: [
+          ref("OpenSSH server config (man)", "https://man7.org/linux/man-pages/man5/sshd_config.5.html"),
+          ref("SELinux project wiki", "https://github.com/SELinuxProject/selinux/wiki"),
+          ref("CIS Benchmarks", "https://www.cisecurity.org/cis-benchmarks"),
+        ],
+      },
+      {
+        slug: "kernel-and-boot",
+        title: "The Kernel & Boot Process",
+        blurb: "From power-on to login: firmware/UEFI, GRUB, initramfs, the kernel & init handoff, kernel modules (lsmod/modprobe), and tuning with sysctl.",
+        further: [
+          ref("The Linux Boot Process (kernel docs)", "https://docs.kernel.org/admin-guide/init.html"),
+          ref("GRUB manual", "https://www.gnu.org/software/grub/manual/grub/grub.html"),
+          ref("sysctl (man)", "https://man7.org/linux/man-pages/man8/sysctl.8.html"),
         ],
       },
     ],

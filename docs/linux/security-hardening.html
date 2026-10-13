@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en" data-base="../">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0d1117">
+<title>Security Hardening — Linux</title>
+<meta name="description" content="Reducing attack surface: SSH hardening, firewalls (ufw/nftables), SELinux vs AppArmor, fail2ban, auditd, automatic updates, and a hardening checklist.">
+<link rel="canonical" href="https://danegigi.github.io/Tutorials/linux/security-hardening.html">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Dev Tutorials">
+<meta property="og:title" content="Security Hardening — Linux">
+<meta property="og:description" content="Reducing attack surface: SSH hardening, firewalls (ufw/nftables), SELinux vs AppArmor, fail2ban, auditd, automatic updates, and a hardening checklist.">
+<meta property="og:url" content="https://danegigi.github.io/Tutorials/linux/security-hardening.html">
+<meta property="og:image" content="https://danegigi.github.io/Tutorials/icon-512.png">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Security Hardening — Linux">
+<meta name="twitter:description" content="Reducing attack surface: SSH hardening, firewalls (ufw/nftables), SELinux vs AppArmor, fail2ban, auditd, automatic updates, and a hardening checklist.">
+<meta name="twitter:image" content="https://danegigi.github.io/Tutorials/icon-512.png">
+<link rel="manifest" href="../manifest.webmanifest">
+<link rel="icon" href="../icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="../icon-192.png">
+<link rel="stylesheet" href="../app.css">
+<script>/* set theme before paint to avoid flash */(function(){try{var t=localStorage.getItem('tut.theme');document.documentElement.setAttribute('data-theme',t||'dark');}catch(e){document.documentElement.setAttribute('data-theme','dark');}})();</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"LearningResource","name":"Security Hardening","description":"Reducing attack surface: SSH hardening, firewalls (ufw/nftables), SELinux vs AppArmor, fail2ban, auditd, automatic updates, and a hardening checklist.","url":"https://danegigi.github.io/Tutorials/linux/security-hardening.html","inLanguage":"en","isPartOf":{"@type":"Course","name":"Linux — Dev Tutorials","url":"https://danegigi.github.io/Tutorials/linux/"},"learningResourceType":"Tutorial"},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Dev Tutorials","item":"https://danegigi.github.io/Tutorials/"},{"@type":"ListItem","position":2,"name":"Linux","item":"https://danegigi.github.io/Tutorials/linux/"},{"@type":"ListItem","position":3,"name":"Security Hardening","item":"https://danegigi.github.io/Tutorials/linux/security-hardening.html"}]}]}</script>
+
+</head>
+<body class="lesson">
+<header class="nav">
+  <a class="brand" href="../index.html">📚 Dev Tutorials</a>
+  <span class="crumb">Security Hardening — Linux</span>
+  <span class="spacer"></span>
+  <a class="navbtn" href="../search.html">🔎 Search</a>
+  <button class="navbtn" id="install-btn" type="button">⬇️ Install</button>
+  <button class="navbtn" id="theme-btn" type="button" aria-label="Toggle theme">🌙 Dark</button>
+</header>
+<main class="wrap lesson-body">
+  <h1 class="page-title">Security Hardening</h1>
+  <div class="lesson-tools" data-lesson-id="linux/security-hardening">
+    <button id="done-btn" type="button" aria-pressed="false">○ Mark complete</button>
+    <button id="mark-btn" type="button" aria-pressed="false">☆ Bookmark</button>
+    <a class="navbtn" href="index.html" style="margin-left:auto">All Linux lessons →</a>
+  </div>
+<nav class="toc" aria-label="On this page"><strong>On this page</strong><ul>
+<li class="lvl2"><a href="#the-principle-reduce-attack-surface">The principle: reduce attack surface</a></li>
+<li class="lvl2"><a href="#harden-ssh-first-its-the-front-door">Harden SSH first — it's the front door</a></li>
+<li class="lvl2"><a href="#close-ports-with-a-firewall">Close ports with a firewall</a></li>
+<li class="lvl2"><a href="#keep-it-patched-automatically">Keep it patched — automatically</a></li>
+<li class="lvl2"><a href="#mandatory-access-control-selinux-vs-apparmor">Mandatory Access Control: SELinux vs AppArmor</a></li>
+<li class="lvl2"><a href="#catch-brute-force-with-fail2ban">Catch brute-force with fail2ban</a></li>
+<li class="lvl2"><a href="#audit-what-happens-auditd">Audit what happens: auditd</a></li>
+<li class="lvl2"><a href="#accounts-sudo-and-least-privilege">Accounts, sudo, and least privilege</a></li>
+<li class="lvl2"><a href="#measure-yourself">Measure yourself</a></li>
+<li class="lvl2"><a href="#common-mistakes">Common mistakes</a></li>
+<li class="lvl2"><a href="#exercises">Exercises</a></li>
+<li class="lvl2"><a href="#mini-project">Mini-project</a></li>
+</ul></nav>
+<p class="lead">A fresh Linux server is reachable, running services, and trusting defaults — which is exactly what an attacker counts on. Hardening is the disciplined reduction of that attack surface: lock down SSH, close ports with a firewall, enforce mandatory access control, catch brute-force attempts, keep patched, and audit what happened. This lesson is a practical, ordered checklist with the commands.</p>
+
+<h2 id="the-principle-reduce-attack-surface">The principle: reduce attack surface</h2>
+<p><span class="level beginner">Beginner</span> Every open port, running service, privileged account, and default credential is surface. Hardening asks three questions of each: <em>is it needed?</em> (if not, remove it), <em>is it exposed?</em> (if not necessary, firewall it), and <em>is it least-privilege?</em> (drop root, drop capabilities). Defense in depth means no single control is your only line.</p>
+
+<h2 id="harden-ssh-first-its-the-front-door">Harden SSH first — it's the front door</h2>
+<pre><code># /etc/ssh/sshd_config  (or a drop-in in /etc/ssh/sshd_config.d/)
+PermitRootLogin no               # never log in as root directly
+PasswordAuthentication no        # keys only — kills password brute-force
+PubkeyAuthentication yes
+AllowUsers deploy admin          # explicit allowlist
+MaxAuthTries 3
+X11Forwarding no
+# then: sshd -t  (test config)  &amp;&amp;  systemctl reload ssh</code></pre>
+<blockquote class="warn"><strong>Never disable password auth before you've confirmed key login works</strong> — open a SECOND SSH session, verify your key logs in, and only then <code>reload ssh</code>. Keep that second session open until you've reconnected fresh. Locking yourself out of a remote box with no console is the single most common hardening disaster.</blockquote>
+
+<h2 id="close-ports-with-a-firewall">Close ports with a firewall</h2>
+<pre><code># Ubuntu (ufw) — simplest correct default
+ufw default deny incoming
+ufw default allow outgoing
+ufw limit 22/tcp                 # 'limit' rate-limits SSH (anti-brute-force)
+ufw allow 80,443/tcp
+ufw enable
+ufw status verbose</code></pre>
+<p>Deny-by-default inbound is the goal: only the ports you explicitly allow are reachable. <code>ufw limit</code> throttles repeated SSH connections automatically. (firewalld's equivalent is zones + <code>firewall-cmd</code>.)</p>
+
+<h2 id="keep-it-patched-automatically">Keep it patched — automatically</h2>
+<pre><code># Debian/Ubuntu: unattended security upgrades
+apt install unattended-upgrades
+dpkg-reconfigure -plow unattended-upgrades
+# RHEL/Fedora:
+dnf install dnf-automatic &amp;&amp; systemctl enable --now dnf-automatic.timer</code></pre>
+<blockquote class="tip">Most breaches exploit <em>known</em> vulnerabilities with available patches. Automatic security updates close that window with near-zero effort — the highest return-on-effort hardening step after SSH keys. Reserve manual control for kernel/reboot-requiring updates.</blockquote>
+
+<h2 id="mandatory-access-control-selinux-vs-apparmor">Mandatory Access Control: SELinux vs AppArmor</h2>
+<p><span class="level advanced">Advanced</span> Beyond file permissions, MAC confines what a process <em>can</em> do even if compromised — a hacked web server can't read <code>/etc/shadow</code> if policy forbids it.</p>
+<table>
+<tr><th></th><th>SELinux (RHEL/Fedora)</th><th>AppArmor (Ubuntu/SUSE)</th></tr>
+<tr><td>Model</td><td>labels on every object</td><td>path-based profiles</td></tr>
+<tr><td>Check mode</td><td><code>getenforce</code></td><td><code>aa-status</code></td></tr>
+<tr><td>Diagnose</td><td><code>ausearch -m avc</code>, <code>audit2why</code></td><td><code>dmesg | grep DENIED</code></td></tr>
+</table>
+<pre><code>getenforce                       # Enforcing | Permissive | Disabled
+setenforce 0                     # TEMP permissive to test (not a fix!)
+# SELinux: when something is "mysteriously" denied, check AVC denials:
+ausearch -m avc -ts recent
+# AppArmor:
+aa-status; aa-complain /etc/apparmor.d/usr.sbin.myapp</code></pre>
+<blockquote class="warn"><strong>Do NOT "fix" an SELinux/AppArmor problem by disabling it.</strong> A permanent <code>setenforce 0</code> or <code>SELINUX=disabled</code> throws away a whole security layer. The right move is to read the denial (<code>ausearch</code>/<code>audit2why</code> or <code>dmesg</code>) and either set the correct label/boolean or adjust the profile. Disabling MAC is the hardening equivalent of unplugging the smoke detector.</blockquote>
+
+<h2 id="catch-brute-force-with-fail2ban">Catch brute-force with fail2ban</h2>
+<pre><code>apt install fail2ban
+# /etc/fail2ban/jail.local
+[sshd]
+enabled = true
+maxretry = 4
+bantime = 1h
+findtime = 10m
+# fail2ban watches logs and bans IPs via the firewall after N failures.
+fail2ban-client status sshd       # banned IPs, counts</code></pre>
+
+<h2 id="audit-what-happens-auditd">Audit what happens: auditd</h2>
+<pre><code>apt install auditd
+# watch a sensitive file for any access:
+auditctl -w /etc/shadow -p rwa -k shadow-watch
+ausearch -k shadow-watch          # who touched it, when
+# auditd gives you a tamper-evident record for forensics &amp; compliance.</code></pre>
+
+<h2 id="accounts-sudo-and-least-privilege">Accounts, sudo, and least privilege</h2>
+<ul>
+<li>No shared accounts — one login per person, so <code>auth.log</code> attributes actions.</li>
+<li>Grant specific sudo rights, not blanket <code>ALL</code>; use <code>visudo</code> and prefer group-based rules.</li>
+<li>Disable or lock unused system accounts; set <code>nologin</code> shells for service accounts.</li>
+<li>Enforce password/key policy; consider MFA (e.g. <code>pam_google_authenticator</code>) for SSH.</li>
+</ul>
+
+<h2 id="measure-yourself">Measure yourself</h2>
+<pre><code># Lynis — a free hardening auditor that scores the host and lists fixes
+apt install lynis &amp;&amp; lynis audit system
+# Or map against the CIS Benchmark for your distro.</code></pre>
+
+<h2 id="common-mistakes">Common mistakes</h2>
+<blockquote class="warn"><ul>
+<li><strong>Disabling password auth or enabling the firewall before verifying your way back in</strong> — lockout. Always keep a second verified session open.</li>
+<li><strong>Disabling SELinux/AppArmor</strong> to make an error go away instead of reading and fixing the denial.</li>
+<li><strong>Leaving default-allow inbound</strong> — a firewall that permits everything protects nothing.</li>
+<li><strong>Running services as root</strong> and skipping MAC, so one bug is total compromise.</li>
+<li><strong>No automatic patching</strong>, leaving known CVEs open for weeks.</li>
+<li><strong>Treating hardening as one-time</strong> — new services add surface; re-audit (Lynis/CIS) periodically.</li>
+</ul></blockquote>
+
+<h2 id="exercises">Exercises</h2>
+<ul>
+<li>Harden sshd (no root, keys only, allowlist) safely using a second session, and confirm password login is refused.</li>
+<li>Set a deny-by-default ufw/firewalld policy allowing only SSH + HTTP(S), with SSH rate-limited, and verify with a port scan from another host.</li>
+<li>Trigger an SELinux or AppArmor denial on purpose (e.g. a service reading an unlabeled path), then diagnose it with <code>ausearch</code>/<code>dmesg</code> and fix it <em>without</em> disabling MAC.</li>
+<li>Install fail2ban, fail several SSH logins from a test IP, and confirm the ban with <code>fail2ban-client status sshd</code>.</li>
+<li>Run <code>lynis audit system</code>, pick the three highest-value suggestions, apply them, and re-run to see the score move.</li>
+</ul>
+
+<h2 id="mini-project">Mini-project</h2>
+<p>Take a fresh VM from default to hardened and document every step as a repeatable runbook: key-only SSH (no root, allowlist, rate-limited) verified without lockout, deny-by-default firewall with only required ports, unattended security updates, MAC left <em>enforcing</em> with one real denial diagnosed and fixed properly, fail2ban on SSH, auditd watching <code>/etc/shadow</code> and <code>/etc/passwd</code>, and least-privilege sudo. Finish by running Lynis before and after, recording the score improvement, and listing which CIS Benchmark items you satisfied.</p>
+
+<section class="further"><h2 id="further-reading">Further reading</h2>
+<p>Official documentation for the tools and APIs covered on this page:</p>
+<ul class="further-list"><li><a href="https://man7.org/linux/man-pages/man5/sshd_config.5.html" target="_blank" rel="noopener">OpenSSH server config (man) ↗</a></li>
+<li><a href="https://github.com/SELinuxProject/selinux/wiki" target="_blank" rel="noopener">SELinux project wiki ↗</a></li>
+<li><a href="https://www.cisecurity.org/cis-benchmarks" target="_blank" rel="noopener">CIS Benchmarks ↗</a></li></ul></section>
+  <nav class="pager">
+<a class="prev" href="networking-deep-dive.html"><small>Previous</small>🐧 Networking Deep Dive</a>
+<a class="next" href="kernel-and-boot.html"><small>Next</small>🐧 The Kernel &amp; Boot Process</a>
+  </nav>
+</main>
+<button type="button" class="fab top" id="fab-top" aria-label="Back to top">↑ Top</button>
+<div class="banner" id="update-banner" role="status">A new version is available.<button type="button">Reload</button></div>
+<div class="banner" id="offline-banner" role="status">You're offline — showing cached lessons.</div>
+<script src="../app.js" defer></script>
+</body>
+</html>

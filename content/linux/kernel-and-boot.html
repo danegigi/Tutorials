@@ -1,0 +1,91 @@
+<p class="lead">Everything your Linux server does rests on a sequence that runs in seconds at power-on: firmware hands off to a bootloader, the bootloader loads the kernel, the kernel mounts the real root filesystem and starts the init system, and only then do your services run. Understanding this chain is what lets you fix a machine that won't boot, load the right driver, and tune the kernel safely.</p>
+
+<h2>The boot sequence, stage by stage</h2>
+<p><span class="level intermediate">Intermediate</span></p>
+<ol>
+<li><strong>Firmware (UEFI or legacy BIOS)</strong> — the motherboard's own code runs first, does POST, and finds a bootloader. UEFI reads an EFI System Partition (ESP, a FAT filesystem at <code>/boot/efi</code>) and a boot entry list; legacy BIOS reads the MBR.</li>
+<li><strong>Bootloader (GRUB)</strong> — presents the menu, loads the selected kernel + its <em>initramfs</em> into memory, and passes a kernel command line.</li>
+<li><strong>Kernel</strong> — initializes hardware, mounts the <em>initramfs</em> as a temporary root, loads just-enough drivers to find the real disk, then pivots to the real root filesystem.</li>
+<li><strong>init (PID 1, systemd)</strong> — the kernel starts <code>/sbin/init</code> (systemd), which brings up the default target and all its services.</li>
+<li><strong>Login</strong> — getty/display manager presents a prompt.</li>
+</ol>
+<pre><code>systemd-analyze              # total boot time: firmware + loader + kernel + userspace
+systemd-analyze blame        # slowest services
+systemd-analyze critical-chain</code></pre>
+
+<h2>GRUB: the bootloader</h2>
+<pre><code># You edit /etc/default/grub, NOT grub.cfg directly:
+GRUB_TIMEOUT=5
+GRUB_CMDLINE_LINUX_DEFAULT="quiet splash"
+# then regenerate the real config:
+update-grub                  # Debian/Ubuntu
+grub2-mkconfig -o /boot/grub2/grub.cfg   # RHEL/Fedora</code></pre>
+<blockquote class="warn"><strong>Never hand-edit <code>/boot/grub/grub.cfg</code></strong> — it's generated and your changes are wiped on the next kernel update. Edit <code>/etc/default/grub</code> (persistent settings) or drop scripts in <code>/etc/grub.d/</code>, then regenerate. At the GRUB menu you can press <code>e</code> to edit the command line for ONE boot — the escape hatch for a broken config.</blockquote>
+
+<h2>The kernel command line</h2>
+<pre><code>cat /proc/cmdline            # what the running kernel was booted with
+# Common one-boot rescue edits (press 'e' in GRUB, append to the linux line):
+#   single        → boot to single-user/rescue
+#   init=/bin/bash → skip init entirely (reset a lost root password)
+#   nomodeset     → disable KMS when a GPU driver breaks the display</code></pre>
+<blockquote class="tip">If a box won't boot after a change, the GRUB <code>e</code>-edit + <code>init=/bin/bash</code> (or <code>systemd.unit=rescue.target</code>) is how you get a shell to undo it. Knowing this turns "unbootable, reinstall" into "five-minute fix."</blockquote>
+
+<h2>initramfs: the chicken-and-egg solver</h2>
+<p>The kernel needs a driver to read the root disk — but the driver often lives <em>on</em> the root disk. The <strong>initramfs</strong> breaks the loop: a small in-memory filesystem with just enough modules (disk controller, LVM, LUKS, filesystem) to mount the real root, then it pivots away.</p>
+<pre><code># rebuild it after changing modules/encryption/root layout:
+update-initramfs -u          # Debian/Ubuntu
+dracut --force               # RHEL/Fedora
+lsinitramfs /boot/initrd.img-$(uname -r) | head   # peek inside</code></pre>
+<blockquote class="warn">A root on LVM, RAID, or an encrypted (LUKS) volume that drops to an <code>(initramfs)</code> prompt at boot usually means the initramfs is missing the needed module — rebuild it with the device present, don't just reinstall the kernel.</blockquote>
+
+<h2>Kernel modules: drivers you can load</h2>
+<p><span class="level intermediate">Intermediate</span> The kernel is modular — most drivers load on demand rather than being compiled in.</p>
+<pre><code>lsmod                        # loaded modules
+modinfo e1000e               # details, parameters, dependencies of a module
+modprobe wireguard           # load a module (and its dependencies)
+modprobe -r pcspkr           # unload (e.g. silence the beep)
+# persist a load across reboots:
+echo wireguard &gt; /etc/modules-load.d/wireguard.conf
+# blacklist a misbehaving driver:
+echo "blacklist nouveau" &gt; /etc/modprobe.d/blacklist-nouveau.conf</code></pre>
+
+<h2>sysctl: tuning the running kernel</h2>
+<p><span class="level advanced">Advanced</span> Hundreds of kernel knobs live under <code>/proc/sys</code> and are read/written with <code>sysctl</code>.</p>
+<pre><code>sysctl -a | grep somaxconn           # inspect
+sysctl net.ipv4.ip_forward           # read one
+sysctl -w net.ipv4.ip_forward=1      # set NOW (not persistent)
+# persist in /etc/sysctl.d/99-custom.conf:
+#   net.core.somaxconn = 1024
+#   vm.swappiness = 10
+#   net.ipv4.tcp_syncookies = 1
+sysctl --system                      # reload all drop-in files</code></pre>
+<blockquote class="tip">Common production tunables: raise <code>net.core.somaxconn</code> and <code>net.ipv4.tcp_max_syn_backlog</code> for high-connection servers, lower <code>vm.swappiness</code> so the box prefers reclaiming cache over swapping, and enable <code>net.ipv4.ip_forward</code> on routers. Set them in <code>/etc/sysctl.d/</code>, never only with <code>-w</code> (which doesn't survive reboot).</blockquote>
+
+<h2>Kernels installed, running, and switching</h2>
+<pre><code>uname -r                     # the RUNNING kernel version
+ls /boot/vmlinuz-*           # installed kernels (GRUB lists each)
+dpkg --list | grep linux-image   # Debian/Ubuntu packages
+# Multiple kernels let you boot the previous one from GRUB's "Advanced options"
+# if a new kernel breaks a driver — a built-in rollback.</code></pre>
+
+<h2>Common mistakes</h2>
+<blockquote class="warn"><ul>
+<li><strong>Hand-editing <code>grub.cfg</code></strong> — it's regenerated; edit <code>/etc/default/grub</code> + <code>update-grub</code>.</li>
+<li><strong>Setting sysctl only with <code>-w</code></strong> and wondering why it's gone after reboot — persist in <code>/etc/sysctl.d/</code>.</li>
+<li><strong>Not rebuilding the initramfs</strong> after changing root encryption/LVM/RAID, then dropping to an initramfs prompt.</li>
+<li><strong>Removing all old kernels</strong>, so there's nothing to boot into when a new one breaks.</li>
+<li><strong>Panicking at an unbootable system</strong> instead of using the GRUB <code>e</code>-edit / rescue target to get a shell.</li>
+<li><strong>Blacklisting the wrong module</strong> or compiling-in vs loading confusion — check with <code>lsmod</code>/<code>modinfo</code> first.</li>
+</ul></blockquote>
+
+<h2>Exercises</h2>
+<ul>
+<li>Run <code>systemd-analyze</code> and <code>systemd-analyze blame</code>; identify the slowest part of your boot.</li>
+<li>Read <code>/proc/cmdline</code>, then (in a VM) use the GRUB <code>e</code>-edit to boot into <code>rescue.target</code> for one boot.</li>
+<li>Load and unload a kernel module with <code>modprobe</code>, inspect it with <code>modinfo</code>, and make the load persistent.</li>
+<li>Set <code>vm.swappiness</code> with <code>sysctl -w</code>, confirm it, then make it persistent in <code>/etc/sysctl.d/</code> and reload with <code>sysctl --system</code>.</li>
+<li>In a VM, practice the lost-root-password recovery: boot with <code>init=/bin/bash</code>, remount root read-write, reset the password, and reboot.</li>
+</ul>
+
+<h2>Mini-project</h2>
+<p>Document the complete boot chain of one machine end to end, with evidence at each stage: identify UEFI vs BIOS and locate the ESP; capture the GRUB config and kernel command line; list what's in the initramfs and explain why each module is there (especially if root is on LVM/LUKS); record the running kernel and the installed alternatives; and apply a small set of justified sysctl tunables persistently. Then deliberately break the boot in a VM (a bad GRUB cmdline), recover it with the GRUB <code>e</code>-edit, and write the recovery steps as a runbook you could follow at 3 a.m.</p>

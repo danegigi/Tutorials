@@ -1,0 +1,102 @@
+<p class="lead">A fresh Linux server is reachable, running services, and trusting defaults — which is exactly what an attacker counts on. Hardening is the disciplined reduction of that attack surface: lock down SSH, close ports with a firewall, enforce mandatory access control, catch brute-force attempts, keep patched, and audit what happened. This lesson is a practical, ordered checklist with the commands.</p>
+
+<h2>The principle: reduce attack surface</h2>
+<p><span class="level beginner">Beginner</span> Every open port, running service, privileged account, and default credential is surface. Hardening asks three questions of each: <em>is it needed?</em> (if not, remove it), <em>is it exposed?</em> (if not necessary, firewall it), and <em>is it least-privilege?</em> (drop root, drop capabilities). Defense in depth means no single control is your only line.</p>
+
+<h2>Harden SSH first — it's the front door</h2>
+<pre><code># /etc/ssh/sshd_config  (or a drop-in in /etc/ssh/sshd_config.d/)
+PermitRootLogin no               # never log in as root directly
+PasswordAuthentication no        # keys only — kills password brute-force
+PubkeyAuthentication yes
+AllowUsers deploy admin          # explicit allowlist
+MaxAuthTries 3
+X11Forwarding no
+# then: sshd -t  (test config)  &amp;&amp;  systemctl reload ssh</code></pre>
+<blockquote class="warn"><strong>Never disable password auth before you've confirmed key login works</strong> — open a SECOND SSH session, verify your key logs in, and only then <code>reload ssh</code>. Keep that second session open until you've reconnected fresh. Locking yourself out of a remote box with no console is the single most common hardening disaster.</blockquote>
+
+<h2>Close ports with a firewall</h2>
+<pre><code># Ubuntu (ufw) — simplest correct default
+ufw default deny incoming
+ufw default allow outgoing
+ufw limit 22/tcp                 # 'limit' rate-limits SSH (anti-brute-force)
+ufw allow 80,443/tcp
+ufw enable
+ufw status verbose</code></pre>
+<p>Deny-by-default inbound is the goal: only the ports you explicitly allow are reachable. <code>ufw limit</code> throttles repeated SSH connections automatically. (firewalld's equivalent is zones + <code>firewall-cmd</code>.)</p>
+
+<h2>Keep it patched — automatically</h2>
+<pre><code># Debian/Ubuntu: unattended security upgrades
+apt install unattended-upgrades
+dpkg-reconfigure -plow unattended-upgrades
+# RHEL/Fedora:
+dnf install dnf-automatic &amp;&amp; systemctl enable --now dnf-automatic.timer</code></pre>
+<blockquote class="tip">Most breaches exploit <em>known</em> vulnerabilities with available patches. Automatic security updates close that window with near-zero effort — the highest return-on-effort hardening step after SSH keys. Reserve manual control for kernel/reboot-requiring updates.</blockquote>
+
+<h2>Mandatory Access Control: SELinux vs AppArmor</h2>
+<p><span class="level advanced">Advanced</span> Beyond file permissions, MAC confines what a process <em>can</em> do even if compromised — a hacked web server can't read <code>/etc/shadow</code> if policy forbids it.</p>
+<table>
+<tr><th></th><th>SELinux (RHEL/Fedora)</th><th>AppArmor (Ubuntu/SUSE)</th></tr>
+<tr><td>Model</td><td>labels on every object</td><td>path-based profiles</td></tr>
+<tr><td>Check mode</td><td><code>getenforce</code></td><td><code>aa-status</code></td></tr>
+<tr><td>Diagnose</td><td><code>ausearch -m avc</code>, <code>audit2why</code></td><td><code>dmesg | grep DENIED</code></td></tr>
+</table>
+<pre><code>getenforce                       # Enforcing | Permissive | Disabled
+setenforce 0                     # TEMP permissive to test (not a fix!)
+# SELinux: when something is "mysteriously" denied, check AVC denials:
+ausearch -m avc -ts recent
+# AppArmor:
+aa-status; aa-complain /etc/apparmor.d/usr.sbin.myapp</code></pre>
+<blockquote class="warn"><strong>Do NOT "fix" an SELinux/AppArmor problem by disabling it.</strong> A permanent <code>setenforce 0</code> or <code>SELINUX=disabled</code> throws away a whole security layer. The right move is to read the denial (<code>ausearch</code>/<code>audit2why</code> or <code>dmesg</code>) and either set the correct label/boolean or adjust the profile. Disabling MAC is the hardening equivalent of unplugging the smoke detector.</blockquote>
+
+<h2>Catch brute-force with fail2ban</h2>
+<pre><code>apt install fail2ban
+# /etc/fail2ban/jail.local
+[sshd]
+enabled = true
+maxretry = 4
+bantime = 1h
+findtime = 10m
+# fail2ban watches logs and bans IPs via the firewall after N failures.
+fail2ban-client status sshd       # banned IPs, counts</code></pre>
+
+<h2>Audit what happens: auditd</h2>
+<pre><code>apt install auditd
+# watch a sensitive file for any access:
+auditctl -w /etc/shadow -p rwa -k shadow-watch
+ausearch -k shadow-watch          # who touched it, when
+# auditd gives you a tamper-evident record for forensics &amp; compliance.</code></pre>
+
+<h2>Accounts, sudo, and least privilege</h2>
+<ul>
+<li>No shared accounts — one login per person, so <code>auth.log</code> attributes actions.</li>
+<li>Grant specific sudo rights, not blanket <code>ALL</code>; use <code>visudo</code> and prefer group-based rules.</li>
+<li>Disable or lock unused system accounts; set <code>nologin</code> shells for service accounts.</li>
+<li>Enforce password/key policy; consider MFA (e.g. <code>pam_google_authenticator</code>) for SSH.</li>
+</ul>
+
+<h2>Measure yourself</h2>
+<pre><code># Lynis — a free hardening auditor that scores the host and lists fixes
+apt install lynis &amp;&amp; lynis audit system
+# Or map against the CIS Benchmark for your distro.</code></pre>
+
+<h2>Common mistakes</h2>
+<blockquote class="warn"><ul>
+<li><strong>Disabling password auth or enabling the firewall before verifying your way back in</strong> — lockout. Always keep a second verified session open.</li>
+<li><strong>Disabling SELinux/AppArmor</strong> to make an error go away instead of reading and fixing the denial.</li>
+<li><strong>Leaving default-allow inbound</strong> — a firewall that permits everything protects nothing.</li>
+<li><strong>Running services as root</strong> and skipping MAC, so one bug is total compromise.</li>
+<li><strong>No automatic patching</strong>, leaving known CVEs open for weeks.</li>
+<li><strong>Treating hardening as one-time</strong> — new services add surface; re-audit (Lynis/CIS) periodically.</li>
+</ul></blockquote>
+
+<h2>Exercises</h2>
+<ul>
+<li>Harden sshd (no root, keys only, allowlist) safely using a second session, and confirm password login is refused.</li>
+<li>Set a deny-by-default ufw/firewalld policy allowing only SSH + HTTP(S), with SSH rate-limited, and verify with a port scan from another host.</li>
+<li>Trigger an SELinux or AppArmor denial on purpose (e.g. a service reading an unlabeled path), then diagnose it with <code>ausearch</code>/<code>dmesg</code> and fix it <em>without</em> disabling MAC.</li>
+<li>Install fail2ban, fail several SSH logins from a test IP, and confirm the ban with <code>fail2ban-client status sshd</code>.</li>
+<li>Run <code>lynis audit system</code>, pick the three highest-value suggestions, apply them, and re-run to see the score move.</li>
+</ul>
+
+<h2>Mini-project</h2>
+<p>Take a fresh VM from default to hardened and document every step as a repeatable runbook: key-only SSH (no root, allowlist, rate-limited) verified without lockout, deny-by-default firewall with only required ports, unattended security updates, MAC left <em>enforcing</em> with one real denial diagnosed and fixed properly, fail2ban on SSH, auditd watching <code>/etc/shadow</code> and <code>/etc/passwd</code>, and least-privilege sudo. Finish by running Lynis before and after, recording the score improvement, and listing which CIS Benchmark items you satisfied.</p>

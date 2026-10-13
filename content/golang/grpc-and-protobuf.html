@@ -1,0 +1,123 @@
+<p class="lead">gRPC is a high-performance RPC framework: you define your service and messages once in a <code>.proto</code> file, generate strongly-typed Go client and server code from it, and communicate over HTTP/2 with compact binary Protocol Buffers instead of JSON. This lesson takes you from a schema to a running server and client, through the four call types, to interceptors — and when gRPC beats REST.</p>
+
+<h2>Why gRPC exists</h2>
+<p><span class="level intermediate">Intermediate</span> REST+JSON is universal but loose: the contract lives in docs, every service re-parses text, and there's no streaming built in. gRPC trades universality for rigor — a single schema generates matching code on both ends, Protobuf is smaller and faster to encode than JSON, and HTTP/2 gives you multiplexing and bidirectional streaming for free. The cost: it's not browser-native (needs gRPC-Web/a proxy) and the payloads aren't human-readable.</p>
+
+<h2>The schema: .proto</h2>
+<pre><code>// greet/greet.proto
+syntax = "proto3";
+package greet;
+option go_package = "github.com/me/app/greet;greetpb";
+
+service Greeter {
+  rpc SayHello(HelloRequest) returns (HelloReply);
+}
+
+message HelloRequest {
+  string name = 1;      // the number is the field's wire tag — NEVER reuse or renumber
+}
+message HelloReply {
+  string message = 1;
+}</code></pre>
+<blockquote class="warn"><strong>Field numbers are the contract, not the names.</strong> Protobuf encodes field 1, field 2… by number. You may rename a field freely, but changing or reusing a number breaks every peer that was built against the old schema. To remove a field, mark it <code>reserved</code> so the number can't be accidentally recycled.</blockquote>
+
+<h2>Generate the Go code</h2>
+<pre><code># one-time: install the plugins
+go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
+go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
+
+protoc --go_out=. --go_opt=paths=source_relative \
+       --go-grpc_out=. --go-grpc_opt=paths=source_relative \
+       greet/greet.proto
+# produces greet.pb.go (messages) and greet_grpc.pb.go (client + server interfaces)</code></pre>
+<blockquote class="tip">Most teams drive this with <strong>buf</strong> (<code>buf generate</code>) instead of raw <code>protoc</code> — it manages plugin versions, lints the schema, and detects breaking changes in CI. Learn <code>protoc</code> once to understand it, then switch to buf for real projects.</blockquote>
+
+<h2>Implement the server</h2>
+<pre><code>type server struct { greetpb.UnimplementedGreeterServer } // embed for forward-compat
+
+func (s *server) SayHello(ctx context.Context, in *greetpb.HelloRequest) (*greetpb.HelloReply, error) {
+    if in.GetName() == "" {
+        return nil, status.Error(codes.InvalidArgument, "name is required")
+    }
+    return &amp;greetpb.HelloReply{Message: "Hello, " + in.GetName()}, nil
+}
+
+func main() {
+    lis, _ := net.Listen("tcp", ":50051")
+    s := grpc.NewServer()
+    greetpb.RegisterGreeterServer(s, &amp;server{})
+    log.Fatal(s.Serve(lis))
+}</code></pre>
+<blockquote class="warn"><strong>Always embed <code>UnimplementedGreeterServer</code></strong>. It provides default methods so that when the <code>.proto</code> adds a new RPC, your server still compiles (the new method returns "unimplemented" instead of breaking the build). Omitting it is the most common upgrade-breaks-build mistake.</blockquote>
+
+<h2>The client</h2>
+<pre><code>conn, _ := grpc.NewClient("localhost:50051",
+    grpc.WithTransportCredentials(insecure.NewCredentials())) // TLS in prod!
+defer conn.Close()
+client := greetpb.NewGreeterClient(conn)
+
+resp, err := client.SayHello(ctx, &amp;greetpb.HelloRequest{Name: "Ada"})
+// resp.GetMessage() == "Hello, Ada"</code></pre>
+
+<h2>The four RPC types</h2>
+<p><span class="level advanced">Advanced</span> HTTP/2 streams let gRPC do more than request/response:</p>
+<table>
+<tr><th>Type</th><th>.proto</th><th>Use for</th></tr>
+<tr><td>Unary</td><td><code>rpc M(Req) returns (Resp)</code></td><td>normal call</td></tr>
+<tr><td>Server streaming</td><td><code>returns (stream Resp)</code></td><td>a feed/large result set</td></tr>
+<tr><td>Client streaming</td><td><code>(stream Req) returns (Resp)</code></td><td>uploads, aggregation</td></tr>
+<tr><td>Bidirectional</td><td><code>(stream Req) returns (stream Resp)</code></td><td>chat, live sync</td></tr>
+</table>
+<pre><code>// server streaming handler
+func (s *server) ListUpdates(req *pb.Req, stream pb.Svc_ListUpdatesServer) error {
+    for _, u := range updates {
+        if err := stream.Send(u); err != nil { return err }
+    }
+    return nil // closing the handler ends the stream
+}</code></pre>
+
+<h2>Interceptors: gRPC's middleware</h2>
+<pre><code>func logging(ctx context.Context, req any, info *grpc.UnaryServerInfo,
+    handler grpc.UnaryHandler) (any, error) {
+    start := time.Now()
+    resp, err := handler(ctx, req)
+    log.Printf("%s took %v err=%v", info.FullMethod, time.Since(start), err)
+    return resp, err
+}
+s := grpc.NewServer(grpc.UnaryInterceptor(logging))
+// chain several with grpc.ChainUnaryInterceptor(auth, logging, recovery)</code></pre>
+<p>Interceptors handle cross-cutting concerns — auth (read a token from metadata), logging, metrics, panic recovery — the same way HTTP middleware does.</p>
+
+<h2>Errors and status codes</h2>
+<p>Don't return bare <code>errors</code>; use <code>google.golang.org/grpc/status</code> + <code>codes</code> so clients get a typed status (<code>NotFound</code>, <code>InvalidArgument</code>, <code>Unauthenticated</code>, <code>DeadlineExceeded</code>). The client inspects it with <code>status.FromError(err)</code>. Deadlines propagate automatically through <code>context</code> — set one on the client and the server sees it.</p>
+
+<h2>gRPC vs REST</h2>
+<table>
+<tr><th>Pick gRPC when</th><th>Pick REST/JSON when</th></tr>
+<tr><td>service-to-service, internal</td><td>public/browser-facing API</td></tr>
+<tr><td>streaming or low-latency matters</td><td>human-debuggable payloads help</td></tr>
+<tr><td>you want a generated, enforced contract</td><td>broad client compatibility matters</td></tr>
+<tr><td>polyglot backend (shared .proto)</td><td>caching via standard HTTP semantics</td></tr>
+</table>
+
+<h2>Common mistakes</h2>
+<blockquote class="warn"><ul>
+<li><strong>Reusing or renumbering a field number</strong> — silently corrupts the wire format for peers on the old schema. Use <code>reserved</code>.</li>
+<li><strong>Not embedding <code>UnimplementedXServer</code></strong>, so adding an RPC to the <code>.proto</code> breaks the build.</li>
+<li><strong>Shipping <code>insecure.NewCredentials()</code> to production</strong> — that's plaintext; use TLS creds.</li>
+<li><strong>Returning plain errors</strong> instead of <code>status.Error(codes.X, ...)</code>, so clients can't distinguish failures.</li>
+<li><strong>Committing generated <code>*.pb.go</code> but not regenerating after a <code>.proto</code> change</strong> — the code and schema drift. Regenerate in CI.</li>
+<li><strong>Expecting a browser to call gRPC directly</strong> — it can't; you need gRPC-Web + a proxy (Envoy) or gRPC-Gateway for a REST bridge.</li>
+</ul></blockquote>
+
+<h2>Exercises</h2>
+<ul>
+<li>Write a <code>.proto</code> for a calculator service, generate the Go code, and implement unary <code>Add</code>/<code>Divide</code> (returning <code>InvalidArgument</code> on divide-by-zero).</li>
+<li>Add a server-streaming RPC that emits a countdown, and consume it from a client with a <code>for { stream.Recv() }</code> loop.</li>
+<li>Write a logging + a panic-recovery interceptor and chain them on the server.</li>
+<li>Set a 1-second client deadline, make the server sleep 2 seconds, and confirm the client gets <code>DeadlineExceeded</code>.</li>
+<li>Add a field to a message with a NEW number, regenerate, and verify an old client still talks to the new server (forward/backward compatibility).</li>
+</ul>
+
+<h2>Mini-project</h2>
+<p>Build a small gRPC key-value store: a <code>.proto</code> with unary <code>Get</code>/<code>Set</code>/<code>Delete</code>, a server-streaming <code>Watch</code> that pushes changes to subscribers, and a bidirectional <code>Sync</code>. Implement the server with a mutex-guarded map, use <code>status</code>/<code>codes</code> for errors (<code>NotFound</code> on a missing key), add auth + logging interceptors (token in metadata), and secure it with TLS. Write a CLI client that exercises every RPC type, and document how a non-Go client (or a browser via gRPC-Gateway) would consume the same schema.</p>
