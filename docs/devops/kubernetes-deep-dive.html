@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en" data-base="../">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0d1117">
+<title>Kubernetes: Basic to Advanced — DevOps</title>
+<meta name="description" content="A thorough ground-up tour: pods, Deployments &amp; Services, ConfigMaps/Secrets, Ingress, StatefulSets, RBAC, namespaces &amp; quotas, the scheduler, and the control-plane components.">
+<link rel="canonical" href="https://danegigi.github.io/Tutorials/devops/kubernetes-deep-dive.html">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Dev Tutorials">
+<meta property="og:title" content="Kubernetes: Basic to Advanced — DevOps">
+<meta property="og:description" content="A thorough ground-up tour: pods, Deployments &amp; Services, ConfigMaps/Secrets, Ingress, StatefulSets, RBAC, namespaces &amp; quotas, the scheduler, and the control-plane components.">
+<meta property="og:url" content="https://danegigi.github.io/Tutorials/devops/kubernetes-deep-dive.html">
+<meta property="og:image" content="https://danegigi.github.io/Tutorials/icon-512.png">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Kubernetes: Basic to Advanced — DevOps">
+<meta name="twitter:description" content="A thorough ground-up tour: pods, Deployments &amp; Services, ConfigMaps/Secrets, Ingress, StatefulSets, RBAC, namespaces &amp; quotas, the scheduler, and the control-plane components.">
+<meta name="twitter:image" content="https://danegigi.github.io/Tutorials/icon-512.png">
+<link rel="manifest" href="../manifest.webmanifest">
+<link rel="icon" href="../icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="../icon-192.png">
+<link rel="stylesheet" href="../app.css">
+<script>/* set theme before paint to avoid flash */(function(){try{var t=localStorage.getItem('tut.theme');document.documentElement.setAttribute('data-theme',t||'dark');}catch(e){document.documentElement.setAttribute('data-theme','dark');}})();</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"LearningResource","name":"Kubernetes: Basic to Advanced","description":"A thorough ground-up tour: pods, Deployments & Services, ConfigMaps/Secrets, Ingress, StatefulSets, RBAC, namespaces & quotas, the scheduler, and the control-plane components.","url":"https://danegigi.github.io/Tutorials/devops/kubernetes-deep-dive.html","inLanguage":"en","isPartOf":{"@type":"Course","name":"DevOps — Dev Tutorials","url":"https://danegigi.github.io/Tutorials/devops/"},"learningResourceType":"Tutorial"},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Dev Tutorials","item":"https://danegigi.github.io/Tutorials/"},{"@type":"ListItem","position":2,"name":"DevOps","item":"https://danegigi.github.io/Tutorials/devops/"},{"@type":"ListItem","position":3,"name":"Kubernetes: Basic to Advanced","item":"https://danegigi.github.io/Tutorials/devops/kubernetes-deep-dive.html"}]}]}</script>
+
+</head>
+<body class="lesson">
+<header class="nav">
+  <a class="brand" href="../index.html">📚 Dev Tutorials</a>
+  <span class="crumb">Kubernetes: Basic to Advanced — DevOps</span>
+  <span class="spacer"></span>
+  <a class="navbtn" href="../search.html">🔎 Search</a>
+  <button class="navbtn" id="install-btn" type="button">⬇️ Install</button>
+  <button class="navbtn" id="theme-btn" type="button" aria-label="Toggle theme">🌙 Dark</button>
+</header>
+<main class="wrap lesson-body">
+  <h1 class="page-title">Kubernetes: Basic to Advanced</h1>
+  <div class="lesson-tools" data-lesson-id="devops/kubernetes-deep-dive">
+    <button id="done-btn" type="button" aria-pressed="false">○ Mark complete</button>
+    <button id="mark-btn" type="button" aria-pressed="false">☆ Bookmark</button>
+    <a class="navbtn" href="index.html" style="margin-left:auto">All DevOps lessons →</a>
+  </div>
+<nav class="toc" aria-label="On this page"><strong>On this page</strong><ul>
+<li class="lvl2"><a href="#the-one-idea-that-makes-kubernetes-click">The one idea that makes Kubernetes click</a></li>
+<li class="lvl2"><a href="#get-a-cluster-to-practice-on">Get a cluster to practice on</a></li>
+<li class="lvl2"><a href="#pods-the-smallest-unit">Pods: the smallest unit</a></li>
+<li class="lvl2"><a href="#deployments-self-healing-scaling-rollouts">Deployments: self-healing, scaling, rollouts</a></li>
+<li class="lvl2"><a href="#services-a-stable-address-for-a-moving-target">Services: a stable address for a moving target</a></li>
+<li class="lvl2"><a href="#ingress-http-routing-at-the-edge">Ingress: HTTP routing at the edge</a></li>
+<li class="lvl2"><a href="#configuration-configmaps-and-secrets">Configuration: ConfigMaps and Secrets</a></li>
+<li class="lvl2"><a href="#storage-and-statefulsets">Storage and StatefulSets</a></li>
+<li class="lvl2"><a href="#namespaces-quotas-and-multi-tenancy">Namespaces, quotas, and multi-tenancy</a></li>
+<li class="lvl2"><a href="#rbac-who-can-do-what">RBAC: who can do what</a></li>
+<li class="lvl2"><a href="#under-the-hood-the-control-plane">Under the hood: the control plane</a></li>
+<li class="lvl2"><a href="#debugging-the-way-you-actually-will">Debugging the way you actually will</a></li>
+<li class="lvl2"><a href="#common-mistakes">Common mistakes</a></li>
+<li class="lvl2"><a href="#exercises">Exercises</a></li>
+<li class="lvl2"><a href="#mini-project">Mini-project</a></li>
+</ul></nav>
+<p class="lead">Kubernetes is a declarative system for running containers across a fleet of machines: you describe the desired state in YAML, submit it to the API server, and a set of controllers works continuously to make reality match. This lesson builds that picture from the ground up — a single pod, then the objects you layer on top for real workloads, then the control-plane internals that make it all reconcile.</p>
+
+<h2 id="the-one-idea-that-makes-kubernetes-click">The one idea that makes Kubernetes click</h2>
+<p><span class="level beginner">Beginner</span> Everything is <strong>declarative reconciliation</strong>. You never tell Kubernetes "start three copies" as a command; you record "I want three copies" as desired state, and a controller loops forever comparing <em>desired</em> to <em>actual</em> and taking action to close the gap. Kill a pod and the controller makes a new one — not because something caught the event, but because the next reconcile sees two where it wants three.</p>
+<blockquote class="tip">Hold this in mind for the whole lesson: an object is a <em>record of intent</em>, and a controller is a loop that enforces it. Almost every "how does Kubernetes do X" answer is "a controller reconciles an object."</blockquote>
+
+<h2 id="get-a-cluster-to-practice-on">Get a cluster to practice on</h2>
+<pre><code># A throwaway local cluster (pick one):
+kind create cluster --name demo        # Docker-based, fast
+# or
+minikube start
+
+kubectl version --short
+kubectl get nodes
+# NAME                 STATUS   ROLES           AGE   VERSION
+# demo-control-plane   Ready    control-plane   40s   v1.31.0</code></pre>
+<p><code>kubectl</code> is your remote control. It reads <code>~/.kube/config</code> to know which cluster and credentials to use. <code>kubectl config current-context</code> tells you which cluster you're about to change — check it before every destructive command.</p>
+
+<h2 id="pods-the-smallest-unit">Pods: the smallest unit</h2>
+<p>A <strong>pod</strong> is one or more containers that share a network namespace (same IP, same localhost) and can share volumes. You rarely create bare pods — but understanding one is the foundation.</p>
+<pre><code>apiVersion: v1
+kind: Pod
+metadata:
+  name: web
+  labels: { app: web }
+spec:
+  containers:
+    - name: nginx
+      image: nginx:1.27
+      ports: [{ containerPort: 80 }]</code></pre>
+<pre><code>kubectl apply -f pod.yaml
+kubectl get pods -o wide
+kubectl logs web
+kubectl exec -it web -- sh         # shell inside the container
+kubectl port-forward pod/web 8080:80   # reach it from your laptop</code></pre>
+<blockquote class="warn"><strong>Why not bare pods in production:</strong> a pod has no self-healing. If its node dies, the pod is gone for good — nothing recreates it. That's what Deployments are for.</blockquote>
+
+<h2 id="deployments-self-healing-scaling-rollouts">Deployments: self-healing, scaling, rollouts</h2>
+<p><span class="level beginner">Beginner</span> A <strong>Deployment</strong> manages a <strong>ReplicaSet</strong>, which manages pods. You declare how many replicas and which image; the Deployment controller keeps that many running and handles rolling updates.</p>
+<pre><code>apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web
+spec:
+  replicas: 3
+  selector:
+    matchLabels: { app: web }
+  template:                 # the pod template — this IS a pod spec
+    metadata:
+      labels: { app: web }
+    spec:
+      containers:
+        - name: nginx
+          image: nginx:1.27
+          ports: [{ containerPort: 80 }]</code></pre>
+<pre><code>kubectl apply -f deploy.yaml
+kubectl get deploy,rs,pods
+kubectl scale deploy/web --replicas=5
+kubectl set image deploy/web nginx=nginx:1.27.1   # triggers a rolling update
+kubectl rollout status deploy/web
+kubectl rollout undo deploy/web                   # roll back to the previous ReplicaSet</code></pre>
+<blockquote class="warn"><strong>The #1 beginner trap:</strong> the <code>selector.matchLabels</code> and the <code>template.metadata.labels</code> MUST agree, or the Deployment manages zero pods (or the wrong ones). The selector is how the controller finds "its" pods.</blockquote>
+
+<h2 id="services-a-stable-address-for-a-moving-target">Services: a stable address for a moving target</h2>
+<p>Pods are ephemeral — their IPs change on every restart. A <strong>Service</strong> gives a stable virtual IP and DNS name that load-balances across whichever pods currently match its selector.</p>
+<pre><code>apiVersion: v1
+kind: Service
+metadata: { name: web }
+spec:
+  selector: { app: web }     # same labels the Deployment's pods carry
+  ports:
+    - port: 80               # the Service's port
+      targetPort: 80         # the container's port
+# type defaults to ClusterIP (reachable only inside the cluster)</code></pre>
+<p>Inside the cluster, other pods reach it as <code>web</code> (same namespace) or <code>web.default.svc.cluster.local</code>. Service types:</p>
+<table>
+<tr><th>Type</th><th>Reachable from</th><th>Use for</th></tr>
+<tr><td><code>ClusterIP</code></td><td>inside the cluster only</td><td>internal services (default)</td></tr>
+<tr><td><code>NodePort</code></td><td>every node's IP on a high port</td><td>quick external access, dev</td></tr>
+<tr><td><code>LoadBalancer</code></td><td>a cloud load balancer</td><td>public services on a cloud provider</td></tr>
+</table>
+
+<h2 id="ingress-http-routing-at-the-edge">Ingress: HTTP routing at the edge</h2>
+<p><span class="level intermediate">Intermediate</span> A <code>LoadBalancer</code> per service is expensive. An <strong>Ingress</strong> + an ingress controller (NGINX, Traefik) gives you one entry point that routes by host/path and terminates TLS.</p>
+<pre><code>apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata: { name: site }
+spec:
+  rules:
+    - host: shop.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend: { service: { name: web, port: { number: 80 } } }
+  tls:
+    - hosts: [shop.example.com]
+      secretName: shop-tls</code></pre>
+<blockquote class="tip">An Ingress object does nothing on its own — you must install an <em>ingress controller</em> that watches Ingress objects and configures the actual proxy. Forgetting this is why "my Ingress has no address."</blockquote>
+
+<h2 id="configuration-configmaps-and-secrets">Configuration: ConfigMaps and Secrets</h2>
+<pre><code>kubectl create configmap app-config --from-literal=LOG_LEVEL=info
+kubectl create secret generic db --from-literal=PASSWORD=s3cr3t</code></pre>
+<pre><code># inject into a container
+envFrom:
+  - configMapRef: { name: app-config }
+env:
+  - name: DB_PASSWORD
+    valueFrom:
+      secretKeyRef: { name: db, key: PASSWORD }</code></pre>
+<blockquote class="warn"><strong>Secrets are only base64-encoded, not encrypted</strong>, and anyone with read access to the namespace can decode them. Enable encryption-at-rest on etcd, restrict access with RBAC, and for real secrets reach for the <em>Secrets Management</em> lesson (Vault, External Secrets, Sealed Secrets).</blockquote>
+
+<h2 id="storage-and-statefulsets">Storage and StatefulSets</h2>
+<p><span class="level intermediate">Intermediate</span> Deployments are for <em>stateless</em> workloads — any replica is interchangeable. For databases and anything needing stable identity + persistent per-pod storage, use a <strong>StatefulSet</strong>, which gives each pod a stable name (<code>db-0</code>, <code>db-1</code>) and its own PersistentVolumeClaim.</p>
+<pre><code>volumeClaimTemplates:
+  - metadata: { name: data }
+    spec:
+      accessModes: [ReadWriteOnce]
+      resources: { requests: { storage: 10Gi } }
+# db-0 gets its OWN 10Gi volume that survives restarts and follows the pod identity.</code></pre>
+<p>A <strong>PersistentVolumeClaim</strong> (PVC) requests storage; a <strong>StorageClass</strong> defines how it's provisioned (which cloud disk type). Pods mount the PVC, not the volume directly.</p>
+
+<h2 id="namespaces-quotas-and-multi-tenancy">Namespaces, quotas, and multi-tenancy</h2>
+<pre><code>kubectl create namespace team-a
+kubectl apply -n team-a -f deploy.yaml</code></pre>
+<p>Namespaces partition a cluster: names are unique per namespace, and you can attach <code>ResourceQuota</code> (cap total CPU/memory/object counts) and <code>LimitRange</code> (default/limit per pod) to keep one team from starving others.</p>
+
+<h2 id="rbac-who-can-do-what">RBAC: who can do what</h2>
+<p><span class="level advanced">Advanced</span> Role-Based Access Control binds <em>subjects</em> (users, groups, ServiceAccounts) to <em>verbs</em> (get, list, create, delete) on <em>resources</em>.</p>
+<pre><code>kind: Role                 # namespaced; ClusterRole for cluster-wide
+metadata: { namespace: team-a, name: pod-reader }
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]
+---
+kind: RoleBinding
+metadata: { namespace: team-a, name: read-pods }
+subjects: [{ kind: ServiceAccount, name: ci, namespace: team-a }]
+roleRef: { kind: Role, name: pod-reader, apiGroup: rbac.authorization.k8s.io }</code></pre>
+<pre><code>kubectl auth can-i delete pods --as=system:serviceaccount:team-a:ci -n team-a
+# no</code></pre>
+
+<h2 id="under-the-hood-the-control-plane">Under the hood: the control plane</h2>
+<p>When you run <code>kubectl apply</code>, here is what actually happens:</p>
+<table>
+<tr><th>Component</th><th>Role</th></tr>
+<tr><td><strong>API server</strong></td><td>the only thing that talks to etcd; validates and stores every object. All reads/writes go through it.</td></tr>
+<tr><td><strong>etcd</strong></td><td>the cluster's database — the single source of truth for desired + actual state.</td></tr>
+<tr><td><strong>scheduler</strong></td><td>watches for unscheduled pods and picks a node (based on requests, affinity, taints).</td></tr>
+<tr><td><strong>controller-manager</strong></td><td>runs the reconcile loops (Deployment, ReplicaSet, Node, Job… controllers).</td></tr>
+<tr><td><strong>kubelet</strong></td><td>on each node: pulls images, starts containers, reports status back to the API server.</td></tr>
+<tr><td><strong>kube-proxy</strong></td><td>on each node: programs iptables/IPVS so Service IPs route to pod IPs.</td></tr>
+</table>
+<p>The flow: <code>kubectl</code> → API server validates &amp; writes to etcd → the Deployment controller sees a new Deployment and creates a ReplicaSet → the ReplicaSet controller creates pods → the scheduler assigns each pod a node → the kubelet on that node starts the container → kube-proxy wires up the Service. Every arrow is a controller watching the API server and reconciling.</p>
+
+<h2 id="debugging-the-way-you-actually-will">Debugging the way you actually will</h2>
+<pre><code>kubectl get pods                      # STATUS tells you a lot
+kubectl describe pod web-xxxx         # Events at the bottom = why it won't start
+kubectl logs web-xxxx --previous      # logs from the crashed container
+kubectl get events --sort-by=.lastTimestamp</code></pre>
+<table>
+<tr><th>STATUS</th><th>Usual cause</th></tr>
+<tr><td><code>ImagePullBackOff</code></td><td>wrong image name/tag or missing registry credentials</td></tr>
+<tr><td><code>CrashLoopBackOff</code></td><td>the container starts then exits — read the logs</td></tr>
+<tr><td><code>Pending</code></td><td>no node can fit it (requests too big, taints, no volume)</td></tr>
+<tr><td><code>CreateContainerConfigError</code></td><td>a referenced ConfigMap/Secret key doesn't exist</td></tr>
+</table>
+
+<h2 id="common-mistakes">Common mistakes</h2>
+<blockquote class="warn"><ul>
+<li><strong>Selector/label mismatch</strong> between a Deployment and its pod template, or a Service and its pods — the controller silently manages nothing.</li>
+<li><strong>Treating Secrets as secure</strong> because they look encoded. They're base64 only.</li>
+<li><strong>No resource requests</strong>, so the scheduler can't place pods sensibly and nodes get overcommitted.</li>
+<li><strong>Using a Deployment for a database.</strong> Rolling two replicas onto the same volume corrupts data — stateful workloads need StatefulSets with per-pod storage.</li>
+<li><strong>Editing live objects with <code>kubectl edit</code></strong> and losing the change on the next <code>apply</code>. Keep YAML in Git and apply from there (see GitOps).</li>
+<li><strong>Not checking <code>kubectl config current-context</code></strong> before a destructive command — deleting in prod when you meant staging.</li>
+</ul></blockquote>
+
+<h2 id="exercises">Exercises</h2>
+<ul>
+<li>Create a Deployment of 3 nginx replicas and a ClusterIP Service, then <code>kubectl exec</code> into a temporary pod (<code>kubectl run tmp --rm -it --image=busybox -- sh</code>) and <code>wget -qO- web</code> to prove in-cluster DNS and load balancing work.</li>
+<li>Scale to 5, then run <code>kubectl set image</code> to a new tag and watch <code>kubectl rollout status</code>; then <code>rollout undo</code> and confirm the old ReplicaSet comes back.</li>
+<li>Break a Deployment on purpose (a nonexistent image tag) and diagnose it end-to-end using only <code>get</code>, <code>describe</code>, and <code>logs</code>.</li>
+<li>Add a <code>ResourceQuota</code> to a namespace that caps total memory, then try to schedule a pod that exceeds it and read the rejection.</li>
+<li>Write a Role + RoleBinding that lets a ServiceAccount list pods but not delete them, and verify both with <code>kubectl auth can-i</code>.</li>
+</ul>
+
+<h2 id="mini-project">Mini-project</h2>
+<p>Deploy a complete two-tier app to your local cluster: a stateless API Deployment (3 replicas) with a ClusterIP Service, a PostgreSQL StatefulSet with a PersistentVolumeClaim, a ConfigMap for app config and a Secret for the DB password, and an Ingress routing <code>app.localtest.me</code> to the API through an installed ingress controller. Add readiness/liveness probes, resource requests/limits, and a ResourceQuota on the namespace. Then simulate a node/pod failure (<code>kubectl delete pod</code>) and document how each object reacts — proving to yourself which parts self-heal and which (the data) persist.</p>
+
+<section class="further"><h2 id="further-reading">Further reading</h2>
+<p>Official documentation for the tools and APIs covered on this page:</p>
+<ul class="further-list"><li><a href="https://kubernetes.io/docs/concepts/" target="_blank" rel="noopener">Kubernetes concepts ↗</a></li>
+<li><a href="https://kubernetes.io/docs/concepts/workloads/" target="_blank" rel="noopener">Workloads ↗</a></li>
+<li><a href="https://kubernetes.io/docs/concepts/services-networking/" target="_blank" rel="noopener">Services, Load Balancing &amp; Networking ↗</a></li>
+<li><a href="https://kubernetes.io/docs/reference/access-authn-authz/rbac/" target="_blank" rel="noopener">RBAC authorization ↗</a></li></ul></section>
+  <nav class="pager">
+<a class="prev" href="flux-gitops-advanced.html"><small>Previous</small>🔁 Flux &amp; GitOps in Depth</a>
+<a class="next" href="monitoring-prometheus-grafana.html"><small>Next</small>🔁 Monitoring with Prometheus &amp; Grafana</a>
+  </nav>
+</main>
+<button type="button" class="fab top" id="fab-top" aria-label="Back to top">↑ Top</button>
+<div class="banner" id="update-banner" role="status">A new version is available.<button type="button">Reload</button></div>
+<div class="banner" id="offline-banner" role="status">You're offline — showing cached lessons.</div>
+<script src="../app.js" defer></script>
+</body>
+</html>

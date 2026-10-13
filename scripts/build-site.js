@@ -33,6 +33,7 @@ const ASSETS = path.join(ROOT, "assets");
 const OUT = path.join(ROOT, "docs");
 
 const SITE_NAME = "Dev Tutorials";
+const SITE_URL = "https://danegigi.github.io/Tutorials"; // canonical origin+base (no trailing slash)
 const SW_VERSION = "v1"; // bump to invalidate caches
 
 // ── small helpers ──────────────────────────────────────────────────────────
@@ -80,17 +81,37 @@ function furtherHtml(further) {
 }
 
 // The <head> shared by every page. `base` is "" (root) or "../" (section depth).
-function head(title, base, extraCss) {
+// `seo` carries per-page metadata: { desc, canonical (path relative to SITE_URL,
+// no leading slash), ogType, jsonLd (object|null) }.
+function head(title, base, extraCss, seo = {}) {
+  const desc = seo.desc || `${SITE_NAME} — Golang, Bun, Web Development, Linux and DevOps, offline-ready.`;
+  const canonical = seo.canonical != null ? `${SITE_URL}/${seo.canonical}`.replace(/\/+$/, "/") : SITE_URL + "/";
+  const ogType = seo.ogType || "website";
+  const ogImage = `${SITE_URL}/icon-512.png`;
+  const jsonLd = seo.jsonLd
+    ? `\n<script type="application/ld+json">${JSON.stringify(seo.jsonLd)}</script>`
+    : "";
   return `<meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="#0d1117">
-<meta name="description" content="${esc(SITE_NAME)} — Golang, Bun, Web Development, Linux and DevOps, offline-ready.">
 <title>${esc(title)}</title>
+<meta name="description" content="${esc(desc)}">
+<link rel="canonical" href="${esc(canonical)}">
+<meta property="og:type" content="${ogType}">
+<meta property="og:site_name" content="${esc(SITE_NAME)}">
+<meta property="og:title" content="${esc(title)}">
+<meta property="og:description" content="${esc(desc)}">
+<meta property="og:url" content="${esc(canonical)}">
+<meta property="og:image" content="${esc(ogImage)}">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="${esc(title)}">
+<meta name="twitter:description" content="${esc(desc)}">
+<meta name="twitter:image" content="${esc(ogImage)}">
 <link rel="manifest" href="${base}manifest.webmanifest">
 <link rel="icon" href="${base}icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="${base}icon-192.png">
 <link rel="stylesheet" href="${base}app.css">
-<script>/* set theme before paint to avoid flash */(function(){try{var t=localStorage.getItem('tut.theme');document.documentElement.setAttribute('data-theme',t||'dark');}catch(e){document.documentElement.setAttribute('data-theme','dark');}})();</script>
+<script>/* set theme before paint to avoid flash */(function(){try{var t=localStorage.getItem('tut.theme');document.documentElement.setAttribute('data-theme',t||'dark');}catch(e){document.documentElement.setAttribute('data-theme','dark');}})();</script>${jsonLd}
 ${extraCss || ""}`;
 }
 
@@ -117,11 +138,11 @@ ${banners()}
 }
 
 // ── page templates ───────────────────────────────────────────────────────────
-function pageDocument({ title, base, bodyClass, body, extraCss }) {
+function pageDocument({ title, base, bodyClass, body, extraCss, seo }) {
   return `<!DOCTYPE html>
 <html lang="en" data-base="${base}">
 <head>
-${head(title, base, extraCss)}
+${head(title, base, extraCss, seo)}
 </head>
 <body${bodyClass ? ` class="${bodyClass}"` : ""}>
 ${navBar(base, title === SITE_NAME ? "" : title)}
@@ -161,7 +182,23 @@ ${cards}
   </div>
   <p style="color:var(--muted);font-size:13px;text-align:center">Installable &middot; works offline after first visit &middot; your progress and bookmarks stay on this device.</p>
 </main>`;
-  return pageDocument({ title: SITE_NAME, base: "", bodyClass: "home", body });
+  return pageDocument({
+    title: SITE_NAME,
+    base: "",
+    bodyClass: "home",
+    body,
+    seo: {
+      desc: `Hands-on, offline-ready developer tutorials: ${lessonCount()} lessons across Golang, Bun, Web Development, Linux, and DevOps — with runnable examples, exercises, and mini-projects.`,
+      canonical: "",
+      jsonLd: {
+        "@context": "https://schema.org",
+        "@type": "WebSite",
+        name: SITE_NAME,
+        url: SITE_URL + "/",
+        description: `Offline-ready tutorials for Golang, Bun, Web Development, Linux, and DevOps (${lessonCount()} lessons).`,
+      },
+    },
+  });
 }
 
 function sectionPage(section) {
@@ -187,7 +224,27 @@ function sectionPage(section) {
 ${items}
   </ul>
 </main>`;
-  return pageDocument({ title: section.title, base, body });
+  return pageDocument({
+    title: section.title,
+    base,
+    body,
+    seo: {
+      desc: `${section.title}: ${section.tagline} ${section.lessons.length} lessons.`,
+      canonical: `${section.id}/`,
+      jsonLd: {
+        "@context": "https://schema.org",
+        "@type": "CollectionPage",
+        name: `${section.title} — ${SITE_NAME}`,
+        url: `${SITE_URL}/${section.id}/`,
+        description: section.tagline,
+        hasPart: section.lessons.map((l) => ({
+          "@type": "LearningResource",
+          name: l.title,
+          url: `${SITE_URL}/${lessonPath(section.id, l.slug)}`,
+        })),
+      },
+    },
+  });
 }
 
 function lessonPage(section, lesson, prev, next, bodyHtml, toc) {
@@ -215,7 +272,39 @@ ${prevLink}
 ${nextLink}
   </nav>
 </main>`;
-  return pageDocument({ title: `${lesson.title} — ${section.title}`, base, bodyClass: "lesson", body });
+  return pageDocument({
+    title: `${lesson.title} — ${section.title}`,
+    base,
+    bodyClass: "lesson",
+    body,
+    seo: {
+      desc: lesson.blurb,
+      canonical: lessonPath(section.id, lesson.slug),
+      ogType: "article",
+      jsonLd: {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "LearningResource",
+            name: lesson.title,
+            description: lesson.blurb,
+            url: `${SITE_URL}/${lessonPath(section.id, lesson.slug)}`,
+            inLanguage: "en",
+            isPartOf: { "@type": "Course", name: `${section.title} — ${SITE_NAME}`, url: `${SITE_URL}/${section.id}/` },
+            learningResourceType: "Tutorial",
+          },
+          {
+            "@type": "BreadcrumbList",
+            itemListElement: [
+              { "@type": "ListItem", position: 1, name: SITE_NAME, item: SITE_URL + "/" },
+              { "@type": "ListItem", position: 2, name: section.title, item: `${SITE_URL}/${section.id}/` },
+              { "@type": "ListItem", position: 3, name: lesson.title, item: `${SITE_URL}/${lessonPath(section.id, lesson.slug)}` },
+            ],
+          },
+        ],
+      },
+    },
+  });
 }
 
 function searchPage() {
@@ -227,7 +316,12 @@ function searchPage() {
     <ul id="search-results"></ul>
   </div>
 </main>`;
-  return pageDocument({ title: "Search", base: "", body });
+  return pageDocument({
+    title: "Search",
+    base: "",
+    body,
+    seo: { desc: `Search across all ${lessonCount()} lessons in ${SITE_NAME}.`, canonical: "search.html" },
+  });
 }
 
 function offlinePage() {
@@ -240,7 +334,12 @@ function offlinePage() {
   </div>
   <div style="display:flex;flex-wrap:wrap;gap:10px;justify-content:center;margin-top:20px">${links}</div>
 </main>`;
-  return pageDocument({ title: "Offline", base: "", body });
+  return pageDocument({
+    title: "Offline",
+    base: "",
+    body,
+    seo: { desc: "You're offline — cached lessons remain available.", canonical: "offline.html" },
+  });
 }
 
 // ── search index ─────────────────────────────────────────────────────────────
@@ -377,6 +476,26 @@ function iconSvg() {
 // data decode so installability has real raster icons without a build dep.
 // (See generateIcons: we write a small valid PNG for 192/512 + maskable.)
 
+// ── sitemap.xml + robots.txt ─────────────────────────────────────────────────
+function sitemapXml() {
+  const urls = [];
+  const add = (loc, priority, changefreq) =>
+    urls.push(
+      `  <url>\n    <loc>${esc(loc)}</loc>\n    <changefreq>${changefreq}</changefreq>\n    <priority>${priority}</priority>\n  </url>`
+    );
+
+  add(SITE_URL + "/", "1.0", "weekly"); // dashboard
+  for (const s of SECTIONS) add(`${SITE_URL}/${s.id}/`, "0.8", "weekly"); // section indexes
+  for (const l of allLessons()) add(`${SITE_URL}/${lessonPath(l.section.id, l.slug)}`, "0.7", "monthly");
+  add(SITE_URL + "/search.html", "0.3", "yearly");
+
+  return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls.join("\n")}\n</urlset>\n`;
+}
+
+function robotsTxt() {
+  return `User-agent: *\nAllow: /\n\nSitemap: ${SITE_URL}/sitemap.xml\n`;
+}
+
 function build() {
   if (!fs.existsSync(CONTENT)) fs.mkdirSync(CONTENT, { recursive: true });
   fs.rmSync(OUT, { recursive: true, force: true });
@@ -441,6 +560,8 @@ function build() {
   fs.writeFileSync(path.join(OUT, "offline.html"), offlinePage());
   fs.writeFileSync(path.join(OUT, "manifest.webmanifest"), manifest());
   fs.writeFileSync(path.join(OUT, "search-index.json"), JSON.stringify(buildSearchIndex()));
+  fs.writeFileSync(path.join(OUT, "sitemap.xml"), sitemapXml());
+  fs.writeFileSync(path.join(OUT, "robots.txt"), robotsTxt());
 
   // Deterministic SW cache version: hash the content of every precached file
   // (sorted for stability). The SW changes only when real output changes, so

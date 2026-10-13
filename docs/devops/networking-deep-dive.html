@@ -4,13 +4,25 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="#0d1117">
-<meta name="description" content="Dev Tutorials — Golang, Bun, Web Development, Linux and DevOps, offline-ready.">
 <title>Networking Deep Dive — DevOps</title>
+<meta name="description" content="DNS, TCP, TLS and HTTP/1.1/2/3 on the wire; load-balancing algorithms; service discovery; and debugging the network.">
+<link rel="canonical" href="https://danegigi.github.io/Tutorials/devops/networking-deep-dive.html">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Dev Tutorials">
+<meta property="og:title" content="Networking Deep Dive — DevOps">
+<meta property="og:description" content="DNS, TCP, TLS and HTTP/1.1/2/3 on the wire; load-balancing algorithms; service discovery; and debugging the network.">
+<meta property="og:url" content="https://danegigi.github.io/Tutorials/devops/networking-deep-dive.html">
+<meta property="og:image" content="https://danegigi.github.io/Tutorials/icon-512.png">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Networking Deep Dive — DevOps">
+<meta name="twitter:description" content="DNS, TCP, TLS and HTTP/1.1/2/3 on the wire; load-balancing algorithms; service discovery; and debugging the network.">
+<meta name="twitter:image" content="https://danegigi.github.io/Tutorials/icon-512.png">
 <link rel="manifest" href="../manifest.webmanifest">
 <link rel="icon" href="../icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="../icon-192.png">
 <link rel="stylesheet" href="../app.css">
 <script>/* set theme before paint to avoid flash */(function(){try{var t=localStorage.getItem('tut.theme');document.documentElement.setAttribute('data-theme',t||'dark');}catch(e){document.documentElement.setAttribute('data-theme','dark');}})();</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"LearningResource","name":"Networking Deep Dive","description":"DNS, TCP, TLS and HTTP/1.1/2/3 on the wire; load-balancing algorithms; service discovery; and debugging the network.","url":"https://danegigi.github.io/Tutorials/devops/networking-deep-dive.html","inLanguage":"en","isPartOf":{"@type":"Course","name":"DevOps — Dev Tutorials","url":"https://danegigi.github.io/Tutorials/devops/"},"learningResourceType":"Tutorial"},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Dev Tutorials","item":"https://danegigi.github.io/Tutorials/"},{"@type":"ListItem","position":2,"name":"DevOps","item":"https://danegigi.github.io/Tutorials/devops/"},{"@type":"ListItem","position":3,"name":"Networking Deep Dive","item":"https://danegigi.github.io/Tutorials/devops/networking-deep-dive.html"}]}]}</script>
 
 </head>
 <body class="lesson">
@@ -115,7 +127,7 @@ tcpdump -i any port 443    # last resort: watch the actual packets</code></pre>
 <li><a href="https://www.rfc-editor.org/rfc/rfc9113.html" target="_blank" rel="noopener">HTTP/2 (RFC 9113) ↗</a></li></ul></section>
   <nav class="pager">
 <a class="prev" href="database-operations.html"><small>Previous</small>🔁 Database Operations</a>
-<a class="next" href="../index.html"><small>Done</small>📚 Dashboard</a>
+<a class="next" href="terraform-deep-dive.html"><small>Next</small>🔁 Terraform: Basic to Advanced</a>
   </nav>
 </main>
 <button type="button" class="fab top" id="fab-top" aria-label="Back to top">↑ Top</button>

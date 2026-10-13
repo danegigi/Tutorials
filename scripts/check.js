@@ -20,7 +20,7 @@ const ok = (msg) => console.log("✓ " + msg);
 function exists(rel) { return fs.existsSync(path.join(OUT, rel)); }
 
 // 1. Top-level files.
-for (const f of ["index.html", "search.html", "offline.html", "manifest.webmanifest", "sw.js", "search-index.json", "app.css", "app.js", "icon.svg", ".nojekyll"]) {
+for (const f of ["index.html", "search.html", "offline.html", "manifest.webmanifest", "sw.js", "search-index.json", "app.css", "app.js", "icon.svg", "sitemap.xml", "robots.txt", ".nojekyll"]) {
   if (!exists(f)) fail(`missing ${f}`);
 }
 if (!errors) ok("app shell files present");
@@ -68,6 +68,26 @@ if (!broken) ok("no broken in-page TOC anchors");
 const sw = fs.readFileSync(path.join(OUT, "sw.js"), "utf8");
 if (!/offline\.html/.test(sw)) fail("sw.js does not reference offline.html");
 else ok("service worker wired for offline fallback");
+
+// 7. SEO: sitemap covers every lesson URL; every lesson page has canonical + description + JSON-LD.
+try {
+  const sitemap = fs.readFileSync(path.join(OUT, "sitemap.xml"), "utf8");
+  let sitemapMisses = 0;
+  for (const l of allLessons()) {
+    const loc = `/${lessonPath(l.section.id, l.slug)}`;
+    if (!sitemap.includes(loc)) { fail(`sitemap missing ${loc}`); sitemapMisses++; }
+  }
+  if (!sitemapMisses) ok(`sitemap.xml covers all ${lessonCount()} lesson URLs`);
+
+  let seoMisses = 0;
+  for (const l of allLessons()) {
+    const html = fs.readFileSync(path.join(OUT, lessonPath(l.section.id, l.slug)), "utf8");
+    if (!/<link rel="canonical"/.test(html)) { fail(`${l.section.id}/${l.slug}.html missing canonical`); seoMisses++; }
+    if (!/<meta name="description"/.test(html)) { fail(`${l.section.id}/${l.slug}.html missing description`); seoMisses++; }
+    if (!/application\/ld\+json/.test(html)) { fail(`${l.section.id}/${l.slug}.html missing JSON-LD`); seoMisses++; }
+  }
+  if (!seoMisses) ok("every lesson page has canonical + description + JSON-LD");
+} catch (e) { fail("SEO/sitemap check failed: " + e.message); }
 
 console.log(errors ? `\n${errors} check(s) failed.` : "\nAll checks passed. ✓");
 process.exit(errors ? 1 : 0);

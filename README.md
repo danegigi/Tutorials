@@ -6,11 +6,11 @@ generator that runs under [Bun](https://bun.com).
 
 | Section | Lessons | Covers |
 |---------|--------:|--------|
-| 🐹 **Golang** | 13 | setup & tooling, modules, types, control flow, structs/interfaces/generics, errors, concurrency, HTTP/APIs, files & JSON, testing, databases, CLI tools, deployment |
-| 🥟 **Bun** | 11 | what/why, install, runtime, package manager, TypeScript, APIs (Bun.serve + Hono), file I/O & shell, testing, bundling, databases (sqlite/sql/Drizzle), deployment |
-| 🌐 **Web Development** | 16 | HTML, CSS, JS, TypeScript, HTTP & APIs, forms & validation, accessibility, responsive design, browser storage, PWAs, service workers, manifests, HTMX, Datastar, auth, frontend/backend integration |
-| 🐧 **Linux** | 13 | shell, filesystem, permissions, users & groups, processes & services, package managers, env vars, networking, SSH, logs, cron & systemd timers, bash scripting, troubleshooting |
-| 🔁 **DevOps** | 16 | mindset, Git workflows, CI/CD, GitHub Actions, Docker, Compose, Kubernetes, reverse proxies, TLS & domains, cloud (AWS), IaC (Terraform), monitoring & logging, GitOps, security, deployment strategies, incident response |
+| 🐹 **Golang** | 17 | setup & tooling, modules, types, control flow, structs/interfaces/generics, errors, concurrency, HTTP/APIs, files & JSON, testing, databases, CLI tools, deployment, generics deep dive, context & cancellation, profiling & performance, project layout & patterns |
+| 🥟 **Bun** | 15 | what/why, install, runtime, package manager, TypeScript, APIs (Bun.serve + Hono), file I/O & shell, testing, bundling, databases (sqlite/sql/Drizzle), deployment, monorepos & workspaces, env & config, web frameworks (Hono/Elysia), performance & optimization |
+| 🌐 **Web Development** | 20 | HTML, CSS, JS, TypeScript, HTTP & APIs, forms & validation, accessibility, responsive design, browser storage, PWAs, service workers, manifests, HTMX, Datastar, auth, frontend/backend integration, web performance, state management, testing, web security, **Vue 3 (fundamentals + advanced)**, **React (fundamentals + advanced)** |
+| 🐧 **Linux** | 17 | shell, filesystem, permissions, users & groups, processes & services, package managers, env vars, networking, SSH, logs, cron & systemd timers, bash scripting, troubleshooting, text processing (grep/sed/awk), disk & storage, performance monitoring, containers & namespaces |
+| 🔁 **DevOps** | 25 | mindset, Git workflows, CI/CD, GitHub Actions, Docker, Compose, Kubernetes, reverse proxies, TLS & domains, cloud (AWS), IaC, monitoring & logging, GitOps, security, deployment strategies, incident response, advanced K8s, secrets management, observability, chaos engineering, platform engineering, cost/FinOps, database ops, networking deep dive, **Terraform / Helm / Flux / Kubernetes / Prometheus+Grafana deep dives** |
 
 Every lesson goes straight into examples, commands, and expected output, with
 common-mistake callouts, exercises, a mini-project, and official "Further
@@ -23,6 +23,7 @@ reading" links.
 - **Caching strategy**: network-first for page navigations (fresh when online, cached when not), stale-while-revalidate for static assets, with versioned caches cleaned up on activate.
 - **Dashboard-first**: the home screen is the tutorial dashboard, not a landing page.
 - **Full-text search** across all lessons (from a generated `search-index.json`).
+- **Discoverable (SEO)**: every page carries a unique `<title>`, meta description, canonical URL, Open Graph + Twitter Card tags, and JSON-LD structured data (`WebSite` / `CollectionPage` / `LearningResource` + `BreadcrumbList`). A generated `sitemap.xml` lists every URL and a `robots.txt` points crawlers to it.
 - **Progress tracking, bookmarks, and completion checkboxes** stored in `localStorage` (per device).
 - **Dark / light theme** (persisted, applied before paint — no flash).
 - **Per-lesson table of contents**, copy-to-clipboard code buttons, and clear previous/next navigation that flows across sections.

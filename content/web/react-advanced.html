@@ -1,0 +1,204 @@
+<p class="lead">Once you know <code>useState</code> and <code>useEffect</code>, "advanced" React is mostly about three things: putting complex state in a reducer, sharing it through Context without re-rendering the world, and memoizing only where it actually earns its keep. The hooks below are the toolkit; knowing <em>when not</em> to use them matters just as much.</p>
+
+<h2>useReducer for complex state</h2>
+<p><span class="level intermediate">Intermediate</span> When state updates depend on the previous state, several fields change together, or the "next state" logic is branchy, a reducer is clearer than a pile of <code>useState</code> calls. The reducer is a pure function <code>(state, action) =&gt; newState</code>; the component only <code>dispatch</code>es actions.</p>
+<pre><code>function cartReducer(state, action) {
+  switch (action.type) {
+    case "add": {
+      const existing = state.items.find(i =&gt; i.id === action.item.id);
+      const items = existing
+        ? state.items.map(i =&gt; i.id === action.item.id ? { ...i, qty: i.qty + 1 } : i)
+        : [...state.items, { ...action.item, qty: 1 }];
+      return { ...state, items };
+    }
+    case "remove":
+      return { ...state, items: state.items.filter(i =&gt; i.id !== action.id) };
+    case "clear":
+      return { ...state, items: [] };
+    default:
+      throw new Error(`unknown action: ${action.type}`);
+  }
+}
+
+function Cart() {
+  const [state, dispatch] = useReducer(cartReducer, { items: [] });
+  const total = state.items.reduce((s, i) =&gt; s + i.price * i.qty, 0);
+  return (
+    &lt;&gt;
+      {state.items.map(i =&gt; (
+        &lt;li key={i.id}&gt;{i.name} ×{i.qty}
+          &lt;button onClick={() =&gt; dispatch({ type: "remove", id: i.id })}&gt;✕&lt;/button&gt;
+        &lt;/li&gt;
+      ))}
+      &lt;p&gt;Total: ${total.toFixed(2)}&lt;/p&gt;
+    &lt;/&gt;
+  );
+}</code></pre>
+<table>
+  <thead><tr><th>Prefer</th><th>When</th></tr></thead>
+  <tbody>
+    <tr><td><code>useState</code></td><td>One or two independent values; updates are simple assignments.</td></tr>
+    <tr><td><code>useReducer</code></td><td>Many fields that change together, next-state depends on prev-state, or the transition logic is worth testing in isolation.</td></tr>
+  </tbody>
+</table>
+<blockquote class="tip">A reducer is a plain, pure function — you can unit-test it with no React at all: <code>expect(cartReducer(state, {type:"add", item})).toEqual(...)</code>. That testability is a big reason to reach for it.</blockquote>
+
+<h2>Context API: sharing state without prop-drilling</h2>
+<p>Passing a value through five layers of components as props ("prop-drilling") is tedious and brittle. Context lets a far-away descendant read a value directly.</p>
+<pre><code>import { createContext, useContext, useReducer } from "react";
+
+const CartContext = createContext(null);
+
+export function CartProvider({ children }) {
+  const [state, dispatch] = useReducer(cartReducer, { items: [] });
+  // value is an object — see the re-render pitfall below about stabilizing it
+  return (
+    &lt;CartContext.Provider value={{ state, dispatch }}&gt;
+      {children}
+    &lt;/CartContext.Provider&gt;
+  );
+}
+
+// A custom hook that also guards against using it outside the provider:
+export function useCart() {
+  const ctx = useContext(CartContext);
+  if (!ctx) throw new Error("useCart must be used inside &lt;CartProvider&gt;");
+  return ctx;
+}</code></pre>
+<p>Any component inside <code>&lt;CartProvider&gt;</code> now calls <code>const { state, dispatch } = useCart()</code> — no props threaded through the tree. Combining <strong>Context + useReducer</strong> like this is the idiomatic way to hold app-wide state (auth, theme, cart) without a third-party library.</p>
+<blockquote class="warn"><strong>The Context re-render pitfall:</strong> every consumer re-renders whenever the Provider's <code>value</code> changes <em>by identity</em>. Writing <code>value={{ state, dispatch }}</code> creates a brand-new object on every Provider render, so <em>all</em> consumers re-render even if they only use <code>dispatch</code> (which never changes). Fixes: wrap the value in <code>useMemo</code>, or split into two contexts — a stable <code>dispatch</code> context and a changing <code>state</code> context — so dispatch-only components don't re-render on state changes.</blockquote>
+
+<h2>Performance: useMemo, useCallback, React.memo</h2>
+<p><span class="level advanced">Advanced</span> These three memoize different things. They trade memory + a dependency comparison for skipped work — useful only when the skipped work is actually expensive or breaks referential equality downstream.</p>
+<pre><code>// useMemo — caches a computed VALUE; recomputes only when deps change.
+const sorted = useMemo(
+  () =&gt; products.slice().sort((a, b) =&gt; a.price - b.price), // expensive on big lists
+  [products]
+);
+
+// useCallback — caches a FUNCTION identity; same function across renders.
+const handleAdd = useCallback(
+  (item) =&gt; dispatch({ type: "add", item }),
+  [dispatch] // dispatch is stable, so this handler is stable
+);
+
+// React.memo — skips re-rendering a component when its props are shallow-equal.
+const Row = React.memo(function Row({ item, onAdd }) {
+  return &lt;li&gt;{item.name} &lt;button onClick={() =&gt; onAdd(item)}&gt;add&lt;/button&gt;&lt;/li&gt;;
+});</code></pre>
+<p><code>React.memo</code> only helps if the props are stable — which is <em>why</em> you'd pass <code>handleAdd</code> from <code>useCallback</code>: an inline <code>onAdd={() =&gt; ...}</code> is a new function every render, so <code>React.memo</code> would see "props changed" and re-render anyway. The three tools work as a set.</p>
+<blockquote class="warn"><strong>Don't over-optimize.</strong> Memoization is not free: it stores the value and runs a dependency comparison every render. For cheap computations and small lists it costs more than it saves and clutters the code. Reach for it when you've measured a real problem — a genuinely expensive calculation, or a stable prop needed by a <code>React.memo</code>'d child in a long list. Default to <em>not</em> memoizing. (React 19's compiler can auto-memoize, further reducing the need to do it by hand.)</blockquote>
+
+<h2>useRef: DOM access and mutable values</h2>
+<p><code>useRef</code> gives you a mutable box (<code>ref.current</code>) that persists across renders and — crucially — <strong>does not trigger a re-render when you change it</strong>. Two distinct uses:</p>
+<pre><code>function SearchBox() {
+  const inputRef = useRef(null);     // 1) a DOM reference
+  const renderCount = useRef(0);     // 2) a mutable value, no re-render
+
+  useEffect(() =&gt; { inputRef.current.focus(); }, []); // focus on mount
+  renderCount.current += 1;          // mutate freely; UI does NOT update
+
+  return &lt;input ref={inputRef} placeholder="Search…" /&gt;;
+}</code></pre>
+<blockquote class="warn"><strong>Common mistake:</strong> mutating <code>ref.current</code> and expecting the screen to update. It won't — refs are explicitly the escape hatch for values that should <em>not</em> cause renders (timers, previous values, instance-like data, the latest value inside a stale closure). If a change should show on screen, it belongs in state, not a ref.</blockquote>
+
+<h2>Custom hooks: extract and reuse logic</h2>
+<p>A custom hook is just a function named <code>use*</code> that calls other hooks. It's how you share stateful logic between components without copy-paste. Two workhorses:</p>
+<pre><code>// useLocalStorage — state that persists across reloads
+function useLocalStorage(key, initial) {
+  const [value, setValue] = useState(() =&gt; {
+    const raw = localStorage.getItem(key);
+    return raw ? JSON.parse(raw) : initial;        // lazy init: read once
+  });
+  useEffect(() =&gt; {
+    localStorage.setItem(key, JSON.stringify(value));
+  }, [key, value]);
+  return [value, setValue];
+}
+
+// Usage reads just like useState, but survives a refresh:
+const [theme, setTheme] = useLocalStorage("theme", "light");</code></pre>
+<pre><code>// useFetch — data fetching with loading/error state AND a race-condition fix
+function useFetch(url) {
+  const [state, setState] = useState({ data: null, loading: true, error: null });
+  useEffect(() =&gt; {
+    const controller = new AbortController();
+    setState({ data: null, loading: true, error: null });
+    fetch(url, { signal: controller.signal })
+      .then(r =&gt; { if (!r.ok) throw new Error(r.status); return r.json(); })
+      .then(data =&gt; setState({ data, loading: false, error: null }))
+      .catch(err =&gt; {
+        if (err.name !== "AbortError")                 // ignore the cancel
+          setState({ data: null, loading: false, error: err });
+      });
+    return () =&gt; controller.abort();                    // cleanup on url change/unmount
+  }, [url]);
+  return state;
+}</code></pre>
+
+<h2>Data fetching in useEffect: the race condition</h2>
+<p><span class="level advanced">Advanced</span> When <code>url</code> changes quickly (user types in a search box, or navigates), several requests are in flight at once. They can resolve <em>out of order</em> — the response for an old query arrives after the new one and overwrites it. The <code>useFetch</code> above already fixes this with <code>AbortController</code>; the manual pattern:</p>
+<pre><code>useEffect(() =&gt; {
+  let active = true;                      // flag approach (if you can't abort)
+  fetch(`/api/search?q=${query}`)
+    .then(r =&gt; r.json())
+    .then(data =&gt; { if (active) setResults(data); }); // ignore if superseded
+  return () =&gt; { active = false; };        // cleanup marks this run stale
+}, [query]);</code></pre>
+<blockquote class="warn"><strong>The classic bug:</strong> no cleanup, so an in-flight request for <code>"re"</code> resolves after <code>"react"</code> and the UI flashes stale results — or you call <code>setState</code> after the component unmounted. Always either abort (<code>AbortController</code>) or guard with an <code>active</code> flag in the effect's cleanup. For anything beyond trivial fetching, a cache library (TanStack Query, SWR) handles this and more for you.</blockquote>
+
+<h2>React Router basics</h2>
+<p>Client-side routing maps the URL to components without a full page reload. The essentials: declaring routes, reading URL params, nesting layouts, and navigating programmatically.</p>
+<pre><code>import { BrowserRouter, Routes, Route, Link, useParams, useNavigate, Outlet } from "react-router-dom";
+
+function App() {
+  return (
+    &lt;BrowserRouter&gt;
+      &lt;Routes&gt;
+        &lt;Route path="/" element={&lt;Home /&gt;} /&gt;
+        &lt;Route path="/products" element={&lt;ProductsLayout /&gt;}&gt;   {/* nested */}
+          &lt;Route index element={&lt;ProductList /&gt;} /&gt;
+          &lt;Route path=":id" element={&lt;ProductDetail /&gt;} /&gt;        {/* URL param */}
+        &lt;/Route&gt;
+        &lt;Route path="*" element={&lt;NotFound /&gt;} /&gt;                 {/* catch-all */}
+      &lt;/Routes&gt;
+    &lt;/BrowserRouter&gt;
+  );
+}
+
+function ProductsLayout() {
+  return &lt;section&gt;&lt;h2&gt;Products&lt;/h2&gt;&lt;Outlet /&gt;&lt;/section&gt;; // child route renders here
+}
+
+function ProductDetail() {
+  const { id } = useParams();            // "/products/42" -&gt; id === "42"
+  const navigate = useNavigate();
+  return (
+    &lt;article&gt;
+      &lt;p&gt;Product {id}&lt;/p&gt;
+      &lt;button onClick={() =&gt; navigate("/products")}&gt;← Back&lt;/button&gt;
+    &lt;/article&gt;
+  );
+}</code></pre>
+<p><code>&lt;Link&gt;</code> replaces <code>&lt;a&gt;</code> for in-app navigation (no reload), <code>:id</code> declares a param read via <code>useParams()</code>, an <code>&lt;Outlet /&gt;</code> is where nested child routes render inside a shared layout, and <code>useNavigate()</code> navigates from code (e.g. after a form submit).</p>
+
+<h2>Common mistakes</h2>
+<ul>
+  <li><strong>Unstable context values.</strong> <code>value={{ ... }}</code> or an inline function/object in context re-renders every consumer each render. Memoize the value, or split state and dispatch into separate contexts.</li>
+  <li><strong>Wrong or omitted dependency arrays.</strong> An empty <code>[]</code> on an effect that reads <code>query</code> captures a stale value; omitting the array entirely runs the effect every render. List every reactive value the effect/callback uses — trust the <code>react-hooks/exhaustive-deps</code> lint rule.</li>
+  <li><strong>Premature memoization.</strong> Wrapping cheap computations in <code>useMemo</code>/<code>useCallback</code> everywhere adds overhead and noise without measurable benefit. Memoize measured hot spots, not reflexively.</li>
+  <li><strong>Mutating <code>ref.current</code> expecting a re-render.</strong> Refs intentionally don't trigger renders. Visible changes belong in state.</li>
+  <li><strong>Fetch race conditions.</strong> An effect that fetches without cleanup lets a stale response overwrite a newer one. Abort or guard with an <code>active</code> flag in the cleanup.</li>
+</ul>
+
+<h2>Exercises</h2>
+<ul>
+  <li>Rewrite a component that juggles 4+ related <code>useState</code> values as a single <code>useReducer</code>, and unit-test the reducer with no React.</li>
+  <li>Build a <code>ThemeContext</code> combining Context + <code>useReducer</code>; then fix the re-render pitfall by memoizing the provider value (or splitting state/dispatch) and confirm fewer renders with the React DevTools profiler.</li>
+  <li>Write <code>useLocalStorage</code> and <code>useDebounce</code> custom hooks and use them in a settings panel.</li>
+  <li>Reproduce a fetch race condition in a search box (type fast), then fix it with an <code>AbortController</code> in the effect cleanup.</li>
+  <li>Add React Router with a nested layout, a <code>:id</code> detail route read via <code>useParams</code>, and a programmatic <code>useNavigate</code> redirect after an action.</li>
+</ul>
+
+<h2>Mini-project: a themed store with context and a custom hook</h2>
+<p>Build a small product-store app that ties the whole lesson together. Hold the cart in a <strong>Context + useReducer</strong> store (add / remove / clear actions), and persist the selected theme with a <code>useLocalStorage</code> custom hook so it survives reloads. Fetch the product list with a <code>useFetch</code> hook that aborts in-flight requests (no race conditions) and shows loading/error states. Add React Router with a product list, a nested <code>/products/:id</code> detail route, and a cart page, navigating programmatically after "add to cart." Finally, profile it: find one genuinely expensive render and fix it with <code>React.memo</code> + <code>useCallback</code> — and leave everything else un-memoized to prove you only optimize what you measured.</p>

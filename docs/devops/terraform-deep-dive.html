@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en" data-base="../">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0d1117">
+<title>Terraform: Basic to Advanced — DevOps</title>
+<meta name="description" content="From first provider and resource to modules, remote state &amp; locking, workspaces, for_each/dynamic, lifecycle, and import — a full HCL walkthrough.">
+<link rel="canonical" href="https://danegigi.github.io/Tutorials/devops/terraform-deep-dive.html">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Dev Tutorials">
+<meta property="og:title" content="Terraform: Basic to Advanced — DevOps">
+<meta property="og:description" content="From first provider and resource to modules, remote state &amp; locking, workspaces, for_each/dynamic, lifecycle, and import — a full HCL walkthrough.">
+<meta property="og:url" content="https://danegigi.github.io/Tutorials/devops/terraform-deep-dive.html">
+<meta property="og:image" content="https://danegigi.github.io/Tutorials/icon-512.png">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Terraform: Basic to Advanced — DevOps">
+<meta name="twitter:description" content="From first provider and resource to modules, remote state &amp; locking, workspaces, for_each/dynamic, lifecycle, and import — a full HCL walkthrough.">
+<meta name="twitter:image" content="https://danegigi.github.io/Tutorials/icon-512.png">
+<link rel="manifest" href="../manifest.webmanifest">
+<link rel="icon" href="../icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="../icon-192.png">
+<link rel="stylesheet" href="../app.css">
+<script>/* set theme before paint to avoid flash */(function(){try{var t=localStorage.getItem('tut.theme');document.documentElement.setAttribute('data-theme',t||'dark');}catch(e){document.documentElement.setAttribute('data-theme','dark');}})();</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"LearningResource","name":"Terraform: Basic to Advanced","description":"From first provider and resource to modules, remote state & locking, workspaces, for_each/dynamic, lifecycle, and import — a full HCL walkthrough.","url":"https://danegigi.github.io/Tutorials/devops/terraform-deep-dive.html","inLanguage":"en","isPartOf":{"@type":"Course","name":"DevOps — Dev Tutorials","url":"https://danegigi.github.io/Tutorials/devops/"},"learningResourceType":"Tutorial"},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Dev Tutorials","item":"https://danegigi.github.io/Tutorials/"},{"@type":"ListItem","position":2,"name":"DevOps","item":"https://danegigi.github.io/Tutorials/devops/"},{"@type":"ListItem","position":3,"name":"Terraform: Basic to Advanced","item":"https://danegigi.github.io/Tutorials/devops/terraform-deep-dive.html"}]}]}</script>
+
+</head>
+<body class="lesson">
+<header class="nav">
+  <a class="brand" href="../index.html">📚 Dev Tutorials</a>
+  <span class="crumb">Terraform: Basic to Advanced — DevOps</span>
+  <span class="spacer"></span>
+  <a class="navbtn" href="../search.html">🔎 Search</a>
+  <button class="navbtn" id="install-btn" type="button">⬇️ Install</button>
+  <button class="navbtn" id="theme-btn" type="button" aria-label="Toggle theme">🌙 Dark</button>
+</header>
+<main class="wrap lesson-body">
+  <h1 class="page-title">Terraform: Basic to Advanced</h1>
+  <div class="lesson-tools" data-lesson-id="devops/terraform-deep-dive">
+    <button id="done-btn" type="button" aria-pressed="false">○ Mark complete</button>
+    <button id="mark-btn" type="button" aria-pressed="false">☆ Bookmark</button>
+    <a class="navbtn" href="index.html" style="margin-left:auto">All DevOps lessons →</a>
+  </div>
+<nav class="toc" aria-label="On this page"><strong>On this page</strong><ul>
+<li class="lvl2"><a href="#the-mental-model-declare-plan-apply">The mental model: declare, plan, apply</a></li>
+<li class="lvl2"><a href="#your-first-configuration">Your first configuration</a></li>
+<li class="lvl2"><a href="#variables-outputs-and-locals">Variables, outputs, and locals</a></li>
+<li class="lvl2"><a href="#state-terraforms-memory">State: Terraform's memory</a></li>
+<li class="lvl2"><a href="#remote-state-locking">Remote state &amp;amp; locking</a></li>
+<li class="lvl2"><a href="#modules-the-unit-of-reuse">Modules: the unit of reuse</a></li>
+<li class="lvl2"><a href="#loops-count-for_each-and-dynamic">Loops: count, for_each, and dynamic</a></li>
+<li class="lvl2"><a href="#lifecycle-and-dependencies">Lifecycle and dependencies</a></li>
+<li class="lvl2"><a href="#importing-existing-infrastructure">Importing existing infrastructure</a></li>
+<li class="lvl2"><a href="#workspaces-and-multi-environment">Workspaces and multi-environment</a></li>
+<li class="lvl2"><a href="#common-mistakes">Common mistakes</a></li>
+<li class="lvl2"><a href="#exercises">Exercises</a></li>
+<li class="lvl2"><a href="#mini-project">Mini-project</a></li>
+</ul></nav>
+<p class="lead">Terraform turns infrastructure into code: you declare the resources you want in HCL, Terraform computes the difference between that declaration and reality, and applies only the changes needed. This lesson goes from your first resource to the patterns that keep a real team's infrastructure reproducible — modules, remote state, loops, and safe imports.</p>
+
+<h2 id="the-mental-model-declare-plan-apply">The mental model: declare, plan, apply</h2>
+<p><span class="level beginner">Beginner</span> You never write "create a server" as an imperative step. You declare "a server with these properties should exist," and Terraform's core loop figures out the verbs:</p>
+<table>
+<tr><th>Command</th><th>What it does</th></tr>
+<tr><td><code>terraform init</code></td><td>downloads providers &amp; modules, configures the backend. Run after any provider/module change.</td></tr>
+<tr><td><code>terraform plan</code></td><td>shows the diff between your config and real state — <strong>read this every time.</strong></td></tr>
+<tr><td><code>terraform apply</code></td><td>makes reality match (after you confirm the plan).</td></tr>
+<tr><td><code>terraform destroy</code></td><td>deletes everything the state tracks.</td></tr>
+</table>
+
+<h2 id="your-first-configuration">Your first configuration</h2>
+<pre><code># main.tf
+terraform {
+  required_version = "&gt;= 1.9"
+  required_providers {
+    aws = { source = "hashicorp/aws", version = "~&gt; 5.0" }
+  }
+}
+
+provider "aws" {
+  region = "us-east-1"
+}
+
+resource "aws_s3_bucket" "assets" {
+  bucket = "my-app-assets-prod"
+  tags   = { Environment = "prod", ManagedBy = "terraform" }
+}</code></pre>
+<pre><code>terraform init
+terraform plan
+#   + resource "aws_s3_bucket" "assets" { ... }
+# Plan: 1 to add, 0 to change, 0 to destroy.
+terraform apply</code></pre>
+<p>A <strong>resource</strong> has a type (<code>aws_s3_bucket</code>) and a local name (<code>assets</code>). You reference it elsewhere as <code>aws_s3_bucket.assets.id</code> — and those references are how Terraform builds its dependency graph and orders operations.</p>
+
+<h2 id="variables-outputs-and-locals">Variables, outputs, and locals</h2>
+<pre><code># variables.tf
+variable "environment" {
+  type    = string
+  default = "dev"
+  validation {
+    condition     = contains(["dev", "staging", "prod"], var.environment)
+    error_message = "environment must be dev, staging, or prod."
+  }
+}
+
+# locals.tf — computed values, named once
+locals {
+  name_prefix = "myapp-${var.environment}"
+  common_tags = { Environment = var.environment, ManagedBy = "terraform" }
+}
+
+# outputs.tf — surface values after apply (and to other configs)
+output "bucket_name" {
+  value = aws_s3_bucket.assets.bucket
+}</code></pre>
+<pre><code>terraform apply -var environment=prod
+# or a file:
+terraform apply -var-file=prod.tfvars
+terraform output bucket_name</code></pre>
+<blockquote class="tip">Precedence (lowest to highest): defaults → <code>terraform.tfvars</code> / <code>*.auto.tfvars</code> → <code>-var-file</code> → <code>-var</code> → <code>TF_VAR_*</code> env vars. Keep secrets out of tfvars checked into Git.</blockquote>
+
+<h2 id="state-terraforms-memory">State: Terraform's memory</h2>
+<p><span class="level intermediate">Intermediate</span> Terraform records what it created in a <strong>state file</strong>. State maps your config to real resource IDs — without it, Terraform can't tell "already exists" from "needs creating." The default is a local <code>terraform.tfstate</code>, which breaks the moment a second person runs apply.</p>
+<blockquote class="warn"><strong>Never commit <code>terraform.tfstate</code> to Git</strong> — it contains resource IDs and often secrets in plaintext, and two people editing it diverge instantly. Use a remote backend.</blockquote>
+
+<h2 id="remote-state-locking">Remote state &amp; locking</h2>
+<pre><code># backend.tf — S3 + DynamoDB lock (classic AWS setup)
+terraform {
+  backend "s3" {
+    bucket         = "mycompany-tfstate"
+    key            = "prod/app.tfstate"
+    region         = "us-east-1"
+    dynamodb_table = "tf-locks"   # prevents two applies at once
+    encrypt        = true
+  }
+}</code></pre>
+<p>Remote state puts the state in shared storage; the lock (DynamoDB here, or the newer S3-native lockfile) stops two people from applying simultaneously and corrupting it. HCP Terraform and other backends give the same guarantees.</p>
+
+<h2 id="modules-the-unit-of-reuse">Modules: the unit of reuse</h2>
+<p><span class="level intermediate">Intermediate</span> A <strong>module</strong> is a folder of <code>.tf</code> files you can call with inputs — the function of infrastructure code. The standard structure:</p>
+<pre><code>modules/
+  web-service/
+    main.tf        # resources
+    variables.tf   # inputs
+    outputs.tf     # outputs
+environments/
+  prod/main.tf     # calls the module</code></pre>
+<pre><code># environments/prod/main.tf
+module "api" {
+  source      = "../../modules/web-service"
+  name        = "api"
+  environment = "prod"
+  replicas    = 4
+}
+
+output "api_url" {
+  value = module.api.service_url
+}</code></pre>
+<blockquote class="tip">Pin remote modules to a version (<code>version = "5.1.2"</code> from a registry, or a Git <code>?ref=v1.2.0</code> tag). An unpinned module can change under you between applies.</blockquote>
+
+<h2 id="loops-count-for_each-and-dynamic">Loops: count, for_each, and dynamic</h2>
+<pre><code># count — simple N copies (indexed; reordering is disruptive)
+resource "aws_instance" "worker" {
+  count         = 3
+  instance_type = "t3.micro"
+  tags          = { Name = "worker-${count.index}" }
+}
+
+# for_each — keyed copies (STABLE to add/remove — prefer this)
+resource "aws_iam_user" "team" {
+  for_each = toset(["alice", "bob", "carol"])
+  name     = each.key
+}</code></pre>
+<pre><code># dynamic — generate repeated nested blocks
+resource "aws_security_group" "web" {
+  dynamic "ingress" {
+    for_each = [80, 443]
+    content {
+      from_port   = ingress.value
+      to_port     = ingress.value
+      protocol    = "tcp"
+      cidr_blocks = ["0.0.0.0/0"]
+    }
+  }
+}</code></pre>
+<blockquote class="warn"><strong>count vs for_each — a real footgun:</strong> with <code>count</code>, resources are tracked by index (<code>[0]</code>, <code>[1]</code>). Remove the middle item from the list and everything after it shifts index, so Terraform plans to destroy &amp; recreate them. <code>for_each</code> tracks by key, so removing one leaves the others untouched. Prefer <code>for_each</code> for anything with identity.</blockquote>
+
+<h2 id="lifecycle-and-dependencies">Lifecycle and dependencies</h2>
+<pre><code>resource "aws_db_instance" "main" {
+  # ...
+  lifecycle {
+    prevent_destroy       = true    # refuse to delete this (prod DB)
+    create_before_destroy = true    # avoid downtime on replacement
+    ignore_changes        = [tags["LastModified"]]  # don't fight an external process
+  }
+}
+
+# explicit ordering when there's no reference to infer it
+resource "aws_s3_bucket_policy" "p" {
+  depends_on = [aws_s3_bucket.assets]
+}</code></pre>
+
+<h2 id="importing-existing-infrastructure">Importing existing infrastructure</h2>
+<p><span class="level advanced">Advanced</span> Resources created by hand (clickops) can be brought under Terraform. Modern Terraform uses an <code>import</code> block so the import itself is reviewable in a plan:</p>
+<pre><code>import {
+  to = aws_s3_bucket.legacy
+  id = "my-existing-bucket"
+}
+# then: terraform plan -generate-config-out=generated.tf
+# Terraform writes a starting resource block AND shows what (if anything) would change.</code></pre>
+<blockquote class="tip">After import, run <code>terraform plan</code> until it shows <em>no changes</em> — that proves your HCL now exactly matches the real resource. If the plan wants to modify something, your config drifted from reality; fix the config, not the resource.</blockquote>
+
+<h2 id="workspaces-and-multi-environment">Workspaces and multi-environment</h2>
+<p>Workspaces give one config multiple independent states (<code>terraform workspace new staging</code>). They're fine for small cases, but for truly different environments most teams prefer <strong>separate directories or separate backends</strong> per environment — it keeps prod and dev state physically apart and makes blast radius obvious. Reach for workspaces when the environments are near-identical; reach for directories when they diverge.</p>
+
+<h2 id="common-mistakes">Common mistakes</h2>
+<blockquote class="warn"><ul>
+<li><strong>Committing state to Git</strong> or using local state on a team — the fastest way to corrupt everything.</li>
+<li><strong>Applying without reading the plan.</strong> The plan is your diff review; "1 to destroy" on a database is how outages happen.</li>
+<li><strong>Using <code>count</code> for resources with identity</strong>, then shuffling the list and triggering destroy/recreate. Use <code>for_each</code>.</li>
+<li><strong>Hardcoding secrets</strong> in <code>.tf</code> or <code>.tfvars</code>. Pull them from a secrets manager or environment at apply time.</li>
+<li><strong>Editing resources by hand after Terraform created them</strong>, causing drift the next plan wants to undo. Change it in code and apply.</li>
+<li><strong>No <code>prevent_destroy</code> on stateful resources</strong>, so one bad refactor plans to delete the production database.</li>
+</ul></blockquote>
+
+<h2 id="exercises">Exercises</h2>
+<ul>
+<li>Write a config that creates two S3 buckets with <code>for_each</code>, then remove one key and confirm the plan touches only that bucket (not the other).</li>
+<li>Configure an S3 remote backend with locking, run an apply, and inspect the state object in the bucket.</li>
+<li>Extract your resources into a module with input variables and an output, then call it twice (dev and prod) with different inputs.</li>
+<li>Create a resource by hand in your cloud console, write an <code>import</code> block for it, and use <code>-generate-config-out</code> to get a config that plans clean.</li>
+<li>Add a <code>lifecycle { prevent_destroy = true }</code> to a resource and try to destroy it — read the error, then understand why it's your friend.</li>
+</ul>
+
+<h2 id="mini-project">Mini-project</h2>
+<p>Build a small but complete, reusable infrastructure module: a <code>network</code> module (VPC + subnets) and a <code>web-service</code> module (compute + security group + load balancer) that consumes the network's outputs. Wire them together in two environment directories (<code>staging</code>, <code>prod</code>) each with its own remote backend and tfvars, using <code>for_each</code> where there's identity, variable validation on the environment name, and <code>prevent_destroy</code> on anything stateful. Run <code>plan</code> for both environments and confirm each shows only its own changes — proving the module is genuinely reusable and the environments are isolated.</p>
+
+<section class="further"><h2 id="further-reading">Further reading</h2>
+<p>Official documentation for the tools and APIs covered on this page:</p>
+<ul class="further-list"><li><a href="https://developer.hashicorp.com/terraform/language" target="_blank" rel="noopener">Terraform language docs ↗</a></li>
+<li><a href="https://developer.hashicorp.com/terraform/language/modules/develop/structure" target="_blank" rel="noopener">Terraform: standard module structure ↗</a></li>
+<li><a href="https://developer.hashicorp.com/terraform/language/backend" target="_blank" rel="noopener">Backends &amp; remote state ↗</a></li>
+<li><a href="https://cloud.google.com/docs/terraform/best-practices-for-terraform" target="_blank" rel="noopener">Terraform best practices (Google) ↗</a></li></ul></section>
+  <nav class="pager">
+<a class="prev" href="networking-deep-dive.html"><small>Previous</small>🔁 Networking Deep Dive</a>
+<a class="next" href="helm-deep-dive.html"><small>Next</small>🔁 Helm: Packaging Kubernetes Apps</a>
+  </nav>
+</main>
+<button type="button" class="fab top" id="fab-top" aria-label="Back to top">↑ Top</button>
+<div class="banner" id="update-banner" role="status">A new version is available.<button type="button">Reload</button></div>
+<div class="banner" id="offline-banner" role="status">You're offline — showing cached lessons.</div>
+<script src="../app.js" defer></script>
+</body>
+</html>

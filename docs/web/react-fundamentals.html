@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en" data-base="../">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0d1117">
+<title>React Fundamentals — Web Development</title>
+<meta name="description" content="JSX, function components, props, the useState and useEffect hooks, rendering lists with keys, handling events and forms, and lifting state up — scaffolded with Vite.">
+<link rel="canonical" href="https://danegigi.github.io/Tutorials/web/react-fundamentals.html">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Dev Tutorials">
+<meta property="og:title" content="React Fundamentals — Web Development">
+<meta property="og:description" content="JSX, function components, props, the useState and useEffect hooks, rendering lists with keys, handling events and forms, and lifting state up — scaffolded with Vite.">
+<meta property="og:url" content="https://danegigi.github.io/Tutorials/web/react-fundamentals.html">
+<meta property="og:image" content="https://danegigi.github.io/Tutorials/icon-512.png">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="React Fundamentals — Web Development">
+<meta name="twitter:description" content="JSX, function components, props, the useState and useEffect hooks, rendering lists with keys, handling events and forms, and lifting state up — scaffolded with Vite.">
+<meta name="twitter:image" content="https://danegigi.github.io/Tutorials/icon-512.png">
+<link rel="manifest" href="../manifest.webmanifest">
+<link rel="icon" href="../icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="../icon-192.png">
+<link rel="stylesheet" href="../app.css">
+<script>/* set theme before paint to avoid flash */(function(){try{var t=localStorage.getItem('tut.theme');document.documentElement.setAttribute('data-theme',t||'dark');}catch(e){document.documentElement.setAttribute('data-theme','dark');}})();</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"LearningResource","name":"React Fundamentals","description":"JSX, function components, props, the useState and useEffect hooks, rendering lists with keys, handling events and forms, and lifting state up — scaffolded with Vite.","url":"https://danegigi.github.io/Tutorials/web/react-fundamentals.html","inLanguage":"en","isPartOf":{"@type":"Course","name":"Web Development — Dev Tutorials","url":"https://danegigi.github.io/Tutorials/web/"},"learningResourceType":"Tutorial"},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Dev Tutorials","item":"https://danegigi.github.io/Tutorials/"},{"@type":"ListItem","position":2,"name":"Web Development","item":"https://danegigi.github.io/Tutorials/web/"},{"@type":"ListItem","position":3,"name":"React Fundamentals","item":"https://danegigi.github.io/Tutorials/web/react-fundamentals.html"}]}]}</script>
+
+</head>
+<body class="lesson">
+<header class="nav">
+  <a class="brand" href="../index.html">📚 Dev Tutorials</a>
+  <span class="crumb">React Fundamentals — Web Development</span>
+  <span class="spacer"></span>
+  <a class="navbtn" href="../search.html">🔎 Search</a>
+  <button class="navbtn" id="install-btn" type="button">⬇️ Install</button>
+  <button class="navbtn" id="theme-btn" type="button" aria-label="Toggle theme">🌙 Dark</button>
+</header>
+<main class="wrap lesson-body">
+  <h1 class="page-title">React Fundamentals</h1>
+  <div class="lesson-tools" data-lesson-id="web/react-fundamentals">
+    <button id="done-btn" type="button" aria-pressed="false">○ Mark complete</button>
+    <button id="mark-btn" type="button" aria-pressed="false">☆ Bookmark</button>
+    <a class="navbtn" href="index.html" style="margin-left:auto">All Web Development lessons →</a>
+  </div>
+<nav class="toc" aria-label="On this page"><strong>On this page</strong><ul>
+<li class="lvl2"><a href="#scaffolding-a-project">Scaffolding a project</a></li>
+<li class="lvl2"><a href="#what-jsx-is">What JSX is</a></li>
+<li class="lvl2"><a href="#components-and-composition">Components and composition</a></li>
+<li class="lvl2"><a href="#props">Props</a></li>
+<li class="lvl2"><a href="#state-with-usestate">State with useState</a></li>
+<li class="lvl2"><a href="#rendering-lists">Rendering lists</a></li>
+<li class="lvl2"><a href="#events-and-controlled-inputs">Events and controlled inputs</a></li>
+<li class="lvl2"><a href="#effects-with-useeffect">Effects with useEffect</a></li>
+<li class="lvl2"><a href="#lifting-state-up">Lifting state up</a></li>
+<li class="lvl2"><a href="#common-mistakes">Common mistakes</a></li>
+<li class="lvl2"><a href="#exercises">Exercises</a></li>
+<li class="lvl2"><a href="#mini-project-a-controlled-todo-list">Mini-project: a controlled todo list</a></li>
+</ul></nav>
+<p class="lead">React is a library for building UIs out of small, reusable <em>components</em> that describe what the screen should look like for a given state. You write a function that returns markup, React renders it, and whenever your data changes React re-renders and updates the DOM for you.</p>
+
+<h2 id="scaffolding-a-project">Scaffolding a project</h2>
+<p><span class="level beginner">Beginner</span> The fastest way to a working React app is Vite. It gives you a dev server with hot reloading and a production build with no config:</p>
+<pre><code>npm create vite@latest my-app -- --template react
+cd my-app
+npm install
+npm run dev</code></pre>
+<pre><code># expected output
+  VITE v5.4.0  ready in 320 ms
+
+  ➜  Local:   http://localhost:5173/
+  ➜  press h + enter to show help</code></pre>
+<p>Open that URL and edit <code>src/App.jsx</code> — the page updates instantly without a reload. The entry point wires your root component into the page:</p>
+<pre><code>// src/main.jsx
+import { createRoot } from "react-dom/client";
+import App from "./App.jsx";
+
+createRoot(document.getElementById("root")).render(&lt;App /&gt;);</code></pre>
+<blockquote class="tip">The <code>--</code> before <code>--template react</code> is required: it tells npm to pass the flag to <code>create-vite</code> rather than consume it itself. Use <code>react-ts</code> instead of <code>react</code> for a TypeScript project.</blockquote>
+
+<h2 id="what-jsx-is">What JSX is</h2>
+<p>JSX is HTML-like syntax inside JavaScript. It is <em>not</em> run by the browser — a build step compiles each tag into a <code>React.createElement</code> call that returns a plain object describing the UI:</p>
+<pre><code>const el = &lt;h1 className="title"&gt;Hello&lt;/h1&gt;;
+// compiles to:
+const el = React.createElement("h1", { className: "title" }, "Hello");</code></pre>
+<p>Because it compiles to JavaScript, three rules follow:</p>
+<ul>
+  <li><strong>Attributes use JS names.</strong> It's <code>className</code> (not <code>class</code>) and <code>htmlFor</code> (not <code>for</code>), because <code>class</code> is a reserved word.</li>
+  <li><strong><code>{expression}</code> embeds JavaScript.</strong> Anything in braces is evaluated and inserted.</li>
+  <li><strong>One root element.</strong> A component returns a single node; wrap siblings in a fragment <code>&lt;&gt;...&lt;/&gt;</code> to avoid an extra wrapper div.</li>
+</ul>
+<pre><code>function Greeting() {
+  const name = "Ada";
+  const hour = new Date().getHours();
+  return (
+    &lt;&gt;
+      &lt;h2 className="greeting"&gt;Hello, {name}&lt;/h2&gt;
+      &lt;p&gt;{hour &lt; 12 ? "Good morning" : "Good afternoon"}&lt;/p&gt;
+    &lt;/&gt;
+  );
+}</code></pre>
+<blockquote class="warn">Braces embed <em>expressions</em>, not statements. <code>{if (x) ...}</code> is a syntax error — use a ternary <code>{x ? a : b}</code> or <code>{x &amp;&amp; a}</code> for conditional rendering, and compute anything complex in a variable before the <code>return</code>.</blockquote>
+
+<h2 id="components-and-composition">Components and composition</h2>
+<p>A component is a function whose name starts with a capital letter and returns JSX. You build screens by composing small components:</p>
+<pre><code>function Avatar() {
+  return &lt;img className="avatar" src="/me.png" alt="" /&gt;;
+}
+
+function Card() {
+  return (
+    &lt;div className="card"&gt;
+      &lt;Avatar /&gt;
+      &lt;p&gt;Composed from smaller pieces.&lt;/p&gt;
+    &lt;/div&gt;
+  );
+}</code></pre>
+<blockquote class="warn">Capitalization matters: <code>&lt;Avatar /&gt;</code> renders your component, but <code>&lt;avatar /&gt;</code> is treated as an unknown HTML tag. Always capitalize component names.</blockquote>
+
+<h2 id="props">Props</h2>
+<p>Props pass data from a parent to a child. They are a <strong>read-only</strong> argument object — a child must never reassign them. The special <code>children</code> prop holds whatever JSX you nest inside the tag:</p>
+<pre><code>function Button({ label, onClick, variant = "primary" }) {
+  return (
+    &lt;button className={`btn ${variant}`} onClick={onClick}&gt;
+      {label}
+    &lt;/button&gt;
+  );
+}
+
+function Panel({ title, children }) {
+  return (
+    &lt;section className="panel"&gt;
+      &lt;h3&gt;{title}&lt;/h3&gt;
+      {children}
+    &lt;/section&gt;
+  );
+}
+
+// usage
+&lt;Panel title="Settings"&gt;
+  &lt;Button label="Save" onClick={save} /&gt;
+&lt;/Panel&gt;</code></pre>
+<blockquote class="tip">Destructure props in the parameter list (<code>{ label, onClick }</code>) and give defaults there (<code>variant = "primary"</code>). It documents a component's API at a glance.</blockquote>
+
+<h2 id="state-with-usestate">State with useState</h2>
+<p><span class="level beginner">Beginner</span> Props come from the parent; <em>state</em> is data a component owns and can change over time. <code>useState</code> returns the current value and a setter. Calling the setter asks React to re-render with the new value:</p>
+<pre><code>import { useState } from "react";
+
+function Counter() {
+  const [count, setCount] = useState(0);   // 0 is the initial value
+  return (
+    &lt;button onClick={() =&gt; setCount(count + 1)}&gt;
+      Clicked {count} times
+    &lt;/button&gt;
+  );
+}</code></pre>
+<p><strong>State is a snapshot.</strong> Within one render, <code>count</code> is a fixed value — the setter does not change it immediately. So this only increments by one:</p>
+<pre><code>setCount(count + 1);
+setCount(count + 1);   // both read the SAME snapshot of count → +1 total</code></pre>
+<p>When the next value depends on the previous one, pass a <strong>functional update</strong>. React feeds each call the latest value:</p>
+<pre><code>setCount(c =&gt; c + 1);
+setCount(c =&gt; c + 1);   // now +2 total</code></pre>
+
+<h2 id="rendering-lists">Rendering lists</h2>
+<p>Render an array with <code>.map</code>, returning one element per item. Each element needs a stable <code>key</code> so React can match items across renders:</p>
+<pre><code>function TodoList({ todos }) {
+  return (
+    &lt;ul&gt;
+      {todos.map(todo =&gt; (
+        &lt;li key={todo.id}&gt;{todo.text}&lt;/li&gt;
+      ))}
+    &lt;/ul&gt;
+  );
+}</code></pre>
+<blockquote class="warn"><strong>The key rule:</strong> a key must be <em>stable, unique, and tied to the item's identity</em> — use a database id, not the array index. Using the index as the key breaks when the list is reordered, filtered, or has items removed: React reuses the wrong DOM node and inputs show up attached to the wrong row.</blockquote>
+
+<h2 id="events-and-controlled-inputs">Events and controlled inputs</h2>
+<p>Attach handlers with camelCase props like <code>onClick</code> and <code>onChange</code> — pass the function, don't call it:</p>
+<pre><code>&lt;button onClick={handleSave}&gt;Save&lt;/button&gt;    {/* right: pass it */}
+&lt;button onClick={handleSave()}&gt;Save&lt;/button&gt;  {/* wrong: runs on render */}</code></pre>
+<p>A <strong>controlled input</strong> gets its value from state and writes back through the setter, making React the single source of truth for the field:</p>
+<pre><code>function NameField() {
+  const [name, setName] = useState("");
+  return (
+    &lt;input
+      value={name}
+      onChange={(e) =&gt; setName(e.target.value)}
+      placeholder="Your name"
+    /&gt;
+  );
+}</code></pre>
+
+<h2 id="effects-with-useeffect">Effects with useEffect</h2>
+<p><span class="level intermediate">Intermediate</span> Most logic belongs in event handlers. <code>useEffect</code> is for <em>synchronizing with something outside React</em> — a network request, a subscription, a timer. It runs <em>after</em> the render is painted:</p>
+<pre><code>import { useEffect, useState } from "react";
+
+function Clock() {
+  const [now, setNow] = useState(new Date());
+
+  useEffect(() =&gt; {
+    const id = setInterval(() =&gt; setNow(new Date()), 1000);
+    return () =&gt; clearInterval(id);   // cleanup: runs before re-run and on unmount
+  }, []);   // [] → run once after the first render
+
+  return &lt;p&gt;{now.toLocaleTimeString()}&lt;/p&gt;;
+}</code></pre>
+<p>The <strong>dependency array</strong> controls when the effect re-runs:</p>
+<table>
+  <thead><tr><th>Deps</th><th>When the effect runs</th></tr></thead>
+  <tbody>
+    <tr><td><code>[]</code></td><td>Once, after the first render</td></tr>
+    <tr><td><code>[userId]</code></td><td>After the first render and whenever <code>userId</code> changes</td></tr>
+    <tr><td>omitted</td><td>After <em>every</em> render (rarely what you want)</td></tr>
+  </tbody>
+</table>
+<pre><code>useEffect(() =&gt; {
+  let active = true;
+  fetch(`/api/users/${userId}`)
+    .then(r =&gt; r.json())
+    .then(data =&gt; { if (active) setUser(data); });
+  return () =&gt; { active = false; };   // ignore a stale response
+}, [userId]);</code></pre>
+
+<h2 id="lifting-state-up">Lifting state up</h2>
+<p>When two components need the same data, move the state to their nearest common parent and pass it down as props. The parent owns the state; children receive the value and a callback to change it:</p>
+<pre><code>function Parent() {
+  const [query, setQuery] = useState("");
+  return (
+    &lt;&gt;
+      &lt;SearchBox query={query} onChange={setQuery} /&gt;
+      &lt;Results query={query} /&gt;
+    &lt;/&gt;
+  );
+}</code></pre>
+<p>Now the search box and the results list stay in sync because they read from one shared source instead of each keeping a private copy.</p>
+
+<h2 id="common-mistakes">Common mistakes</h2>
+<blockquote class="warn">
+<ul>
+  <li><strong>Mutating state directly.</strong> <code>todos.push(x)</code> then <code>setTodos(todos)</code> does nothing — React compares the same array reference and skips the re-render. Create a new value: <code>setTodos([...todos, x])</code>.</li>
+  <li><strong>Index as key (or missing/duplicate keys).</strong> Breaks on reorder/removal and triggers a console warning. Use a stable id.</li>
+  <li><strong>Stale closures.</strong> An effect or handler captures the state value from the render it was created in. Use a functional update <code>setCount(c =&gt; c + 1)</code> or add the value to the dependency array.</li>
+  <li><strong>Missing effect dependencies.</strong> Leaving out a value the effect uses causes it to work with stale data. List every reactive value it reads; the <code>react-hooks/exhaustive-deps</code> lint rule catches this.</li>
+  <li><strong>Calling hooks conditionally.</strong> Hooks must run in the same order every render — never inside an <code>if</code>, loop, or after an early <code>return</code>. Call them at the top level of the component.</li>
+</ul>
+</blockquote>
+
+<h2 id="exercises">Exercises</h2>
+<ul>
+  <li>Scaffold a Vite React app and change the counter so two rapid clicks reliably add two, using a functional update.</li>
+  <li>Render a list of five items with correct <code>key</code>s, then add a "remove" button — confirm no key warning appears in the console.</li>
+  <li>Build a controlled text input that shows a live character count below it.</li>
+  <li>Write a component that fetches <code>/api/users/:id</code> in a <code>useEffect</code> keyed on <code>id</code>, with cleanup that ignores a stale response.</li>
+  <li>Lift state up: give two sibling components a shared counter owned by their parent.</li>
+</ul>
+
+<h2 id="mini-project-a-controlled-todo-list">Mini-project: a controlled todo list</h2>
+<p>Build a todo app in a single Vite React project. Keep an array of <code>{ id, text, done }</code> objects in <code>useState</code> on a parent component, plus a <code>filter</code> state of <code>"all" | "active" | "done"</code>.</p>
+<ul>
+  <li><strong>Add:</strong> a controlled input whose submit handler appends <code>{ id: crypto.randomUUID(), text, done: false }</code> with a fresh array (never <code>push</code>), then clears the field.</li>
+  <li><strong>Toggle:</strong> clicking an item flips its <code>done</code> by mapping to a new array and replacing only the matching item.</li>
+  <li><strong>Remove:</strong> a delete button filters the item out by id.</li>
+  <li><strong>Filter:</strong> three buttons set the filter; the rendered list is <code>todos.filter(...)</code> derived from state, not a second copy stored in state.</li>
+  <li>Use each todo's <code>id</code> as its <code>key</code>, and show a live count of remaining active items.</li>
+</ul>
+<p>This exercises every concept in the lesson at once: components and props, immutable state updates, lists with keys, controlled inputs, event handlers, and deriving the visible list from a single source of truth.</p>
+
+<section class="further"><h2 id="further-reading">Further reading</h2>
+<p>Official documentation for the tools and APIs covered on this page:</p>
+<ul class="further-list"><li><a href="https://react.dev/learn" target="_blank" rel="noopener">React: Learn ↗</a></li>
+<li><a href="https://react.dev/learn/thinking-in-react" target="_blank" rel="noopener">Thinking in React ↗</a></li>
+<li><a href="https://react.dev/reference/react/hooks" target="_blank" rel="noopener">Hooks reference ↗</a></li>
+<li><a href="https://vite.dev/guide/#scaffolding-your-first-vite-project" target="_blank" rel="noopener">Vite: scaffolding a React app ↗</a></li></ul></section>
+  <nav class="pager">
+<a class="prev" href="vue-advanced.html"><small>Previous</small>🌐 Vue 3 Advanced</a>
+<a class="next" href="react-advanced.html"><small>Next</small>🌐 React Advanced</a>
+  </nav>
+</main>
+<button type="button" class="fab top" id="fab-top" aria-label="Back to top">↑ Top</button>
+<div class="banner" id="update-banner" role="status">A new version is available.<button type="button">Reload</button></div>
+<div class="banner" id="offline-banner" role="status">You're offline — showing cached lessons.</div>
+<script src="../app.js" defer></script>
+</body>
+</html>

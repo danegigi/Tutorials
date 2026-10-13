@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://danegigi.github.io/Tutorials/sitemap.xml

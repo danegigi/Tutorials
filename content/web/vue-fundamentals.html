@@ -1,0 +1,274 @@
+<p class="lead">Vue is a progressive framework: you can drop it into one page with a single <code>&lt;script&gt;</code> tag, or scaffold a full build-tooled single-page app — and the mental model is the same either way. You describe what the UI should look like for a given piece of state, and Vue keeps the DOM in sync as that state changes. This lesson uses Vue 3 with the Composition API and <code>&lt;script setup&gt;</code>, the current recommended style.</p>
+
+<h2>Two ways to start an app</h2>
+
+<h3>1. CDN + createApp (zero build)</h3>
+<p><span class="level beginner">Beginner</span> The fastest way to try Vue is a plain HTML file — no Node, no install. Great for a prototype, a demo, or sprinkling interactivity onto an existing page.</p>
+<pre><code>&lt;!DOCTYPE html&gt;
+&lt;div id="app"&gt;
+  &lt;button @click="count++"&gt;Clicked {{ count }} times&lt;/button&gt;
+&lt;/div&gt;
+
+&lt;script src="https://unpkg.com/vue@3/dist/vue.global.js"&gt;&lt;/script&gt;
+&lt;script&gt;
+  const { createApp, ref } = Vue;
+  createApp({
+    setup() {
+      const count = ref(0);
+      return { count };   // anything returned here is usable in the template
+    }
+  }).mount('#app');
+&lt;/script&gt;</code></pre>
+<p>Open the file in a browser and the button works. <code>createApp(...)</code> builds the app instance; <code>.mount('#app')</code> tells Vue which existing element to take over.</p>
+
+<h3>2. npm create vue@latest (Vite build)</h3>
+<p><span class="level beginner">Beginner</span> For anything real you want a build step: single-file components (<code>.vue</code>), hot-reload, and a bundler. The official scaffolder sets this up:</p>
+<pre><code>$ npm create vue@latest
+
+Vue.js - The Progressive JavaScript Framework
+
+✔ Project name: … my-app
+✔ Add TypeScript? … No
+✔ Add Vue Router for Single Page Application development? … No
+✔ Add Pinia for state management? … No
+✔ Add Vitest for Unit Testing? … No
+
+Scaffolding project in ./my-app...
+Done. Now run:
+
+  cd my-app
+  npm install
+  npm run dev
+
+  VITE v5.4.0  ready in 412 ms
+  ➜  Local:   http://localhost:5173/</code></pre>
+<blockquote class="tip">The CDN path is perfect for learning the reactivity concepts below without tooling friction. Switch to the Vite scaffold the moment you want to split code into <code>.vue</code> files and import components. Every API in this lesson behaves identically in both.</blockquote>
+
+<h2>Reactive state: ref() and reactive()</h2>
+<p><span class="level beginner">Beginner</span> Reactivity is Vue's core trick: wrap a value so that when it changes, every part of the UI using it updates automatically. There are two tools.</p>
+
+<h3>ref() — for any single value</h3>
+<pre><code>import { ref } from 'vue';
+
+const count = ref(0);
+const name  = ref('Ada');
+
+// In JavaScript you must use .value to read or write:
+count.value++;          // now 1
+console.log(name.value); // 'Ada'</code></pre>
+<p><code>ref()</code> wraps the value in an object with a <code>.value</code> property. That indirection is what lets Vue track reads and writes.</p>
+
+<h3>reactive() — for objects</h3>
+<pre><code>import { reactive } from 'vue';
+
+const state = reactive({ count: 0, user: { name: 'Ada' } });
+
+state.count++;              // no .value — reactive() returns a proxy
+state.user.name = 'Grace';  // deeply reactive</code></pre>
+<blockquote class="warn"><strong>The .value gotcha.</strong> In <em>script</em> you must write <code>count.value</code>; forgetting it is the single most common beginner bug (<code>count++</code> on a ref increments the object, not the number, and does nothing useful). In the <em>template</em>, Vue unwraps refs for you — you write <code>{{ count }}</code>, not <code>{{ count.value }}</code>. So the rule is: <strong>.value in JS, no .value in the template.</strong></blockquote>
+
+<p>Which to use? Reach for <code>ref()</code> by default — it works for primitives and objects alike and the explicit <code>.value</code> makes reactivity obvious. Use <code>reactive()</code> when you have a group of related fields you always touch together.</p>
+
+<h2>Derived state with computed()</h2>
+<p><span class="level beginner">Beginner</span> A <code>computed</code> is a value calculated from other reactive state. It caches its result and only recalculates when a dependency changes — don't do this work in a plain function called from the template.</p>
+<pre><code>import { ref, computed } from 'vue';
+
+const items = ref([
+  { text: 'Learn Vue',  done: true  },
+  { text: 'Build an app', done: false },
+]);
+
+const remaining = computed(() =&gt; items.value.filter(i =&gt; !i.done).length);
+// remaining.value is 1, and updates automatically when any item's `done` flips.</code></pre>
+
+<h2>Template syntax</h2>
+
+<h3>Text interpolation</h3>
+<pre><code>&lt;p&gt;Hello, {{ name }}! You have {{ remaining }} tasks left.&lt;/p&gt;
+&lt;p&gt;Total: {{ price * quantity }}&lt;/p&gt;   &lt;!-- any JS expression works --&gt;</code></pre>
+
+<h3>v-bind — bind an attribute</h3>
+<pre><code>&lt;a v-bind:href="url"&gt;link&lt;/a&gt;
+&lt;a :href="url"&gt;link&lt;/a&gt;                    &lt;!-- : is the shorthand --&gt;
+&lt;img :src="avatar" :alt="name"&gt;
+&lt;button :disabled="isLoading"&gt;Save&lt;/button&gt;
+&lt;div :class="{ active: isOpen, done: task.done }"&gt;&lt;/div&gt;  &lt;!-- conditional classes --&gt;</code></pre>
+
+<h3>v-on — listen to events</h3>
+<pre><code>&lt;button v-on:click="count++"&gt;+1&lt;/button&gt;
+&lt;button @click="addTodo"&gt;Add&lt;/button&gt;              &lt;!-- @ is the shorthand --&gt;
+&lt;form @submit.prevent="save"&gt;...&lt;/form&gt;            &lt;!-- .prevent = preventDefault() --&gt;
+&lt;input @keyup.enter="addTodo"&gt;                     &lt;!-- key modifier --&gt;</code></pre>
+
+<h3>v-model — two-way binding</h3>
+<p><span class="level beginner">Beginner</span> <code>v-model</code> wires a form input to a ref in both directions: type in the box, the ref updates; change the ref, the box updates.</p>
+<pre><code>&lt;input v-model="newTodo" placeholder="What needs doing?"&gt;
+&lt;p&gt;You typed: {{ newTodo }}&lt;/p&gt;
+
+&lt;!-- works on checkboxes, radios, selects, textareas too --&gt;
+&lt;input type="checkbox" v-model="showDone"&gt;
+&lt;select v-model="filter"&gt;
+  &lt;option value="all"&gt;All&lt;/option&gt;
+  &lt;option value="active"&gt;Active&lt;/option&gt;
+&lt;/select&gt;</code></pre>
+
+<h2>Conditional &amp; list rendering</h2>
+
+<h3>v-if vs v-show</h3>
+<pre><code>&lt;p v-if="remaining === 0"&gt;All done! 🎉&lt;/p&gt;
+&lt;p v-else-if="remaining === 1"&gt;One task left.&lt;/p&gt;
+&lt;p v-else&gt;{{ remaining }} tasks left.&lt;/p&gt;
+
+&lt;div v-show="isOpen"&gt;Toggled with CSS display&lt;/div&gt;</code></pre>
+<table>
+  <thead><tr><th></th><th>v-if</th><th>v-show</th></tr></thead>
+  <tbody>
+    <tr><td>How it hides</td><td>Removes the element from the DOM</td><td>Sets <code>display: none</code></td></tr>
+    <tr><td>Toggle cost</td><td>Higher (create/destroy)</td><td>Cheap (just CSS)</td></tr>
+    <tr><td>Use when</td><td>Rarely toggled / may never render</td><td>Toggled often</td></tr>
+  </tbody>
+</table>
+
+<h3>v-for with :key</h3>
+<pre><code>&lt;ul&gt;
+  &lt;li v-for="todo in todos" :key="todo.id"&gt;
+    {{ todo.text }}
+  &lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;!-- with index --&gt;
+&lt;li v-for="(todo, i) in todos" :key="todo.id"&gt;{{ i + 1 }}. {{ todo.text }}&lt;/li&gt;</code></pre>
+<blockquote class="warn"><strong>Always give v-for a :key</strong> — a stable, unique id per item (<code>todo.id</code>, not the array index). The key tells Vue which DOM node maps to which item so it can reuse nodes correctly when the list reorders. Using the index as the key, or omitting it, causes subtle bugs: checkbox state attaching to the wrong row after a sort or delete.</blockquote>
+
+<h2>Components</h2>
+<p><span class="level intermediate">Intermediate</span> Components let you split a UI into reusable, self-contained pieces. With the Vite scaffold each lives in a <code>.vue</code> file with three blocks:</p>
+<pre><code>&lt;!-- TodoItem.vue --&gt;
+&lt;script setup&gt;
+const props = defineProps({
+  todo: { type: Object, required: true }
+});
+const emit = defineEmits(['toggle', 'remove']);
+&lt;/script&gt;
+
+&lt;template&gt;
+  &lt;li :class="{ done: todo.done }"&gt;
+    &lt;input type="checkbox" :checked="todo.done" @change="emit('toggle', todo.id)"&gt;
+    &lt;span&gt;{{ todo.text }}&lt;/span&gt;
+    &lt;button @click="emit('remove', todo.id)"&gt;✕&lt;/button&gt;
+  &lt;/li&gt;
+&lt;/template&gt;
+
+&lt;style scoped&gt;
+.done span { text-decoration: line-through; opacity: 0.5; }
+&lt;/style&gt;</code></pre>
+
+<h3>Props down, events up</h3>
+<p>Data flows <em>down</em> via props; a child asks its parent to change something by <em>emitting an event</em> up. The parent decides what to do:</p>
+<pre><code>&lt;!-- App.vue (parent) --&gt;
+&lt;script setup&gt;
+import { ref } from 'vue';
+import TodoItem from './TodoItem.vue';
+
+const todos = ref([
+  { id: 1, text: 'Learn components', done: false },
+]);
+
+function toggle(id) {
+  const t = todos.value.find(t =&gt; t.id === id);
+  if (t) t.done = !t.done;
+}
+function remove(id) {
+  todos.value = todos.value.filter(t =&gt; t.id !== id);
+}
+&lt;/script&gt;
+
+&lt;template&gt;
+  &lt;ul&gt;
+    &lt;TodoItem
+      v-for="todo in todos"
+      :key="todo.id"
+      :todo="todo"
+      @toggle="toggle"
+      @remove="remove"
+    /&gt;
+  &lt;/ul&gt;
+&lt;/template&gt;</code></pre>
+<p><code>defineProps</code> and <code>defineEmits</code> are compiler macros — available inside <code>&lt;script setup&gt;</code> without importing them.</p>
+
+<h3>Slots</h3>
+<p>Slots let a parent pass markup <em>into</em> a child, so a component can wrap arbitrary content:</p>
+<pre><code>&lt;!-- Card.vue --&gt;
+&lt;template&gt;
+  &lt;div class="card"&gt;
+    &lt;slot&gt;Default content if none provided&lt;/slot&gt;
+  &lt;/div&gt;
+&lt;/template&gt;
+
+&lt;!-- usage --&gt;
+&lt;Card&gt;&lt;h3&gt;Anything I want here&lt;/h3&gt;&lt;/Card&gt;</code></pre>
+
+<h2>Putting it together: a reactive todo list</h2>
+<p>This single-file component ties together refs, computed, v-model, v-for, v-if, and events — add, toggle, and remove:</p>
+<pre><code>&lt;script setup&gt;
+import { ref, computed } from 'vue';
+
+const todos   = ref([]);
+const newTodo = ref('');
+let nextId    = 1;
+
+const remaining = computed(() =&gt; todos.value.filter(t =&gt; !t.done).length);
+
+function addTodo() {
+  const text = newTodo.value.trim();
+  if (!text) return;                 // ignore empty submits
+  todos.value.push({ id: nextId++, text, done: false });
+  newTodo.value = '';                // clear the input
+}
+function toggle(id) {
+  const t = todos.value.find(t =&gt; t.id === id);
+  if (t) t.done = !t.done;
+}
+function remove(id) {
+  todos.value = todos.value.filter(t =&gt; t.id !== id);
+}
+&lt;/script&gt;
+
+&lt;template&gt;
+  &lt;h2&gt;Todos ({{ remaining }} left)&lt;/h2&gt;
+  &lt;form @submit.prevent="addTodo"&gt;
+    &lt;input v-model="newTodo" placeholder="Add a task"&gt;
+    &lt;button&gt;Add&lt;/button&gt;
+  &lt;/form&gt;
+
+  &lt;p v-if="todos.length === 0"&gt;Nothing yet — add your first task.&lt;/p&gt;
+  &lt;ul v-else&gt;
+    &lt;li v-for="todo in todos" :key="todo.id" :class="{ done: todo.done }"&gt;
+      &lt;input type="checkbox" :checked="todo.done" @change="toggle(todo.id)"&gt;
+      {{ todo.text }}
+      &lt;button @click="remove(todo.id)"&gt;✕&lt;/button&gt;
+    &lt;/li&gt;
+  &lt;/ul&gt;
+&lt;/template&gt;</code></pre>
+
+<h2>Common mistakes</h2>
+<blockquote class="warn">
+<ul>
+  <li><strong>Forgetting <code>.value</code> on a ref in script.</strong> <code>count++</code> where <code>count</code> is a ref does nothing useful — you need <code>count.value++</code>. (In the template Vue unwraps it, so no <code>.value</code> there.)</li>
+  <li><strong>Destructuring a <code>reactive()</code> object.</strong> <code>const { count } = reactive({ count: 0 })</code> gives you a plain, non-reactive number — the connection to the proxy is lost. Keep the object and access <code>state.count</code>, or use <code>toRefs()</code> if you must destructure.</li>
+  <li><strong>Missing or index-based <code>:key</code> on <code>v-for</code>.</strong> Always key by a stable unique id. Index keys break when the list reorders or items are removed.</li>
+  <li><strong>Mutating props in a child.</strong> Props are one-way (read-only). Writing <code>props.todo.done = true</code> in a child is an anti-pattern; emit an event and let the owner change the data instead.</li>
+  <li><strong>Doing heavy work in template expressions.</strong> Filtering/sorting inline in <code>{{ }}</code> re-runs on every render — use a <code>computed</code> so it caches.</li>
+</ul>
+</blockquote>
+
+<h2>Exercises</h2>
+<ul>
+  <li>Build the CDN counter from the top of this lesson, then add a second button that resets the count to zero.</li>
+  <li>Add a filter to the todo list (All / Active / Done) using a <code>&lt;select v-model&gt;</code> and a <code>computed</code> that returns the visible todos.</li>
+  <li>Extract the list row into a <code>TodoItem.vue</code> component that takes a <code>todo</code> prop and emits <code>toggle</code> and <code>remove</code>.</li>
+  <li>Trigger the <code>.value</code> bug on purpose: write <code>count++</code> (no <code>.value</code>) and observe nothing happens, then fix it — so you recognize the symptom.</li>
+  <li>Persist the todos to <code>localStorage</code> so they survive a page reload (write on change, seed the ref on load).</li>
+</ul>
+
+<h2>Mini-project: a notes app</h2>
+<p>Build a small notes app with the Vite scaffold. A <code>NoteList</code> renders a <code>v-for</code> of <code>NoteCard</code> components (each with a <code>note</code> prop and <code>edit</code>/<code>delete</code> emits); an input bound with <code>v-model</code> adds new notes; a <code>computed</code> shows a live count and a search box filters the list; and notes persist to <code>localStorage</code>. It exercises every concept here — refs, computed, template directives, props-down/events-up, and slots (give <code>NoteCard</code> a slot for optional footer actions) — in one coherent build.</p>

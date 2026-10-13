@@ -1,0 +1,148 @@
+<p class="lead">The Observability lesson covered the three pillars conceptually; this one builds the metrics stack hands-on. Prometheus scrapes numeric time-series from your services, PromQL slices and aggregates them, Alertmanager routes the alerts, and Grafana turns it all into dashboards. By the end you'll instrument a service, write real queries and alerting rules, and visualize them.</p>
+
+<h2>How Prometheus works: pull, not push</h2>
+<p><span class="level beginner">Beginner</span> Prometheus <strong>scrapes</strong> — it periodically HTTP-GETs a <code>/metrics</code> endpoint on each target and stores what it finds as time series. Your app doesn't push metrics anywhere; it exposes them, and Prometheus comes and reads them on an interval. This pull model means Prometheus always knows if a target is <em>down</em> (the scrape fails), which is itself a useful signal.</p>
+<pre><code># prometheus.yml
+global:
+  scrape_interval: 15s
+scrape_configs:
+  - job_name: api
+    static_configs:
+      - targets: ["api:8080"]      # scrapes http://api:8080/metrics
+  - job_name: node
+    static_configs:
+      - targets: ["node-exporter:9100"]</code></pre>
+
+<h2>The four metric types</h2>
+<table>
+<tr><th>Type</th><th>Meaning</th><th>Example</th></tr>
+<tr><td><strong>Counter</strong></td><td>only goes up (reset on restart)</td><td><code>http_requests_total</code></td></tr>
+<tr><td><strong>Gauge</strong></td><td>goes up and down</td><td><code>memory_bytes</code>, <code>queue_depth</code></td></tr>
+<tr><td><strong>Histogram</strong></td><td>bucketed observations → quantiles</td><td><code>http_request_duration_seconds</code></td></tr>
+<tr><td><strong>Summary</strong></td><td>client-computed quantiles</td><td>rarely preferred over histograms</td></tr>
+</table>
+<blockquote class="warn"><strong>Never compute a rate on a gauge or read a counter raw.</strong> A counter's absolute value is meaningless (it resets); what you want is its <em>rate</em>. A gauge's rate is nonsense; you want its current value or an average. Mixing these up is the most common PromQL error.</blockquote>
+
+<h2>Instrumenting a service</h2>
+<pre><code>// Go, using the official client
+var reqs = prometheus.NewCounterVec(
+  prometheus.CounterOpts{Name: "http_requests_total", Help: "..."},
+  []string{"method", "status"},
+)
+func init() { prometheus.MustRegister(reqs) }
+
+// in your handler:
+reqs.WithLabelValues(r.Method, "200").Inc()
+
+// expose it:
+http.Handle("/metrics", promhttp.Handler())</code></pre>
+<pre><code>curl -s localhost:8080/metrics | grep http_requests_total
+# http_requests_total{method="GET",status="200"} 1427
+# http_requests_total{method="POST",status="500"} 3</code></pre>
+<blockquote class="warn"><strong>Label cardinality is the thing that kills Prometheus.</strong> Every unique combination of label values is a separate time series. Labeling by <code>user_id</code> or <code>request_id</code> creates millions of series and OOMs the server. Labels must be <em>bounded</em>: method, status, route-template — never unbounded identifiers.</blockquote>
+
+<h2>PromQL: querying the data</h2>
+<p><span class="level intermediate">Intermediate</span></p>
+<pre><code># requests per second over the last 5 minutes, per status
+rate(http_requests_total[5m])
+
+# total RPS across all labels
+sum(rate(http_requests_total[5m]))
+
+# error ratio (the number you actually alert on)
+sum(rate(http_requests_total{status=~"5.."}[5m]))
+  /
+sum(rate(http_requests_total[5m]))
+
+# p95 latency from a histogram
+histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le))
+
+# memory headroom
+(node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) * 100</code></pre>
+<blockquote class="tip"><code>rate()</code> wants a <strong>range vector</strong> (<code>[5m]</code>) and only works on counters. <code>histogram_quantile</code> needs the <code>_bucket</code> series summed <code>by (le)</code>. These two patterns cover most of what you'll write.</blockquote>
+
+<h2>Recording rules: precompute the expensive queries</h2>
+<pre><code># rules.yml
+groups:
+  - name: api
+    rules:
+      - record: job:http_error_ratio:5m
+        expr: |
+          sum(rate(http_requests_total{status=~"5.."}[5m]))
+            / sum(rate(http_requests_total[5m]))</code></pre>
+<p>Recording rules evaluate a query on a schedule and store the result as a new series. Dashboards and alerts then read the cheap precomputed series instead of recomputing a heavy query every refresh.</p>
+
+<h2>Alerting rules</h2>
+<pre><code>groups:
+  - name: alerts
+    rules:
+      - alert: HighErrorRate
+        expr: job:http_error_ratio:5m &gt; 0.05
+        for: 10m                     # must persist 10m before firing (debounce)
+        labels: { severity: page }
+        annotations:
+          summary: "Error ratio {{ $value | humanizePercentage }} on {{ $labels.job }}"
+      - alert: TargetDown
+        expr: up == 0
+        for: 2m
+        labels: { severity: page }</code></pre>
+<blockquote class="warn"><strong>The <code>for:</code> clause is what separates good alerting from pager fatigue.</strong> Without it, a single 5-second blip pages someone. <code>for: 10m</code> means "only alert if this stays true for 10 minutes" — alert on sustained symptoms, not instantaneous noise. And alert on <em>symptoms</em> (error ratio, latency) your users feel, not <em>causes</em> (high CPU) that may be harmless.</blockquote>
+
+<h2>Alertmanager: routing &amp; silencing</h2>
+<p><span class="level advanced">Advanced</span> Prometheus decides <em>what</em> is firing; Alertmanager decides <em>who</em> hears about it and <em>how</em>, with grouping, inhibition, and silences.</p>
+<pre><code># alertmanager.yml
+route:
+  receiver: slack
+  group_by: [alertname, job]
+  group_wait: 30s          # wait to batch related alerts
+  repeat_interval: 4h
+  routes:
+    - matchers: [severity="page"]
+      receiver: pagerduty    # pages escalate; warnings go to Slack
+inhibit_rules:
+  - source_matchers: [alertname="TargetDown"]
+    target_matchers: [job="api"]
+    equal: [job]            # if the whole target is down, suppress its sub-alerts</code></pre>
+
+<h2>Grafana: making it visible</h2>
+<pre><code># docker-compose snippet for the whole stack
+services:
+  prometheus:
+    image: prom/prometheus
+    volumes: ["./prometheus.yml:/etc/prometheus/prometheus.yml"]
+    ports: ["9090:9090"]
+  grafana:
+    image: grafana/grafana
+    ports: ["3000:3000"]</code></pre>
+<p>Add Prometheus as a data source (URL <code>http://prometheus:9090</code>), then build panels from PromQL. Key Grafana skills:</p>
+<ul>
+<li><strong>Variables</strong> — a <code>$job</code> template variable turns one dashboard into one-per-service via a dropdown.</li>
+<li><strong>Panel types</strong> — time series for rates, stat/gauge for single numbers (error %), tables for top-N.</li>
+<li><strong>Provisioning</strong> — commit dashboards as JSON and data sources as YAML so they're reproducible (GitOps for dashboards), not clicked together by hand.</li>
+</ul>
+<blockquote class="tip">A good first dashboard follows the <strong>RED method</strong> for each service: <strong>R</strong>ate (requests/sec), <strong>E</strong>rrors (error ratio), <strong>D</strong>uration (p50/p95/p99 latency). Three rows and you can see the health of any service at a glance.</blockquote>
+
+<h2>In Kubernetes: the operator does the wiring</h2>
+<p>On Kubernetes you rarely edit <code>prometheus.yml</code> by hand — the <strong>kube-prometheus-stack</strong> Helm chart installs Prometheus, Alertmanager, and Grafana, and you declare scrape targets with <code>ServiceMonitor</code> / <code>PodMonitor</code> custom resources that the Prometheus Operator reconciles into scrape config. Alerts become <code>PrometheusRule</code> objects. It's the same concepts, driven by CRDs.</p>
+
+<h2>Common mistakes</h2>
+<blockquote class="warn"><ul>
+<li><strong>High-cardinality labels</strong> (user id, request id, email) — the fastest way to OOM Prometheus.</li>
+<li><strong>Reading a counter raw</strong> instead of <code>rate()</code>-ing it, or rating a gauge.</li>
+<li><strong>No <code>for:</code> on alerts</strong>, so every transient blip pages someone → alert fatigue → ignored pages.</li>
+<li><strong>Alerting on causes, not symptoms</strong> — high CPU isn't a problem if latency is fine; alert on what users feel.</li>
+<li><strong>Hand-built dashboards</strong> that live only in one Grafana instance. Provision them from Git.</li>
+<li><strong>Forgetting <code>up == 0</code></strong> — if a target stops being scraped, your other alerts can't fire because there's no data; a "target down" alert is essential.</li>
+</ul></blockquote>
+
+<h2>Exercises</h2>
+<ul>
+<li>Run Prometheus + Grafana with docker-compose and scrape node-exporter; graph CPU and memory in Grafana.</li>
+<li>Instrument a small HTTP service with a request counter and a latency histogram, then compute RPS, error ratio, and p95 in the Prometheus expression browser.</li>
+<li>Write a recording rule for the error ratio and an alerting rule with <code>for: 5m</code>; trigger it by generating 500s and watch it move from pending to firing.</li>
+<li>Configure Alertmanager to route <code>severity=page</code> differently from warnings, and create a silence.</li>
+<li>Build a RED-method dashboard with a <code>$job</code> variable and export it as provisioned JSON.</li>
+</ul>
+
+<h2>Mini-project</h2>
+<p>Stand up a full monitoring stack for a demo app: Prometheus scraping the app plus node-exporter, an instrumented service exposing counters/histograms with bounded labels, recording rules for RPS and error ratio, alerting rules (HighErrorRate with <code>for:</code>, HighLatency on p95, TargetDown on <code>up==0</code>), Alertmanager routing pages vs warnings with an inhibit rule, and a provisioned Grafana RED dashboard with a service template variable. Then load-test the app to drive real traffic, break it to fire alerts, and confirm the whole pipeline — metric → rule → alert → route → dashboard — works end to end.</p>

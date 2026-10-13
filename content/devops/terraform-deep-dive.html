@@ -1,0 +1,178 @@
+<p class="lead">Terraform turns infrastructure into code: you declare the resources you want in HCL, Terraform computes the difference between that declaration and reality, and applies only the changes needed. This lesson goes from your first resource to the patterns that keep a real team's infrastructure reproducible — modules, remote state, loops, and safe imports.</p>
+
+<h2>The mental model: declare, plan, apply</h2>
+<p><span class="level beginner">Beginner</span> You never write "create a server" as an imperative step. You declare "a server with these properties should exist," and Terraform's core loop figures out the verbs:</p>
+<table>
+<tr><th>Command</th><th>What it does</th></tr>
+<tr><td><code>terraform init</code></td><td>downloads providers &amp; modules, configures the backend. Run after any provider/module change.</td></tr>
+<tr><td><code>terraform plan</code></td><td>shows the diff between your config and real state — <strong>read this every time.</strong></td></tr>
+<tr><td><code>terraform apply</code></td><td>makes reality match (after you confirm the plan).</td></tr>
+<tr><td><code>terraform destroy</code></td><td>deletes everything the state tracks.</td></tr>
+</table>
+
+<h2>Your first configuration</h2>
+<pre><code># main.tf
+terraform {
+  required_version = "&gt;= 1.9"
+  required_providers {
+    aws = { source = "hashicorp/aws", version = "~&gt; 5.0" }
+  }
+}
+
+provider "aws" {
+  region = "us-east-1"
+}
+
+resource "aws_s3_bucket" "assets" {
+  bucket = "my-app-assets-prod"
+  tags   = { Environment = "prod", ManagedBy = "terraform" }
+}</code></pre>
+<pre><code>terraform init
+terraform plan
+#   + resource "aws_s3_bucket" "assets" { ... }
+# Plan: 1 to add, 0 to change, 0 to destroy.
+terraform apply</code></pre>
+<p>A <strong>resource</strong> has a type (<code>aws_s3_bucket</code>) and a local name (<code>assets</code>). You reference it elsewhere as <code>aws_s3_bucket.assets.id</code> — and those references are how Terraform builds its dependency graph and orders operations.</p>
+
+<h2>Variables, outputs, and locals</h2>
+<pre><code># variables.tf
+variable "environment" {
+  type    = string
+  default = "dev"
+  validation {
+    condition     = contains(["dev", "staging", "prod"], var.environment)
+    error_message = "environment must be dev, staging, or prod."
+  }
+}
+
+# locals.tf — computed values, named once
+locals {
+  name_prefix = "myapp-${var.environment}"
+  common_tags = { Environment = var.environment, ManagedBy = "terraform" }
+}
+
+# outputs.tf — surface values after apply (and to other configs)
+output "bucket_name" {
+  value = aws_s3_bucket.assets.bucket
+}</code></pre>
+<pre><code>terraform apply -var environment=prod
+# or a file:
+terraform apply -var-file=prod.tfvars
+terraform output bucket_name</code></pre>
+<blockquote class="tip">Precedence (lowest to highest): defaults → <code>terraform.tfvars</code> / <code>*.auto.tfvars</code> → <code>-var-file</code> → <code>-var</code> → <code>TF_VAR_*</code> env vars. Keep secrets out of tfvars checked into Git.</blockquote>
+
+<h2>State: Terraform's memory</h2>
+<p><span class="level intermediate">Intermediate</span> Terraform records what it created in a <strong>state file</strong>. State maps your config to real resource IDs — without it, Terraform can't tell "already exists" from "needs creating." The default is a local <code>terraform.tfstate</code>, which breaks the moment a second person runs apply.</p>
+<blockquote class="warn"><strong>Never commit <code>terraform.tfstate</code> to Git</strong> — it contains resource IDs and often secrets in plaintext, and two people editing it diverge instantly. Use a remote backend.</blockquote>
+
+<h2>Remote state &amp; locking</h2>
+<pre><code># backend.tf — S3 + DynamoDB lock (classic AWS setup)
+terraform {
+  backend "s3" {
+    bucket         = "mycompany-tfstate"
+    key            = "prod/app.tfstate"
+    region         = "us-east-1"
+    dynamodb_table = "tf-locks"   # prevents two applies at once
+    encrypt        = true
+  }
+}</code></pre>
+<p>Remote state puts the state in shared storage; the lock (DynamoDB here, or the newer S3-native lockfile) stops two people from applying simultaneously and corrupting it. HCP Terraform and other backends give the same guarantees.</p>
+
+<h2>Modules: the unit of reuse</h2>
+<p><span class="level intermediate">Intermediate</span> A <strong>module</strong> is a folder of <code>.tf</code> files you can call with inputs — the function of infrastructure code. The standard structure:</p>
+<pre><code>modules/
+  web-service/
+    main.tf        # resources
+    variables.tf   # inputs
+    outputs.tf     # outputs
+environments/
+  prod/main.tf     # calls the module</code></pre>
+<pre><code># environments/prod/main.tf
+module "api" {
+  source      = "../../modules/web-service"
+  name        = "api"
+  environment = "prod"
+  replicas    = 4
+}
+
+output "api_url" {
+  value = module.api.service_url
+}</code></pre>
+<blockquote class="tip">Pin remote modules to a version (<code>version = "5.1.2"</code> from a registry, or a Git <code>?ref=v1.2.0</code> tag). An unpinned module can change under you between applies.</blockquote>
+
+<h2>Loops: count, for_each, and dynamic</h2>
+<pre><code># count — simple N copies (indexed; reordering is disruptive)
+resource "aws_instance" "worker" {
+  count         = 3
+  instance_type = "t3.micro"
+  tags          = { Name = "worker-${count.index}" }
+}
+
+# for_each — keyed copies (STABLE to add/remove — prefer this)
+resource "aws_iam_user" "team" {
+  for_each = toset(["alice", "bob", "carol"])
+  name     = each.key
+}</code></pre>
+<pre><code># dynamic — generate repeated nested blocks
+resource "aws_security_group" "web" {
+  dynamic "ingress" {
+    for_each = [80, 443]
+    content {
+      from_port   = ingress.value
+      to_port     = ingress.value
+      protocol    = "tcp"
+      cidr_blocks = ["0.0.0.0/0"]
+    }
+  }
+}</code></pre>
+<blockquote class="warn"><strong>count vs for_each — a real footgun:</strong> with <code>count</code>, resources are tracked by index (<code>[0]</code>, <code>[1]</code>). Remove the middle item from the list and everything after it shifts index, so Terraform plans to destroy &amp; recreate them. <code>for_each</code> tracks by key, so removing one leaves the others untouched. Prefer <code>for_each</code> for anything with identity.</blockquote>
+
+<h2>Lifecycle and dependencies</h2>
+<pre><code>resource "aws_db_instance" "main" {
+  # ...
+  lifecycle {
+    prevent_destroy       = true    # refuse to delete this (prod DB)
+    create_before_destroy = true    # avoid downtime on replacement
+    ignore_changes        = [tags["LastModified"]]  # don't fight an external process
+  }
+}
+
+# explicit ordering when there's no reference to infer it
+resource "aws_s3_bucket_policy" "p" {
+  depends_on = [aws_s3_bucket.assets]
+}</code></pre>
+
+<h2>Importing existing infrastructure</h2>
+<p><span class="level advanced">Advanced</span> Resources created by hand (clickops) can be brought under Terraform. Modern Terraform uses an <code>import</code> block so the import itself is reviewable in a plan:</p>
+<pre><code>import {
+  to = aws_s3_bucket.legacy
+  id = "my-existing-bucket"
+}
+# then: terraform plan -generate-config-out=generated.tf
+# Terraform writes a starting resource block AND shows what (if anything) would change.</code></pre>
+<blockquote class="tip">After import, run <code>terraform plan</code> until it shows <em>no changes</em> — that proves your HCL now exactly matches the real resource. If the plan wants to modify something, your config drifted from reality; fix the config, not the resource.</blockquote>
+
+<h2>Workspaces and multi-environment</h2>
+<p>Workspaces give one config multiple independent states (<code>terraform workspace new staging</code>). They're fine for small cases, but for truly different environments most teams prefer <strong>separate directories or separate backends</strong> per environment — it keeps prod and dev state physically apart and makes blast radius obvious. Reach for workspaces when the environments are near-identical; reach for directories when they diverge.</p>
+
+<h2>Common mistakes</h2>
+<blockquote class="warn"><ul>
+<li><strong>Committing state to Git</strong> or using local state on a team — the fastest way to corrupt everything.</li>
+<li><strong>Applying without reading the plan.</strong> The plan is your diff review; "1 to destroy" on a database is how outages happen.</li>
+<li><strong>Using <code>count</code> for resources with identity</strong>, then shuffling the list and triggering destroy/recreate. Use <code>for_each</code>.</li>
+<li><strong>Hardcoding secrets</strong> in <code>.tf</code> or <code>.tfvars</code>. Pull them from a secrets manager or environment at apply time.</li>
+<li><strong>Editing resources by hand after Terraform created them</strong>, causing drift the next plan wants to undo. Change it in code and apply.</li>
+<li><strong>No <code>prevent_destroy</code> on stateful resources</strong>, so one bad refactor plans to delete the production database.</li>
+</ul></blockquote>
+
+<h2>Exercises</h2>
+<ul>
+<li>Write a config that creates two S3 buckets with <code>for_each</code>, then remove one key and confirm the plan touches only that bucket (not the other).</li>
+<li>Configure an S3 remote backend with locking, run an apply, and inspect the state object in the bucket.</li>
+<li>Extract your resources into a module with input variables and an output, then call it twice (dev and prod) with different inputs.</li>
+<li>Create a resource by hand in your cloud console, write an <code>import</code> block for it, and use <code>-generate-config-out</code> to get a config that plans clean.</li>
+<li>Add a <code>lifecycle { prevent_destroy = true }</code> to a resource and try to destroy it — read the error, then understand why it's your friend.</li>
+</ul>
+
+<h2>Mini-project</h2>
+<p>Build a small but complete, reusable infrastructure module: a <code>network</code> module (VPC + subnets) and a <code>web-service</code> module (compute + security group + load balancer) that consumes the network's outputs. Wire them together in two environment directories (<code>staging</code>, <code>prod</code>) each with its own remote backend and tfvars, using <code>for_each</code> where there's identity, variable validation on the environment name, and <code>prevent_destroy</code> on anything stateful. Run <code>plan</code> for both environments and confirm each shows only its own changes — proving the module is genuinely reusable and the environments are isolated.</p>

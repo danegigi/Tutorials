@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="en" data-base="../">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0d1117">
+<title>Vue 3 Advanced — Web Development</title>
+<meta name="description" content="Lifecycle &amp; watchers, composables for reusable logic, provide/inject, Vue Router, Pinia state management, async components &amp; Suspense, and performance patterns.">
+<link rel="canonical" href="https://danegigi.github.io/Tutorials/web/vue-advanced.html">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Dev Tutorials">
+<meta property="og:title" content="Vue 3 Advanced — Web Development">
+<meta property="og:description" content="Lifecycle &amp; watchers, composables for reusable logic, provide/inject, Vue Router, Pinia state management, async components &amp; Suspense, and performance patterns.">
+<meta property="og:url" content="https://danegigi.github.io/Tutorials/web/vue-advanced.html">
+<meta property="og:image" content="https://danegigi.github.io/Tutorials/icon-512.png">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Vue 3 Advanced — Web Development">
+<meta name="twitter:description" content="Lifecycle &amp; watchers, composables for reusable logic, provide/inject, Vue Router, Pinia state management, async components &amp; Suspense, and performance patterns.">
+<meta name="twitter:image" content="https://danegigi.github.io/Tutorials/icon-512.png">
+<link rel="manifest" href="../manifest.webmanifest">
+<link rel="icon" href="../icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="../icon-192.png">
+<link rel="stylesheet" href="../app.css">
+<script>/* set theme before paint to avoid flash */(function(){try{var t=localStorage.getItem('tut.theme');document.documentElement.setAttribute('data-theme',t||'dark');}catch(e){document.documentElement.setAttribute('data-theme','dark');}})();</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"LearningResource","name":"Vue 3 Advanced","description":"Lifecycle & watchers, composables for reusable logic, provide/inject, Vue Router, Pinia state management, async components & Suspense, and performance patterns.","url":"https://danegigi.github.io/Tutorials/web/vue-advanced.html","inLanguage":"en","isPartOf":{"@type":"Course","name":"Web Development — Dev Tutorials","url":"https://danegigi.github.io/Tutorials/web/"},"learningResourceType":"Tutorial"},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Dev Tutorials","item":"https://danegigi.github.io/Tutorials/"},{"@type":"ListItem","position":2,"name":"Web Development","item":"https://danegigi.github.io/Tutorials/web/"},{"@type":"ListItem","position":3,"name":"Vue 3 Advanced","item":"https://danegigi.github.io/Tutorials/web/vue-advanced.html"}]}]}</script>
+
+</head>
+<body class="lesson">
+<header class="nav">
+  <a class="brand" href="../index.html">📚 Dev Tutorials</a>
+  <span class="crumb">Vue 3 Advanced — Web Development</span>
+  <span class="spacer"></span>
+  <a class="navbtn" href="../search.html">🔎 Search</a>
+  <button class="navbtn" id="install-btn" type="button">⬇️ Install</button>
+  <button class="navbtn" id="theme-btn" type="button" aria-label="Toggle theme">🌙 Dark</button>
+</header>
+<main class="wrap lesson-body">
+  <h1 class="page-title">Vue 3 Advanced</h1>
+  <div class="lesson-tools" data-lesson-id="web/vue-advanced">
+    <button id="done-btn" type="button" aria-pressed="false">○ Mark complete</button>
+    <button id="mark-btn" type="button" aria-pressed="false">☆ Bookmark</button>
+    <a class="navbtn" href="index.html" style="margin-left:auto">All Web Development lessons →</a>
+  </div>
+<nav class="toc" aria-label="On this page"><strong>On this page</strong><ul>
+<li class="lvl2"><a href="#lifecycle-hooks">Lifecycle hooks</a></li>
+<li class="lvl2"><a href="#watch-vs-watcheffect">watch vs watchEffect</a></li>
+<li class="lvl2"><a href="#composables-reusable-stateful-logic">Composables — reusable stateful logic</a></li>
+<li class="lvl2"><a href="#provide-inject">provide / inject</a></li>
+<li class="lvl2"><a href="#vue-router">Vue Router</a></li>
+<li class="lvl2"><a href="#pinia-the-official-store">Pinia — the official store</a></li>
+<li class="lvl2"><a href="#async-components-suspense">Async components &amp;amp; &amp;lt;Suspense&amp;gt;</a></li>
+<li class="lvl2"><a href="#performance">Performance</a></li>
+<li class="lvl2"><a href="#common-mistakes">Common mistakes</a></li>
+<li class="lvl2"><a href="#exercises">Exercises</a></li>
+<li class="lvl2"><a href="#mini-project-a-small-router-pinia-app">Mini-project: a small router + Pinia app</a></li>
+</ul></nav>
+<p class="lead">Once you know <code>ref</code>, <code>reactive</code>, and <code>computed</code>, the next step is organising a real app: running effects at the right moment, extracting reusable logic, routing between pages, and sharing state cleanly. This lesson covers the Composition API patterns that hold a growing Vue 3 app together.</p>
+
+<h2 id="lifecycle-hooks">Lifecycle hooks</h2>
+<p><span class="level intermediate">Intermediate</span> In <code>&lt;script setup&gt;</code> you register lifecycle work with functions called during setup. The common three: <code>onMounted</code> (DOM is ready — fetch, measure, attach listeners), <code>onUnmounted</code> (tear down — the single most forgotten step), and <code>onUpdated</code> (after a reactive re-render flushed to the DOM).</p>
+<pre><code>&lt;script setup&gt;
+import { ref, onMounted, onUnmounted, onUpdated } from "vue";
+
+const width = ref(window.innerWidth);
+const onResize = () =&gt; (width.value = window.innerWidth);
+
+onMounted(() =&gt; {
+  // DOM exists now — safe to read layout or attach listeners
+  window.addEventListener("resize", onResize);
+});
+
+onUnmounted(() =&gt; {
+  // ALWAYS mirror an addEventListener with a removeEventListener
+  window.removeEventListener("resize", onResize);
+});
+
+onUpdated(() =&gt; {
+  // Runs after every re-render — keep it cheap, never mutate state here
+});
+&lt;/script&gt;
+
+&lt;template&gt;&lt;p&gt;Window is {{ width }}px wide&lt;/p&gt;&lt;/template&gt;</code></pre>
+<blockquote class="warn"><strong>Every subscription you create in <code>onMounted</code> must be cancelled in <code>onUnmounted</code></strong> — event listeners, intervals, WebSockets, observers. Forgetting this is the classic Vue memory leak: navigate away and back a few times and you have five resize handlers firing at once.</blockquote>
+
+<h2 id="watch-vs-watcheffect"><code>watch</code> vs <code>watchEffect</code></h2>
+<p>Both run a side effect when reactive data changes. They differ in <em>how you declare the dependencies</em>.</p>
+<table>
+  <thead><tr><th></th><th><code>watch</code></th><th><code>watchEffect</code></th></tr></thead>
+  <tbody>
+    <tr><td>Dependencies</td><td>Explicit — you name the source</td><td>Automatic — whatever it reads</td></tr>
+    <tr><td>Runs immediately?</td><td>No (opt in with <code>{ immediate: true }</code>)</td><td>Yes, once on setup</td></tr>
+    <tr><td>Gives old value?</td><td>Yes — <code>(newVal, oldVal)</code></td><td>No</td></tr>
+    <tr><td>Best for</td><td>Reacting to a specific change</td><td>Keeping something in sync with several sources</td></tr>
+  </tbody>
+</table>
+<pre><code>&lt;script setup&gt;
+import { ref, watch, watchEffect } from "vue";
+
+const query = ref("");
+const results = ref([]);
+
+// watch: react to ONE source, with debounce + the previous value available
+watch(query, (next, prev) =&gt; {
+  console.log(`query changed from "${prev}" to "${next}"`);
+});
+
+// watchEffect: auto-tracks `query`; re-runs whenever it changes.
+// The cleanup callback runs BEFORE the next run and on unmount —
+// use it to abort the in-flight request so stale responses can't land.
+watchEffect(async (onCleanup) =&gt; {
+  const controller = new AbortController();
+  onCleanup(() =&gt; controller.abort());
+  if (!query.value) { results.value = []; return; }
+  const res = await fetch(`/api/search?q=${query.value}`, { signal: controller.signal });
+  results.value = await res.json();
+});
+&lt;/script&gt;</code></pre>
+<blockquote class="tip">Rule of thumb: reach for <code>watchEffect</code> when the effect simply reads some reactive values and you'd otherwise list them all by hand. Reach for <code>watch</code> when you need the old value, want to run only on change (not immediately), or are watching a single precise source.</blockquote>
+
+<h2 id="composables-reusable-stateful-logic">Composables — reusable stateful logic</h2>
+<p><span class="level advanced">Advanced</span> A composable is a plain function named <code>useXxx</code> that uses the Composition API internally and returns reactive state. It's how you extract and share logic without mixins or wrapper components. Each call gets its own isolated state.</p>
+<pre><code>// composables/useMouse.js
+import { ref, onMounted, onUnmounted } from "vue";
+
+export function useMouse() {
+  const x = ref(0);
+  const y = ref(0);
+  const update = (e) =&gt; { x.value = e.pageX; y.value = e.pageY; };
+
+  onMounted(() =&gt; window.addEventListener("mousemove", update));
+  onUnmounted(() =&gt; window.removeEventListener("mousemove", update));
+
+  return { x, y };               // caller gets live refs
+}</code></pre>
+<p>A more realistic one — a reusable fetch with loading/error state and refetch:</p>
+<pre><code>// composables/useFetch.js
+import { ref, watchEffect, toValue } from "vue";
+
+// `url` may be a ref/getter — toValue() unwraps it, so the fetch
+// re-runs automatically when the url changes.
+export function useFetch(url) {
+  const data = ref(null);
+  const error = ref(null);
+  const loading = ref(false);
+
+  async function load() {
+    loading.value = true;
+    error.value = null;
+    try {
+      const res = await fetch(toValue(url));
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      data.value = await res.json();
+    } catch (e) {
+      error.value = e;
+    } finally {
+      loading.value = false;
+    }
+  }
+
+  watchEffect(load);             // re-fetch whenever toValue(url) changes
+  return { data, error, loading, refetch: load };
+}</code></pre>
+<pre><code>&lt;script setup&gt;
+import { ref } from "vue";
+import { useMouse } from "@/composables/useMouse";
+import { useFetch } from "@/composables/useFetch";
+
+const { x, y } = useMouse();
+const id = ref(1);
+// pass a getter so useFetch re-runs when `id` changes
+const { data: user, loading, error, refetch } = useFetch(() =&gt; `/api/users/${id.value}`);
+&lt;/script&gt;
+
+&lt;template&gt;
+  &lt;p&gt;Mouse: {{ x }}, {{ y }}&lt;/p&gt;
+  &lt;p v-if="loading"&gt;Loading…&lt;/p&gt;
+  &lt;p v-else-if="error"&gt;Error: {{ error.message }}&lt;/p&gt;
+  &lt;pre v-else&gt;{{ user }}&lt;/pre&gt;
+  &lt;button @click="id++"&gt;Next user&lt;/button&gt;
+  &lt;button @click="refetch"&gt;Reload&lt;/button&gt;
+&lt;/template&gt;</code></pre>
+<blockquote class="tip">Composables are Vue's answer to React hooks. The naming convention <code>useXxx</code> is a signal to readers (and tooling) that the function uses reactive state and lifecycle, so it must be called synchronously inside <code>setup</code> — not inside a conditional or an async callback.</blockquote>
+
+<h2 id="provide-inject">provide / inject</h2>
+<p>For passing data down a deep tree without threading props through every level, an ancestor <code>provide</code>s a value and any descendant <code>inject</code>s it. Provide a <code>ref</code> to keep it reactive.</p>
+<pre><code>// Ancestor (e.g. App.vue)
+&lt;script setup&gt;
+import { ref, provide } from "vue";
+const theme = ref("dark");
+provide("theme", theme);                 // descendants read it reactively
+provide("toggleTheme", () =&gt; (theme.value = theme.value === "dark" ? "light" : "dark"));
+&lt;/script&gt;
+
+// Deep descendant — no props threaded through the middle
+&lt;script setup&gt;
+import { inject } from "vue";
+const theme = inject("theme");           // live ref
+const toggle = inject("toggleTheme", () =&gt; {});  // 2nd arg = default fallback
+&lt;/script&gt;</code></pre>
+<blockquote class="warn">Prefer a Symbol key over a string in a real app to avoid name collisions, and keep the <em>right to mutate</em> with the provider: expose an updater function (as above) rather than letting children write the injected ref directly, or the data flow becomes impossible to trace.</blockquote>
+
+<h2 id="vue-router">Vue Router</h2>
+<p><span class="level intermediate">Intermediate</span> The official router maps URLs to components. Define routes (with dynamic params and lazy loading), render the match with <code>&lt;RouterView&gt;</code>, and link with <code>&lt;RouterLink&gt;</code>.</p>
+<pre><code>// router/index.js
+import { createRouter, createWebHistory } from "vue-router";
+
+const routes = [
+  { path: "/", component: () =&gt; import("@/views/Home.vue") },     // lazy-loaded chunk
+  { path: "/users/:id", name: "user", component: () =&gt; import("@/views/User.vue"), props: true },
+  { path: "/admin", component: () =&gt; import("@/views/Admin.vue"), meta: { requiresAuth: true } },
+  { path: "/:pathMatch(.*)*", component: () =&gt; import("@/views/NotFound.vue") }, // 404
+];
+
+const router = createRouter({ history: createWebHistory(), routes });
+
+// Global navigation guard — e.g. protect authenticated routes
+router.beforeEach((to) =&gt; {
+  const loggedIn = !!localStorage.getItem("token");
+  if (to.meta.requiresAuth &amp;&amp; !loggedIn) {
+    return { path: "/login", query: { redirect: to.fullPath } };  // redirect
+  }
+});
+
+export default router;</code></pre>
+<pre><code>&lt;!-- App.vue --&gt;
+&lt;template&gt;
+  &lt;nav&gt;
+    &lt;RouterLink to="/"&gt;Home&lt;/RouterLink&gt;
+    &lt;RouterLink :to="{ name: 'user', params: { id: 42 } }"&gt;User 42&lt;/RouterLink&gt;
+  &lt;/nav&gt;
+  &lt;RouterView /&gt;        &lt;!-- the matched component renders here --&gt;
+&lt;/template&gt;
+
+&lt;!-- User.vue: read the dynamic param --&gt;
+&lt;script setup&gt;
+import { useRoute } from "vue-router";
+const route = useRoute();
+// route.params.id — or declare `props: true` on the route and accept it as a prop
+&lt;/script&gt;</code></pre>
+<blockquote class="tip">Lazy-loading routes with <code>() =&gt; import(...)</code> is the single biggest router performance win: each view becomes its own JS chunk fetched on demand, so the initial bundle only contains the first screen. <code>&lt;RouterLink&gt;</code> also sets the active class and handles the back/forward buttons for you — never build navigation with raw <code>&lt;a href&gt;</code> inside an SPA.</blockquote>
+
+<h2 id="pinia-the-official-store">Pinia — the official store</h2>
+<p><span class="level advanced">Advanced</span> Pinia is Vue's state-management library: a store has <strong>state</strong> (the data), <strong>getters</strong> (computed derivations), and <strong>actions</strong> (methods that mutate state, sync or async).</p>
+<pre><code>// stores/cart.js
+import { defineStore } from "pinia";
+
+export const useCartStore = defineStore("cart", {
+  state: () =&gt; ({ items: [] }),
+  getters: {
+    count: (s) =&gt; s.items.reduce((n, i) =&gt; n + i.qty, 0),
+    total: (s) =&gt; s.items.reduce((sum, i) =&gt; sum + i.price * i.qty, 0),
+  },
+  actions: {
+    add(product) {
+      const line = this.items.find((i) =&gt; i.id === product.id);
+      line ? line.qty++ : this.items.push({ ...product, qty: 1 });
+    },
+    async checkout() {
+      await fetch("/api/checkout", { method: "POST", body: JSON.stringify(this.items) });
+      this.items = [];                         // mutate state directly — it's reactive
+    },
+  },
+});</code></pre>
+<pre><code>&lt;script setup&gt;
+import { storeToRefs } from "pinia";
+import { useCartStore } from "@/stores/cart";
+
+const cart = useCartStore();
+// Destructuring state/getters loses reactivity — use storeToRefs for those.
+const { count, total } = storeToRefs(cart);
+// Actions can be destructured directly (they're bound methods).
+const { add, checkout } = cart;
+&lt;/script&gt;
+
+&lt;template&gt;
+  &lt;button @click="add(product)"&gt;Add&lt;/button&gt;
+  &lt;p&gt;{{ count }} items — ${{ total }}&lt;/p&gt;
+&lt;/template&gt;</code></pre>
+<blockquote class="warn"><strong>Why Pinia over a bare <code>reactive({})</code> object?</strong> You <em>can</em> share a global reactive object, but Pinia adds: devtools time-travel and inspection, SSR safety (no cross-request state leaks), hot-module-reload that preserves state, typed stores, and a clear state/getter/action structure the whole team recognises. A bare object has none of that and tends to grow into an untestable blob.</blockquote>
+
+<h2 id="async-components-suspense">Async components &amp; <code>&lt;Suspense&gt;</code></h2>
+<pre><code>&lt;script setup&gt;
+import { defineAsyncComponent } from "vue";
+// Code-split a heavy component; it loads only when rendered
+const Chart = defineAsyncComponent(() =&gt; import("@/components/HeavyChart.vue"));
+&lt;/script&gt;
+
+&lt;template&gt;
+  &lt;!-- Suspense shows a fallback while an async component (or a
+       component with a top-level await in setup) is resolving --&gt;
+  &lt;Suspense&gt;
+    &lt;template #default&gt;&lt;Chart /&gt;&lt;/template&gt;
+    &lt;template #fallback&gt;&lt;p&gt;Loading chart…&lt;/p&gt;&lt;/template&gt;
+  &lt;/Suspense&gt;
+&lt;/template&gt;</code></pre>
+
+<h2 id="performance">Performance</h2>
+<p>Vue's reactivity is cheap, but you can still do needless work. The main levers:</p>
+<table>
+  <thead><tr><th>Tool</th><th>Use when</th></tr></thead>
+  <tbody>
+    <tr><td><code>v-once</code></td><td>Content renders once and never changes — skip it forever</td></tr>
+    <tr><td><code>v-memo</code></td><td>A list row only needs re-render when specific values change</td></tr>
+    <tr><td><code>shallowRef</code></td><td>A large object whose <em>identity</em> changes but whose deep fields you don't track (e.g. a chart instance)</td></tr>
+    <tr><td><code>computed</code></td><td>A derived value read many times — caches until deps change</td></tr>
+  </tbody>
+</table>
+<pre><code>&lt;!-- v-once: static block, never diffed again --&gt;
+&lt;footer v-once&gt;© 2026 Acme — all rights reserved&lt;/footer&gt;
+
+&lt;!-- v-memo: this row skips re-render unless id or selected changes --&gt;
+&lt;div v-for="item in list" :key="item.id" v-memo="[item.id, item.id === selectedId]"&gt;
+  {{ item.name }}
+&lt;/div&gt;</code></pre>
+<pre><code>import { shallowRef, computed } from "vue";
+// Don't deep-track a huge structure you only ever replace wholesale:
+const dataset = shallowRef(bigArray);     // reactivity on .value reassignment only
+// Prefer computed (cached) over a method (re-runs every render):
+const expensive = computed(() =&gt; list.value.filter(heavyPredicate));</code></pre>
+<blockquote class="tip"><strong>computed vs method:</strong> a <code>computed</code> caches its result and only recomputes when a reactive dependency changes; a method called in the template (<code>{{ compute() }}</code>) runs on <em>every</em> render. For derived values, prefer <code>computed</code> — it's the difference between computing once and computing on every unrelated re-render.</blockquote>
+
+<h2 id="common-mistakes">Common mistakes</h2>
+<blockquote class="warn">
+<strong>Side effects inside <code>computed</code>.</strong> A computed must be a pure derivation — no fetching, no mutating other state, no DOM writes. Side effects there run unpredictably (or get cached away) and corrupt the dependency graph. Put side effects in a <code>watch</code>/<code>watchEffect</code> or an action.<br><br>
+<strong>Forgetting to clean up.</strong> A listener, interval, or subscription created in <code>onMounted</code> (or a <code>watchEffect</code>) that isn't cancelled leaks on unmount and fires on a dead component.<br><br>
+<strong>Overusing <code>watch</code> where <code>computed</code> fits.</strong> If you're watching a value only to assign another value, that's a derived value — use <code>computed</code>. Reserve <code>watch</code> for genuine side effects (fetching, logging, imperative DOM work).<br><br>
+<strong>Reactivity loss.</strong> Destructuring a <code>reactive</code> object or a Pinia store breaks the reactive link — <code>const { count } = store</code> gives a plain number frozen in time. Use <code>storeToRefs(store)</code> for state/getters, or keep the store object and access <code>store.count</code>.
+</blockquote>
+
+<h2 id="exercises">Exercises</h2>
+<ul>
+  <li>Write a <code>useLocalStorage(key, initial)</code> composable that reads/writes <code>localStorage</code> and stays reactive across tabs (hint: a <code>storage</code> event listener cleaned up in <code>onUnmounted</code>).</li>
+  <li>Convert a component that uses <code>watch</code> to derive a value into one that uses <code>computed</code>, and explain why it's better.</li>
+  <li>Add a <code>beforeEach</code> navigation guard that blocks <code>/admin</code> unless a token exists, redirecting to <code>/login?redirect=…</code>.</li>
+  <li>Build a Pinia store for a to-do list (state: todos; getters: remaining count; actions: add/toggle/clear-done) and wire it to two components.</li>
+  <li>Lazy-load a heavy component with <code>defineAsyncComponent</code> + <code>&lt;Suspense&gt;</code> and confirm in the Network tab that its chunk loads only when shown.</li>
+</ul>
+
+<h2 id="mini-project-a-small-router-pinia-app">Mini-project: a small router + Pinia app</h2>
+<p>Build a two-page product browser. Route <code>/</code> lists products (fetched through a <code>useFetch</code> composable); route <code>/products/:id</code> shows one product, reading the dynamic param. A Pinia <code>cart</code> store holds line items with <code>count</code>/<code>total</code> getters and <code>add</code>/<code>checkout</code> actions; a header component shows the live cart badge via <code>storeToRefs</code>. Lazy-load both route views, protect a <code>/checkout</code> route with a <code>beforeEach</code> guard, and use <code>computed</code> (not a method) for the filtered list. The point is the architecture: URL in the router, shared state in Pinia, reusable fetching in a composable.</p>
+
+<section class="further"><h2 id="further-reading">Further reading</h2>
+<p>Official documentation for the tools and APIs covered on this page:</p>
+<ul class="further-list"><li><a href="https://vuejs.org/guide/reusability/composables.html" target="_blank" rel="noopener">Composables ↗</a></li>
+<li><a href="https://router.vuejs.org/" target="_blank" rel="noopener">Vue Router ↗</a></li>
+<li><a href="https://pinia.vuejs.org/" target="_blank" rel="noopener">Pinia (state management) ↗</a></li>
+<li><a href="https://vuejs.org/guide/best-practices/performance.html" target="_blank" rel="noopener">Performance guide ↗</a></li></ul></section>
+  <nav class="pager">
+<a class="prev" href="vue-fundamentals.html"><small>Previous</small>🌐 Vue 3 Fundamentals</a>
+<a class="next" href="react-fundamentals.html"><small>Next</small>🌐 React Fundamentals</a>
+  </nav>
+</main>
+<button type="button" class="fab top" id="fab-top" aria-label="Back to top">↑ Top</button>
+<div class="banner" id="update-banner" role="status">A new version is available.<button type="button">Reload</button></div>
+<div class="banner" id="offline-banner" role="status">You're offline — showing cached lessons.</div>
+<script src="../app.js" defer></script>
+</body>
+</html>
