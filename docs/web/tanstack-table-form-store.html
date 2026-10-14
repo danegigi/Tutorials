@@ -49,6 +49,7 @@
 <li class="lvl2"><a href="#tanstack-form">TanStack Form</a></li>
 <li class="lvl2"><a href="#tanstack-store">TanStack Store</a></li>
 <li class="lvl2"><a href="#tanstack-db-where-its-headed">TanStack DB — where it's headed</a></li>
+<li class="lvl2"><a href="#shared-example-the-issues-tracker-grid-form-ui-store">Shared example: the Issues Tracker (grid, form &amp;amp; UI store)</a></li>
 <li class="lvl2"><a href="#common-mistakes">Common mistakes</a></li>
 <li class="lvl2"><a href="#exercises">Exercises</a></li>
 <li class="lvl2"><a href="#mini-project-a-headless-admin-data-grid">Mini-project: a headless admin data grid</a></li>
@@ -221,6 +222,89 @@ function CartCount() {
 <h2 id="tanstack-db-where-its-headed">TanStack DB — where it's headed</h2>
 <p>TanStack DB is the newest member: a reactive client store built on <em>collections</em> and <strong>live queries</strong> that stay in sync, designed to sit on top of TanStack Query for sync. You define collections, write differential queries against them, and the UI updates incrementally as data changes — with optimistic mutations built in. It's younger than the others, so pin versions and read the current docs before adopting it in production; the collection + live-query model is the thing to understand.</p>
 
+<h2 id="shared-example-the-issues-tracker-grid-form-ui-store">Shared example: the Issues Tracker (grid, form &amp; UI store)</h2>
+<p><span class="level advanced">Advanced</span> This closes the Issues Tracker from the <strong>Query</strong> and <strong>Router</strong> lessons. Same <code>src/issues/</code> module, same cache — now rendered as a real grid, with a form to file issues and a Store for UI state. Nothing here re-fetches: the data arrives from the query the router already preloaded.</p>
+<p><strong>The grid</strong> renders the shared <code>issueQueries.list</code> data as your own styled table, with a close-issue action wired to the shared mutation:</p>
+<pre><code>// src/issues/IssuesTable.tsx
+import { createColumnHelper, flexRender, getCoreRowModel,
+  getSortedRowModel, useReactTable } from "@tanstack/react-table";
+import { useSuspenseQuery } from "@tanstack/react-query";
+import { useState } from "react";
+import { issueQueries } from "./queries";       // ← Query lesson
+import { useCloseIssue } from "./mutations";     // ← Query lesson
+import type { Issue } from "./types";
+
+const col = createColumnHelper&lt;Issue&gt;();
+
+export function IssuesTable() {
+  const { data } = useSuspenseQuery(issueQueries.list({})); // shared cache, no refetch
+  const close = useCloseIssue();
+  const [sorting, setSorting] = useState([]);
+
+  const columns = [
+    col.accessor("title", { header: "Title" }),
+    col.accessor("status", { header: "Status" }),
+    col.accessor("assignee", { header: "Assignee" }),
+    col.display({
+      id: "actions",
+      cell: ({ row }) =&gt;
+        row.original.status === "open" ? (
+          &lt;button onClick={() =&gt; close.mutate(row.original.id)}&gt;Close&lt;/button&gt;
+        ) : null,
+    }),
+  ];
+
+  const table = useReactTable({
+    data, columns, state: { sorting }, onSortingChange: setSorting,
+    getCoreRowModel: getCoreRowModel(), getSortedRowModel: getSortedRowModel(),
+  });
+  // …render table.getHeaderGroups() / table.getRowModel() exactly as shown above
+  return &lt;table&gt;{/* your markup */}&lt;/table&gt;;
+}</code></pre>
+<p><strong>The form</strong> files a new issue with TanStack Form + Zod, then invalidates <code>["issues"]</code> so the grid above refreshes — the same cache key family all three lessons share:</p>
+<pre><code>// src/issues/NewIssueForm.tsx
+import { useForm } from "@tanstack/react-form";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { z } from "zod";
+
+export function NewIssueForm() {
+  const qc = useQueryClient();
+  const create = useMutation({
+    mutationFn: (body: { title: string; assignee: string }) =&gt;
+      fetch("/api/issues", { method: "POST", body: JSON.stringify(body) }).then((r) =&gt; r.json()),
+    onSuccess: () =&gt; qc.invalidateQueries({ queryKey: ["issues"] }), // grid refetches
+  });
+
+  const form = useForm({
+    defaultValues: { title: "", assignee: "" },
+    onSubmit: async ({ value }) =&gt; { await create.mutateAsync(value); },
+  });
+
+  return (
+    &lt;form onSubmit={(e) =&gt; { e.preventDefault(); form.handleSubmit(); }}&gt;
+      &lt;form.Field name="title" validators={{ onChange: z.string().min(3, "Too short") }}&gt;
+        {(f) =&gt; (
+          &lt;input value={f.state.value} onBlur={f.handleBlur}
+            onChange={(e) =&gt; f.handleChange(e.target.value)} /&gt;
+        )}
+      &lt;/form.Field&gt;
+      &lt;form.Subscribe selector={(s) =&gt; s.canSubmit}&gt;
+        {(canSubmit) =&gt; &lt;button type="submit" disabled={!canSubmit}&gt;File issue&lt;/button&gt;}
+      &lt;/form.Subscribe&gt;
+    &lt;/form&gt;
+  );
+}</code></pre>
+<p><strong>The Store</strong> holds pure UI state — which issue is selected in a side panel — with no server round-trip and selector-scoped re-renders:</p>
+<pre><code>// src/issues/uiStore.ts
+import { Store, useStore } from "@tanstack/react-store";
+
+export const uiStore = new Store({ selectedId: null as number | null });
+export const selectIssue = (id: number | null) =&gt; uiStore.setState(() =&gt; ({ selectedId: id }));
+
+// a component re-renders ONLY when selectedId changes:
+export const useSelectedId = () =&gt; useStore(uiStore, (s) =&gt; s.selectedId);</code></pre>
+<blockquote class="tip">Trace the data across all three lessons: <strong>Query</strong> defined <code>issueQueries</code> + <code>useCloseIssue</code> → <strong>Router</strong> preloaded the list and detail by URL → <strong>Table/Form/Store</strong> renders the grid, files new issues, and holds panel state. Each library owns one concern — server state, routing, headless UI logic — and they compose into one app without stepping on each other.</blockquote>
+
 <h2 id="common-mistakes">Common mistakes</h2>
 <blockquote class="warn">
 <ul>
@@ -262,7 +346,7 @@ function CartCount() {
 <li><a href="https://tanstack.com/virtual/latest" target="_blank" rel="noopener">TanStack Virtual ↗</a></li></ul></section>
   <nav class="pager">
 <a class="prev" href="tanstack-router.html"><small>Previous</small>🌐 TanStack Router: Type-Safe Routing</a>
-<a class="next" href="tailwind-and-daisyui.html"><small>Next</small>🌐 Tailwind CSS 4 &amp; daisyUI</a>
+<a class="next" href="vue-fundamentals.html"><small>Next</small>🌐 Vue 3 Fundamentals</a>
   </nav>
 </main>
 <button type="button" class="fab top" id="fab-top" aria-label="Back to top">↑ Top</button>

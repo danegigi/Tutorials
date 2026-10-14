@@ -56,6 +56,15 @@ HTML fragment (`<h2>`/`<h3>`, `<pre><code>`, `<table>`, `<blockquote class="tip|
 generator assigns heading ids, builds the TOC, adds copy buttons, wires prev/next,
 and appends the Further-reading block automatically.
 
+**Lesson order is the reading order.** Each section's `lessons` array is
+sequenced pedagogically — fundamentals first, then every topic's basic→advanced
+lessons kept adjacent (all the React lessons run together, then the TanStack
+trio; Kubernetes basics → deep-dive → advanced follow one another; Go's generics,
+concurrency, and testing lessons each sit beside their advanced counterpart) — so
+a reader moving top-to-bottom, and the prev/next pager, never jump topic
+mid-thread. When adding a lesson, place its entry next to its siblings rather than
+appending to the end.
+
 ## Develop
 
 Requires [Bun](https://bun.com) ≥ 1.0.

@@ -180,6 +180,71 @@ await queryClient.ensureQueryData(todoQueries.detail(5));
 // imperatively
 const data = queryClient.getQueryData(todoQueries.detail(5).queryKey); // typed!</code></pre>
 
+<h2>Shared example: the Issues Tracker (data layer)</h2>
+<p><span class="level intermediate">Intermediate</span> The next two lessons — <strong>TanStack Router</strong> and <strong>TanStack Table, Form &amp; Store</strong> — build the <em>same</em> app, an "Issues Tracker" (a stripped-down GitHub issues board). Here we lay its data foundation so Router can preload it and Table can render it. One domain type and one typed query module carry across all three lessons:</p>
+<pre><code>// src/issues/types.ts — the shared domain model (used in all three lessons)
+export type IssueStatus = "open" | "closed";
+export type Issue = {
+  id: number;
+  title: string;
+  status: IssueStatus;
+  assignee: string;
+  labels: string[];
+  createdAt: string; // ISO
+};</code></pre>
+<p>A single <code>queryOptions</code> module is the contract every other lesson imports — the list (optionally filtered) and one issue by id:</p>
+<pre><code>// src/issues/queries.ts
+import { queryOptions } from "@tanstack/react-query";
+import type { Issue, IssueStatus } from "./types";
+
+async function getJSON&lt;T&gt;(url: string): Promise&lt;T&gt; {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`); // throw so Query marks it errored
+  return res.json();
+}
+
+export const issueQueries = {
+  // the filter is part of the cache identity → it belongs in the key
+  list: (filter: { status?: IssueStatus } = {}) =&gt;
+    queryOptions({
+      queryKey: ["issues", "list", filter],
+      queryFn: () =&gt;
+        getJSON&lt;Issue[]&gt;("/api/issues?" + new URLSearchParams(filter as Record&lt;string, string&gt;)),
+      staleTime: 30_000,
+    }),
+  detail: (id: number) =&gt;
+    queryOptions({
+      queryKey: ["issues", "detail", id],
+      queryFn: () =&gt; getJSON&lt;Issue&gt;(`/api/issues/${id}`),
+    }),
+};</code></pre>
+<p>And the mutation the Table/Form lesson will call — closing an issue, optimistically — invalidating by the <code>["issues"]</code> prefix so both the list and the detail refetch:</p>
+<pre><code>// src/issues/mutations.ts
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import type { Issue } from "./types";
+
+export function useCloseIssue() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) =&gt;
+      fetch(`/api/issues/${id}/close`, { method: "POST" }).then((r) =&gt; {
+        if (!r.ok) throw new Error("close failed");
+        return r.json() as Promise&lt;Issue&gt;;
+      }),
+    onMutate: async (id) =&gt; {
+      await qc.cancelQueries({ queryKey: ["issues"] });
+      const prev = qc.getQueryData&lt;Issue[]&gt;(["issues", "list", {}]);
+      qc.setQueryData&lt;Issue[]&gt;(["issues", "list", {}], (old) =&gt;
+        old?.map((i) =&gt; (i.id === id ? { ...i, status: "closed" } : i)),
+      );
+      return { prev };
+    },
+    onError: (_e, _id, ctx) =&gt; ctx?.prev &amp;&amp; qc.setQueryData(["issues", "list", {}], ctx.prev),
+    onSettled: () =&gt; qc.invalidateQueries({ queryKey: ["issues"] }), // prefix → list + detail
+  });
+}</code></pre>
+<blockquote class="tip">Keep this <code>src/issues/</code> module as you move to the next lessons. The Router lesson imports <code>issueQueries</code> in its loaders; the Table/Form/Store lesson imports <code>issueQueries.list</code> for the grid and <code>useCloseIssue</code> for the row action. Nothing is re-fetched twice — all three lessons share one cache.</blockquote>
+
 <h2>Common mistakes</h2>
 <blockquote class="warn">
 <ul>

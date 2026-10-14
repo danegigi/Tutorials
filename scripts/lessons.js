@@ -6,6 +6,13 @@
  * and prev/next navigation are all derived from this one file. Nothing about
  * the site's structure is hard-coded anywhere else.
  *
+ * Lesson ORDER in each section's `lessons` array is the reading order: it
+ * drives the section index, the search corpus, and the prev/next pager (which
+ * flows across sections). Lessons are sequenced pedagogically — fundamentals
+ * first, then each topic's basic→advanced lessons kept adjacent (e.g. all the
+ * React lessons run together; Kubernetes basics→advanced→deep-dive follow one
+ * another) so a reader moving top-to-bottom never jumps topic mid-thread.
+ *
  * Each lesson's prose lives as a clean HTML fragment in
  *   content/<section>/<slug>.html
  * authored with <h2>/<h3>, <pre><code>, <table>, <blockquote class="tip|warn">,
@@ -51,6 +58,17 @@ export const SECTIONS = [
         ],
       },
       {
+        slug: "modules-advanced",
+        title: "Modules: Advanced",
+        blurb: "replace & exclude directives, vendoring, private modules with GOPRIVATE, version selection & go.sum, major-version suffixes, and publishing a module.",
+        further: [
+          ref("Go Modules Reference", "https://go.dev/ref/mod"),
+          ref("Publishing a module", "https://go.dev/doc/modules/publishing"),
+          ref("Private modules (GOPRIVATE)", "https://go.dev/ref/mod#private-modules"),
+          ref("Module version numbering", "https://go.dev/doc/modules/version-numbers"),
+        ],
+      },
+      {
         slug: "variables-types-functions",
         title: "Variables, Types & Functions",
         blurb: "Declarations, zero values, basic & composite types, functions, multiple returns, closures.",
@@ -78,6 +96,26 @@ export const SECTIONS = [
         ],
       },
       {
+        slug: "generics-deep-dive",
+        title: "Generics Deep Dive",
+        blurb: "Type parameters, constraints & the constraints package, generic data structures, inference, and when NOT to use them.",
+        further: [
+          ref("Tutorial: Generics", "https://go.dev/doc/tutorial/generics"),
+          ref("When To Use Generics", "https://go.dev/blog/when-generics"),
+          ref("golang.org/x/exp/constraints", "https://pkg.go.dev/golang.org/x/exp/constraints"),
+        ],
+      },
+      {
+        slug: "generics-in-practice",
+        title: "Generics in Practice",
+        blurb: "Beyond the theory: shipping real generic code — constraints packages, type sets, generic data structures and helpers, the slices/maps stdlib packages, and when a plain interface is still the better call.",
+        further: [
+          ref("Tutorial: Generics", "https://go.dev/doc/tutorial/generics"),
+          ref("golang.org/x/exp constraints", "https://pkg.go.dev/golang.org/x/exp/constraints"),
+          ref("slices & maps packages", "https://pkg.go.dev/slices"),
+        ],
+      },
+      {
         slug: "error-handling",
         title: "Error Handling",
         blurb: "errors as values, wrapping with %w, errors.Is / errors.As, sentinel errors, custom types.",
@@ -97,13 +135,23 @@ export const SECTIONS = [
         ],
       },
       {
-        slug: "http-servers-and-apis",
-        title: "HTTP Servers & APIs",
-        blurb: "net/http servers, routing with ServeMux, JSON APIs, middleware, and the Gin framework.",
+        slug: "concurrency-patterns",
+        title: "Concurrency Patterns",
+        blurb: "Beyond go + channels: worker pools, fan-in/fan-out, pipelines, context cancellation, errgroup, rate limiting, and detecting leaks with the race detector.",
         further: [
-          ref("net/http", "https://pkg.go.dev/net/http"),
-          ref("Writing web applications", "https://go.dev/doc/articles/wiki/"),
-          ref("Gin web framework", "https://gin-gonic.com/docs/"),
+          ref("Go Concurrency Patterns (blog)", "https://go.dev/blog/pipelines"),
+          ref("golang.org/x/sync/errgroup", "https://pkg.go.dev/golang.org/x/sync/errgroup"),
+          ref("Share Memory By Communicating", "https://go.dev/blog/codelab-share"),
+          ref("Data Race Detector", "https://go.dev/doc/articles/race_detector"),
+        ],
+      },
+      {
+        slug: "context-and-cancellation",
+        title: "Context & Cancellation",
+        blurb: "context.Context in depth: timeouts, deadlines, cancellation propagation, values, and the rules for passing it.",
+        further: [
+          ref("context package", "https://pkg.go.dev/context"),
+          ref("Go Concurrency Patterns: Context", "https://go.dev/blog/context"),
         ],
       },
       {
@@ -117,13 +165,23 @@ export const SECTIONS = [
         ],
       },
       {
-        slug: "testing",
-        title: "Testing & Benchmarks",
-        blurb: "the testing package, table-driven tests, subtests, benchmarks, fuzzing, and coverage.",
+        slug: "http-servers-and-apis",
+        title: "HTTP Servers & APIs",
+        blurb: "net/http servers, routing with ServeMux, JSON APIs, middleware, and the Gin framework.",
         further: [
-          ref("testing package", "https://pkg.go.dev/testing"),
-          ref("Go fuzzing", "https://go.dev/doc/security/fuzz/"),
-          ref("Add a test (tutorial)", "https://go.dev/doc/tutorial/add-a-test"),
+          ref("net/http", "https://pkg.go.dev/net/http"),
+          ref("Writing web applications", "https://go.dev/doc/articles/wiki/"),
+          ref("Gin web framework", "https://gin-gonic.com/docs/"),
+        ],
+      },
+      {
+        slug: "building-web-services",
+        title: "Building Production Web Services",
+        blurb: "Production net/http: the Go 1.22 method+pattern router, composable middleware, graceful shutdown, server & request timeouts, structured logging with slog, and threading context through handlers.",
+        further: [
+          ref("net/http package", "https://pkg.go.dev/net/http"),
+          ref("Routing enhancements (1.22)", "https://go.dev/blog/routing-enhancements"),
+          ref("log/slog package", "https://pkg.go.dev/log/slog"),
         ],
       },
       {
@@ -134,6 +192,76 @@ export const SECTIONS = [
           ref("database/sql", "https://pkg.go.dev/database/sql"),
           ref("Accessing a database (tutorial)", "https://go.dev/doc/tutorial/database-access"),
           ref("Ent ORM", "https://entgo.io/docs/getting-started/"),
+        ],
+      },
+      {
+        slug: "grpc-and-protobuf",
+        title: "gRPC & Protocol Buffers",
+        blurb: "Defining services in .proto, generating Go code with protoc, implementing a server & client, the four RPC types, interceptors, and gRPC vs REST.",
+        further: [
+          ref("gRPC Go quick start", "https://grpc.io/docs/languages/go/quickstart/"),
+          ref("Protocol Buffers (proto3)", "https://protobuf.dev/programming-guides/proto3/"),
+          ref("google.golang.org/grpc", "https://pkg.go.dev/google.golang.org/grpc"),
+        ],
+      },
+      {
+        slug: "testing",
+        title: "Testing & Benchmarks",
+        blurb: "the testing package, table-driven tests, subtests, benchmarks, fuzzing, and coverage.",
+        further: [
+          ref("testing package", "https://pkg.go.dev/testing"),
+          ref("Go fuzzing", "https://go.dev/doc/security/fuzz/"),
+          ref("Add a test (tutorial)", "https://go.dev/doc/tutorial/add-a-test"),
+        ],
+      },
+      {
+        slug: "fuzzing-and-advanced-testing",
+        title: "Fuzzing & Advanced Testing",
+        blurb: "Native fuzzing with go test -fuzz, table-driven and golden-file tests, deterministic concurrency with testing/synctest, coverage, parallel subtests, and integration tests with real dependencies.",
+        further: [
+          ref("Go fuzzing", "https://go.dev/doc/security/fuzz/"),
+          ref("testing package", "https://pkg.go.dev/testing"),
+          ref("testing/synctest", "https://pkg.go.dev/testing/synctest"),
+        ],
+      },
+      {
+        slug: "reflection-and-struct-tags",
+        title: "Reflection & Struct Tags",
+        blurb: "How encoding/json works: reflect.Type/Value, reading struct tags, writing a generic validator, and the heavy cost that makes reflection a last resort.",
+        further: [
+          ref("The Laws of Reflection", "https://go.dev/blog/laws-of-reflection"),
+          ref("reflect package", "https://pkg.go.dev/reflect"),
+          ref("Struct tags (spec)", "https://pkg.go.dev/reflect#StructTag"),
+        ],
+      },
+      {
+        slug: "profiling-and-performance",
+        title: "Profiling & Performance",
+        blurb: "pprof CPU/memory profiles, benchmarks with -benchmem, the execution tracer, escape analysis, and reducing allocations.",
+        further: [
+          ref("Profiling Go programs", "https://go.dev/blog/pprof"),
+          ref("Diagnostics", "https://go.dev/doc/diagnostics"),
+          ref("runtime/pprof", "https://pkg.go.dev/runtime/pprof"),
+        ],
+      },
+      {
+        slug: "memory-and-garbage-collection",
+        title: "Memory & the Garbage Collector",
+        blurb: "Stack vs heap, escape analysis in depth, how Go's concurrent GC works, GOGC and GOMEMLIMIT tuning, reading a heap profile, and cutting allocations on the hot path.",
+        further: [
+          ref("A Guide to the Go GC", "https://go.dev/doc/gc-guide"),
+          ref("GOMEMLIMIT soft memory limit", "https://go.dev/doc/gc-guide#Memory_limit"),
+          ref("Profiling Go programs (pprof)", "https://go.dev/blog/pprof"),
+        ],
+      },
+      {
+        slug: "project-layout-and-patterns",
+        title: "Project Layout & Patterns",
+        blurb: "Package organization, internal/ and cmd/, dependency injection, interfaces at the boundary, and idiomatic structure.",
+        further: [
+          ref("Organizing a Go module", "https://go.dev/doc/modules/layout"),
+          ref("Effective Go", "https://go.dev/doc/effective_go"),
+          ref("Standard Go Project Layout (community)", "https://github.com/golang-standards/project-layout"),
         ],
       },
       {
@@ -152,127 +280,6 @@ export const SECTIONS = [
         further: [
           ref("go build", "https://pkg.go.dev/cmd/go#hdr-Compile_packages_and_dependencies"),
           ref("Deploying Go (official Docker image)", "https://hub.docker.com/_/golang"),
-        ],
-      },
-      {
-        slug: "generics-deep-dive",
-        title: "Generics Deep Dive",
-        blurb: "Type parameters, constraints & the constraints package, generic data structures, inference, and when NOT to use them.",
-        further: [
-          ref("Tutorial: Generics", "https://go.dev/doc/tutorial/generics"),
-          ref("When To Use Generics", "https://go.dev/blog/when-generics"),
-          ref("golang.org/x/exp/constraints", "https://pkg.go.dev/golang.org/x/exp/constraints"),
-        ],
-      },
-      {
-        slug: "context-and-cancellation",
-        title: "Context & Cancellation",
-        blurb: "context.Context in depth: timeouts, deadlines, cancellation propagation, values, and the rules for passing it.",
-        further: [
-          ref("context package", "https://pkg.go.dev/context"),
-          ref("Go Concurrency Patterns: Context", "https://go.dev/blog/context"),
-        ],
-      },
-      {
-        slug: "profiling-and-performance",
-        title: "Profiling & Performance",
-        blurb: "pprof CPU/memory profiles, benchmarks with -benchmem, the execution tracer, escape analysis, and reducing allocations.",
-        further: [
-          ref("Profiling Go programs", "https://go.dev/blog/pprof"),
-          ref("Diagnostics", "https://go.dev/doc/diagnostics"),
-          ref("runtime/pprof", "https://pkg.go.dev/runtime/pprof"),
-        ],
-      },
-      {
-        slug: "project-layout-and-patterns",
-        title: "Project Layout & Patterns",
-        blurb: "Package organization, internal/ and cmd/, dependency injection, interfaces at the boundary, and idiomatic structure.",
-        further: [
-          ref("Organizing a Go module", "https://go.dev/doc/modules/layout"),
-          ref("Effective Go", "https://go.dev/doc/effective_go"),
-          ref("Standard Go Project Layout (community)", "https://github.com/golang-standards/project-layout"),
-        ],
-      },
-      {
-        slug: "concurrency-patterns",
-        title: "Concurrency Patterns",
-        blurb: "Beyond go + channels: worker pools, fan-in/fan-out, pipelines, context cancellation, errgroup, rate limiting, and detecting leaks with the race detector.",
-        further: [
-          ref("Go Concurrency Patterns (blog)", "https://go.dev/blog/pipelines"),
-          ref("golang.org/x/sync/errgroup", "https://pkg.go.dev/golang.org/x/sync/errgroup"),
-          ref("Share Memory By Communicating", "https://go.dev/blog/codelab-share"),
-          ref("Data Race Detector", "https://go.dev/doc/articles/race_detector"),
-        ],
-      },
-      {
-        slug: "reflection-and-struct-tags",
-        title: "Reflection & Struct Tags",
-        blurb: "How encoding/json works: reflect.Type/Value, reading struct tags, writing a generic validator, and the heavy cost that makes reflection a last resort.",
-        further: [
-          ref("The Laws of Reflection", "https://go.dev/blog/laws-of-reflection"),
-          ref("reflect package", "https://pkg.go.dev/reflect"),
-          ref("Struct tags (spec)", "https://pkg.go.dev/reflect#StructTag"),
-        ],
-      },
-      {
-        slug: "modules-advanced",
-        title: "Modules: Advanced",
-        blurb: "replace & exclude directives, vendoring, private modules with GOPRIVATE, version selection & go.sum, major-version suffixes, and publishing a module.",
-        further: [
-          ref("Go Modules Reference", "https://go.dev/ref/mod"),
-          ref("Publishing a module", "https://go.dev/doc/modules/publishing"),
-          ref("Private modules (GOPRIVATE)", "https://go.dev/ref/mod#private-modules"),
-          ref("Module version numbering", "https://go.dev/doc/modules/version-numbers"),
-        ],
-      },
-      {
-        slug: "grpc-and-protobuf",
-        title: "gRPC & Protocol Buffers",
-        blurb: "Defining services in .proto, generating Go code with protoc, implementing a server & client, the four RPC types, interceptors, and gRPC vs REST.",
-        further: [
-          ref("gRPC Go quick start", "https://grpc.io/docs/languages/go/quickstart/"),
-          ref("Protocol Buffers (proto3)", "https://protobuf.dev/programming-guides/proto3/"),
-          ref("google.golang.org/grpc", "https://pkg.go.dev/google.golang.org/grpc"),
-        ],
-      },
-      {
-        slug: "memory-and-garbage-collection",
-        title: "Memory & the Garbage Collector",
-        blurb: "Stack vs heap, escape analysis in depth, how Go's concurrent GC works, GOGC and GOMEMLIMIT tuning, reading a heap profile, and cutting allocations on the hot path.",
-        further: [
-          ref("A Guide to the Go GC", "https://go.dev/doc/gc-guide"),
-          ref("GOMEMLIMIT soft memory limit", "https://go.dev/doc/gc-guide#Memory_limit"),
-          ref("Profiling Go programs (pprof)", "https://go.dev/blog/pprof"),
-        ],
-      },
-      {
-        slug: "generics-in-practice",
-        title: "Generics in Practice",
-        blurb: "Beyond the theory: shipping real generic code — constraints packages, type sets, generic data structures and helpers, the slices/maps stdlib packages, and when a plain interface is still the better call.",
-        further: [
-          ref("Tutorial: Generics", "https://go.dev/doc/tutorial/generics"),
-          ref("golang.org/x/exp constraints", "https://pkg.go.dev/golang.org/x/exp/constraints"),
-          ref("slices & maps packages", "https://pkg.go.dev/slices"),
-        ],
-      },
-      {
-        slug: "building-web-services",
-        title: "Building Production Web Services",
-        blurb: "Production net/http: the Go 1.22 method+pattern router, composable middleware, graceful shutdown, server & request timeouts, structured logging with slog, and threading context through handlers.",
-        further: [
-          ref("net/http package", "https://pkg.go.dev/net/http"),
-          ref("Routing enhancements (1.22)", "https://go.dev/blog/routing-enhancements"),
-          ref("log/slog package", "https://pkg.go.dev/log/slog"),
-        ],
-      },
-      {
-        slug: "fuzzing-and-advanced-testing",
-        title: "Fuzzing & Advanced Testing",
-        blurb: "Native fuzzing with go test -fuzz, table-driven and golden-file tests, deterministic concurrency with testing/synctest, coverage, parallel subtests, and integration tests with real dependencies.",
-        further: [
-          ref("Go fuzzing", "https://go.dev/doc/security/fuzz/"),
-          ref("testing package", "https://pkg.go.dev/testing"),
-          ref("testing/synctest", "https://pkg.go.dev/testing/synctest"),
         ],
       },
     ],
@@ -316,16 +323,6 @@ export const SECTIONS = [
         ],
       },
       {
-        slug: "package-management",
-        title: "Package Management",
-        blurb: "install/add/remove, the binary lockfile, bun outdated, workspaces, overrides, and bunx.",
-        further: [
-          ref("bun install", "https://bun.com/docs/cli/install"),
-          ref("Lockfile", "https://bun.com/docs/install/lockfile"),
-          ref("Workspaces", "https://bun.com/docs/install/workspaces"),
-        ],
-      },
-      {
         slug: "typescript",
         title: "TypeScript with Bun",
         blurb: "Zero-config TS execution, path mapping, tsconfig, type-checking with tsc --noEmit.",
@@ -335,61 +332,13 @@ export const SECTIONS = [
         ],
       },
       {
-        slug: "building-apis",
-        title: "Building APIs with Bun.serve",
-        blurb: "Bun.serve routing, WebSockets + pub/sub, raw TCP/UDP, and building a Hono app with JWT auth.",
+        slug: "package-management",
+        title: "Package Management",
+        blurb: "install/add/remove, the binary lockfile, bun outdated, workspaces, overrides, and bunx.",
         further: [
-          ref("HTTP server", "https://bun.com/docs/api/http"),
-          ref("WebSockets", "https://bun.com/docs/api/websockets"),
-          ref("Hono docs", "https://hono.dev/docs/"),
-        ],
-      },
-      {
-        slug: "file-io",
-        title: "File I/O & Shell",
-        blurb: "Bun.file, Bun.write, streaming, the s3:// protocol, Bun.$ shell scripting, and Bun.spawn.",
-        further: [
-          ref("File I/O", "https://bun.com/docs/api/file-io"),
-          ref("Bun Shell ($)", "https://bun.com/docs/runtime/shell"),
-          ref("Spawn", "https://bun.com/docs/api/spawn"),
-        ],
-      },
-      {
-        slug: "testing",
-        title: "Testing with bun test",
-        blurb: "bun test, matchers, mocks/spies, snapshots, lifecycle hooks, coverage, and DOM testing.",
-        further: [
-          ref("bun test", "https://bun.com/docs/cli/test"),
-          ref("Writing tests", "https://bun.com/docs/test/writing"),
-          ref("Coverage", "https://bun.com/docs/test/coverage"),
-        ],
-      },
-      {
-        slug: "bundling",
-        title: "Bundling & Executables",
-        blurb: "bun build for the browser & server, tree-shaking, and --compile standalone binaries.",
-        further: [
-          ref("Bundler", "https://bun.com/docs/bundler"),
-          ref("Standalone executables", "https://bun.com/docs/bundler/executables"),
-        ],
-      },
-      {
-        slug: "databases",
-        title: "Database Usage",
-        blurb: "bun:sqlite, the unified Bun.sql client (Postgres/MySQL/SQLite), and Drizzle ORM with Bun.",
-        further: [
-          ref("bun:sqlite", "https://bun.com/docs/api/sqlite"),
-          ref("Bun.sql", "https://bun.com/docs/api/sql"),
-          ref("Drizzle + Bun SQLite", "https://orm.drizzle.team/docs/get-started/bun-sqlite-new"),
-        ],
-      },
-      {
-        slug: "deployment",
-        title: "Deployment Workflows",
-        blurb: "Environment config, Playwright E2E under Bun, the official Docker image, and production hardening.",
-        further: [
-          ref("Bun Docker image", "https://hub.docker.com/r/oven/bun"),
-          ref("Playwright", "https://playwright.dev/docs/intro"),
+          ref("bun install", "https://bun.com/docs/cli/install"),
+          ref("Lockfile", "https://bun.com/docs/install/lockfile"),
+          ref("Workspaces", "https://bun.com/docs/install/workspaces"),
         ],
       },
       {
@@ -413,6 +362,26 @@ export const SECTIONS = [
         ],
       },
       {
+        slug: "file-io",
+        title: "File I/O & Shell",
+        blurb: "Bun.file, Bun.write, streaming, the s3:// protocol, Bun.$ shell scripting, and Bun.spawn.",
+        further: [
+          ref("File I/O", "https://bun.com/docs/api/file-io"),
+          ref("Bun Shell ($)", "https://bun.com/docs/runtime/shell"),
+          ref("Spawn", "https://bun.com/docs/api/spawn"),
+        ],
+      },
+      {
+        slug: "building-apis",
+        title: "Building APIs with Bun.serve",
+        blurb: "Bun.serve routing, WebSockets + pub/sub, raw TCP/UDP, and building a Hono app with JWT auth.",
+        further: [
+          ref("HTTP server", "https://bun.com/docs/api/http"),
+          ref("WebSockets", "https://bun.com/docs/api/websockets"),
+          ref("Hono docs", "https://hono.dev/docs/"),
+        ],
+      },
+      {
         slug: "web-frameworks",
         title: "Web Frameworks: Hono & Elysia",
         blurb: "Beyond Bun.serve: routing, middleware, validation, and typed end-to-end APIs with Hono and Elysia.",
@@ -423,13 +392,42 @@ export const SECTIONS = [
         ],
       },
       {
-        slug: "performance-and-optimization",
-        title: "Performance & Optimization",
-        blurb: "Benchmarking with bun test, where Bun is fast, hot paths, startup time, and production profiling.",
+        slug: "fullstack-dev-server",
+        title: "Full-Stack with Bun",
+        blurb: "Bun's full-stack dev server: importing .html as routes, automatic bundling of TSX/CSS, hot reloading, API routes alongside the frontend, and building for production.",
         further: [
-          ref("bench (bun test --bench style)", "https://bun.com/docs/cli/test"),
-          ref("Bun performance", "https://bun.com/docs"),
-          ref("Node profiling (applies to Bun)", "https://nodejs.org/en/learn/getting-started/profiling"),
+          ref("Bun: full-stack dev server", "https://bun.com/docs/bundler/fullstack"),
+          ref("HTML imports & routing", "https://bun.com/docs/api/http#routing"),
+          ref("Bun bundler", "https://bun.com/docs/bundler"),
+        ],
+      },
+      {
+        slug: "databases",
+        title: "Database Usage",
+        blurb: "bun:sqlite, the unified Bun.sql client (Postgres/MySQL/SQLite), and Drizzle ORM with Bun.",
+        further: [
+          ref("bun:sqlite", "https://bun.com/docs/api/sqlite"),
+          ref("Bun.sql", "https://bun.com/docs/api/sql"),
+          ref("Drizzle + Bun SQLite", "https://orm.drizzle.team/docs/get-started/bun-sqlite-new"),
+        ],
+      },
+      {
+        slug: "testing",
+        title: "Testing with bun test",
+        blurb: "bun test, matchers, mocks/spies, snapshots, lifecycle hooks, coverage, and DOM testing.",
+        further: [
+          ref("bun test", "https://bun.com/docs/cli/test"),
+          ref("Writing tests", "https://bun.com/docs/test/writing"),
+          ref("Coverage", "https://bun.com/docs/test/coverage"),
+        ],
+      },
+      {
+        slug: "bundling",
+        title: "Bundling & Executables",
+        blurb: "bun build for the browser & server, tree-shaking, and --compile standalone binaries.",
+        further: [
+          ref("Bundler", "https://bun.com/docs/bundler"),
+          ref("Standalone executables", "https://bun.com/docs/bundler/executables"),
         ],
       },
       {
@@ -453,13 +451,13 @@ export const SECTIONS = [
         ],
       },
       {
-        slug: "fullstack-dev-server",
-        title: "Full-Stack with Bun",
-        blurb: "Bun's full-stack dev server: importing .html as routes, automatic bundling of TSX/CSS, hot reloading, API routes alongside the frontend, and building for production.",
+        slug: "performance-and-optimization",
+        title: "Performance & Optimization",
+        blurb: "Benchmarking with bun test, where Bun is fast, hot paths, startup time, and production profiling.",
         further: [
-          ref("Bun: full-stack dev server", "https://bun.com/docs/bundler/fullstack"),
-          ref("HTML imports & routing", "https://bun.com/docs/api/http#routing"),
-          ref("Bun bundler", "https://bun.com/docs/bundler"),
+          ref("bench (bun test --bench style)", "https://bun.com/docs/cli/test"),
+          ref("Bun performance", "https://bun.com/docs"),
+          ref("Node profiling (applies to Bun)", "https://nodejs.org/en/learn/getting-started/profiling"),
         ],
       },
       {
@@ -470,6 +468,15 @@ export const SECTIONS = [
           ref("Node.js compatibility", "https://bun.com/docs/runtime/nodejs-apis"),
           ref("Migrating from Node", "https://bun.com/guides/migrate-from-npm"),
           ref("bunfig.toml", "https://bun.com/docs/runtime/bunfig"),
+        ],
+      },
+      {
+        slug: "deployment",
+        title: "Deployment Workflows",
+        blurb: "Environment config, Playwright E2E under Bun, the official Docker image, and production hardening.",
+        further: [
+          ref("Bun Docker image", "https://hub.docker.com/r/oven/bun"),
+          ref("Playwright", "https://playwright.dev/docs/intro"),
         ],
       },
     ],
@@ -500,6 +507,15 @@ export const SECTIONS = [
           ref("CSS reference (MDN)", "https://developer.mozilla.org/en-US/docs/Web/CSS/Reference"),
           ref("A Complete Guide to Flexbox", "https://css-tricks.com/snippets/css/a-guide-to-flexbox/"),
           ref("A Complete Guide to Grid", "https://css-tricks.com/snippets/css/complete-guide-grid/"),
+        ],
+      },
+      {
+        slug: "responsive-design",
+        title: "Responsive Design",
+        blurb: "The viewport, fluid layouts, media & container queries, responsive images, and mobile-first.",
+        further: [
+          ref("Responsive design (MDN)", "https://developer.mozilla.org/en-US/docs/Learn_web_development/Core/CSS_layout/Responsive_Design"),
+          ref("Container queries (MDN)", "https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_containment/Container_queries"),
         ],
       },
       {
@@ -550,90 +566,6 @@ export const SECTIONS = [
         ],
       },
       {
-        slug: "responsive-design",
-        title: "Responsive Design",
-        blurb: "The viewport, fluid layouts, media & container queries, responsive images, and mobile-first.",
-        further: [
-          ref("Responsive design (MDN)", "https://developer.mozilla.org/en-US/docs/Learn_web_development/Core/CSS_layout/Responsive_Design"),
-          ref("Container queries (MDN)", "https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_containment/Container_queries"),
-        ],
-      },
-      {
-        slug: "browser-storage",
-        title: "Browser Storage",
-        blurb: "localStorage & sessionStorage, cookies, IndexedDB, the Cache API, and when to use each.",
-        further: [
-          ref("Web Storage API (MDN)", "https://developer.mozilla.org/en-US/docs/Web/API/Web_Storage_API"),
-          ref("IndexedDB (MDN)", "https://developer.mozilla.org/en-US/docs/Web/API/IndexedDB_API"),
-        ],
-      },
-      {
-        slug: "progressive-web-apps",
-        title: "Progressive Web Apps",
-        blurb: "What makes an app a PWA: installability, the manifest, offline-first, and the install prompt.",
-        further: [
-          ref("PWA overview (MDN)", "https://developer.mozilla.org/en-US/docs/Web/Progressive_web_apps"),
-          ref("Learn PWA (web.dev)", "https://web.dev/learn/pwa/"),
-          ref("Installation prompt", "https://web.dev/learn/pwa/installation-prompt"),
-        ],
-      },
-      {
-        slug: "service-workers-and-offline",
-        title: "Service Workers & Offline Caching",
-        blurb: "The service-worker lifecycle, caching strategies, offline fallback, and background sync.",
-        further: [
-          ref("Service Worker API (MDN)", "https://developer.mozilla.org/en-US/docs/Web/API/Service_Worker_API"),
-          ref("Caching strategies (Workbox)", "https://developer.chrome.com/docs/workbox/modules/workbox-strategies"),
-          ref("Background Sync", "https://developer.mozilla.org/en-US/docs/Web/API/Background_Synchronization_API"),
-        ],
-      },
-      {
-        slug: "web-app-manifests",
-        title: "Web App Manifests",
-        blurb: "The manifest.webmanifest fields, icons & maskable icons, display modes, and shortcuts.",
-        further: [
-          ref("Web app manifest (MDN)", "https://developer.mozilla.org/en-US/docs/Web/Progressive_web_apps/Manifest"),
-          ref("Maskable icons", "https://web.dev/articles/maskable-icon"),
-        ],
-      },
-      {
-        slug: "htmx",
-        title: "HTMX",
-        blurb: "Hypermedia-driven apps: hx-get/post, swapping, triggers, and server-rendered partials.",
-        further: [
-          ref("htmx docs", "https://htmx.org/docs/"),
-          ref("Hypermedia Systems (book)", "https://hypermedia.systems/"),
-        ],
-      },
-      {
-        slug: "datastar",
-        title: "Datastar",
-        blurb: "Reactive signals + server-sent events: data-* attributes, SSE fragment merging, and gotchas.",
-        further: [
-          ref("Datastar docs", "https://data-star.dev/"),
-          ref("Server-Sent Events (MDN)", "https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events"),
-        ],
-      },
-      {
-        slug: "authentication-concepts",
-        title: "Authentication Concepts",
-        blurb: "Sessions vs tokens, JWT access + refresh rotation, HttpOnly cookies, OAuth2/OIDC, and CSRF.",
-        further: [
-          ref("OAuth 2.0 (RFC 6749)", "https://datatracker.ietf.org/doc/html/rfc6749"),
-          ref("OpenID Connect", "https://openid.net/developers/how-connect-works/"),
-          ref("JWT introduction", "https://jwt.io/introduction"),
-        ],
-      },
-      {
-        slug: "frontend-backend-integration",
-        title: "Frontend / Backend Integration & Deployment",
-        blurb: "Wiring a frontend to an API, environment config, build output, and static deployment.",
-        further: [
-          ref("Deploy static sites (MDN)", "https://developer.mozilla.org/en-US/docs/Learn_web_development/Howto/Tools_and_setup/Deployment"),
-          ref("GitHub Pages", "https://docs.github.com/en/pages"),
-        ],
-      },
-      {
         slug: "web-performance",
         title: "Web Performance & Core Web Vitals",
         blurb: "LCP, CLS, INP — what they measure, how to diagnose them, and the fixes: images, fonts, JS, layout stability.",
@@ -642,25 +574,6 @@ export const SECTIONS = [
           ref("Optimize LCP", "https://web.dev/articles/optimize-lcp"),
           ref("Optimize CLS", "https://web.dev/articles/optimize-cls"),
           ref("Optimize INP", "https://web.dev/articles/optimize-inp"),
-        ],
-      },
-      {
-        slug: "state-management",
-        title: "Client-Side State Management",
-        blurb: "Local vs shared vs server vs URL state, the observable store pattern, and avoiding over-engineering.",
-        further: [
-          ref("Thinking in React (state)", "https://react.dev/learn/thinking-in-react"),
-          ref("URLSearchParams (MDN)", "https://developer.mozilla.org/en-US/docs/Web/API/URLSearchParams"),
-        ],
-      },
-      {
-        slug: "testing-web-apps",
-        title: "Testing Web Apps",
-        blurb: "The testing pyramid for the frontend: unit, component, and end-to-end tests with Playwright.",
-        further: [
-          ref("Testing Library principles", "https://testing-library.com/docs/guiding-principles/"),
-          ref("Playwright", "https://playwright.dev/docs/intro"),
-          ref("Vitest", "https://vitest.dev/"),
         ],
       },
       {
@@ -674,25 +587,31 @@ export const SECTIONS = [
         ],
       },
       {
-        slug: "vue-fundamentals",
-        title: "Vue 3 Fundamentals",
-        blurb: "From a CDN script tag to a Vite project: the Composition API, reactive state with ref/reactive, computed, template syntax, v-bind/v-on/v-model, conditional & list rendering, and components with props and events.",
+        slug: "authentication-concepts",
+        title: "Authentication Concepts",
+        blurb: "Sessions vs tokens, JWT access + refresh rotation, HttpOnly cookies, OAuth2/OIDC, and CSRF.",
         further: [
-          ref("Vue.js guide", "https://vuejs.org/guide/introduction.html"),
-          ref("Reactivity fundamentals", "https://vuejs.org/guide/essentials/reactivity-fundamentals.html"),
-          ref("Components basics", "https://vuejs.org/guide/essentials/component-basics.html"),
-          ref("Create Vue (Vite scaffolding)", "https://vuejs.org/guide/quick-start.html"),
+          ref("OAuth 2.0 (RFC 6749)", "https://datatracker.ietf.org/doc/html/rfc6749"),
+          ref("OpenID Connect", "https://openid.net/developers/how-connect-works/"),
+          ref("JWT introduction", "https://jwt.io/introduction"),
         ],
       },
       {
-        slug: "vue-advanced",
-        title: "Vue 3 Advanced",
-        blurb: "Lifecycle & watchers, composables for reusable logic, provide/inject, Vue Router, Pinia state management, async components & Suspense, and performance patterns.",
+        slug: "browser-storage",
+        title: "Browser Storage",
+        blurb: "localStorage & sessionStorage, cookies, IndexedDB, the Cache API, and when to use each.",
         further: [
-          ref("Composables", "https://vuejs.org/guide/reusability/composables.html"),
-          ref("Vue Router", "https://router.vuejs.org/"),
-          ref("Pinia (state management)", "https://pinia.vuejs.org/"),
-          ref("Performance guide", "https://vuejs.org/guide/best-practices/performance.html"),
+          ref("Web Storage API (MDN)", "https://developer.mozilla.org/en-US/docs/Web/API/Web_Storage_API"),
+          ref("IndexedDB (MDN)", "https://developer.mozilla.org/en-US/docs/Web/API/IndexedDB_API"),
+        ],
+      },
+      {
+        slug: "state-management",
+        title: "Client-Side State Management",
+        blurb: "Local vs shared vs server vs URL state, the observable store pattern, and avoiding over-engineering.",
+        further: [
+          ref("Thinking in React (state)", "https://react.dev/learn/thinking-in-react"),
+          ref("URLSearchParams (MDN)", "https://developer.mozilla.org/en-US/docs/Web/API/URLSearchParams"),
         ],
       },
       {
@@ -718,44 +637,14 @@ export const SECTIONS = [
         ],
       },
       {
-        slug: "web-components",
-        title: "Web Components",
-        blurb: "Framework-free reusable elements: custom elements & the lifecycle callbacks, Shadow DOM encapsulation, <template> & slots, attributes vs properties, and interop with any framework.",
+        slug: "react-aria",
+        title: "React Aria: Accessible Components",
+        blurb: "Adobe's accessible primitives: React Aria Components (Button, TextField, Select, ListBox, Dialog), the hooks layer (useButton) for full control, focus management, and styling with data attributes.",
         further: [
-          ref("Web Components (MDN)", "https://developer.mozilla.org/en-US/docs/Web/API/Web_components"),
-          ref("Using custom elements", "https://developer.mozilla.org/en-US/docs/Web/API/Web_components/Using_custom_elements"),
-          ref("Using shadow DOM", "https://developer.mozilla.org/en-US/docs/Web/API/Web_components/Using_shadow_DOM"),
-        ],
-      },
-      {
-        slug: "websockets-and-realtime",
-        title: "WebSockets & Real-Time",
-        blurb: "Pushing data to the browser: the WebSocket API, Server-Sent Events (and when each fits), reconnection & heartbeats, broadcasting, and scaling real-time across servers.",
-        further: [
-          ref("WebSockets API (MDN)", "https://developer.mozilla.org/en-US/docs/Web/API/WebSockets_API"),
-          ref("Server-Sent Events (MDN)", "https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events"),
-          ref("Bun WebSockets (server)", "https://bun.com/docs/api/websockets"),
-        ],
-      },
-      {
-        slug: "web-animations",
-        title: "Animation on the Web",
-        blurb: "CSS transitions & keyframes, the Web Animations API, transform/opacity for 60fps, scroll-driven animations, and respecting prefers-reduced-motion.",
-        further: [
-          ref("CSS animations (MDN)", "https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_animations"),
-          ref("Web Animations API (MDN)", "https://developer.mozilla.org/en-US/docs/Web/API/Web_Animations_API"),
-          ref("Animations guide (web.dev)", "https://web.dev/articles/animations-guide"),
-          ref("prefers-reduced-motion (MDN)", "https://developer.mozilla.org/en-US/docs/Web/CSS/@media/prefers-reduced-motion"),
-        ],
-      },
-      {
-        slug: "graphql",
-        title: "GraphQL for the Frontend",
-        blurb: "Queries, mutations & variables, the single-endpoint model vs REST, fragments, over/under-fetching, caching with a client, and the N+1 trap on the server.",
-        further: [
-          ref("Introduction to GraphQL", "https://graphql.org/learn/"),
-          ref("Queries & mutations", "https://graphql.org/learn/queries/"),
-          ref("Apollo Client (caching)", "https://www.apollographql.com/docs/react/"),
+          ref("React Aria Components", "https://react-spectrum.adobe.com/react-aria/components.html"),
+          ref("React Aria hooks", "https://react-spectrum.adobe.com/react-aria/hooks.html"),
+          ref("Styling", "https://react-spectrum.adobe.com/react-aria/styling.html"),
+          ref("WAI-ARIA Authoring Practices (APG)", "https://www.w3.org/WAI/ARIA/apg/"),
         ],
       },
       {
@@ -793,6 +682,28 @@ export const SECTIONS = [
         ],
       },
       {
+        slug: "vue-fundamentals",
+        title: "Vue 3 Fundamentals",
+        blurb: "From a CDN script tag to a Vite project: the Composition API, reactive state with ref/reactive, computed, template syntax, v-bind/v-on/v-model, conditional & list rendering, and components with props and events.",
+        further: [
+          ref("Vue.js guide", "https://vuejs.org/guide/introduction.html"),
+          ref("Reactivity fundamentals", "https://vuejs.org/guide/essentials/reactivity-fundamentals.html"),
+          ref("Components basics", "https://vuejs.org/guide/essentials/component-basics.html"),
+          ref("Create Vue (Vite scaffolding)", "https://vuejs.org/guide/quick-start.html"),
+        ],
+      },
+      {
+        slug: "vue-advanced",
+        title: "Vue 3 Advanced",
+        blurb: "Lifecycle & watchers, composables for reusable logic, provide/inject, Vue Router, Pinia state management, async components & Suspense, and performance patterns.",
+        further: [
+          ref("Composables", "https://vuejs.org/guide/reusability/composables.html"),
+          ref("Vue Router", "https://router.vuejs.org/"),
+          ref("Pinia (state management)", "https://pinia.vuejs.org/"),
+          ref("Performance guide", "https://vuejs.org/guide/best-practices/performance.html"),
+        ],
+      },
+      {
         slug: "tailwind-and-daisyui",
         title: "Tailwind CSS 4 & daisyUI",
         blurb: "The v4 rewrite: the Vite plugin, CSS-first config with @theme, @import \"tailwindcss\", @utility & @variant; then daisyUI 5 semantic components (btn/card/modal), themes, and when to reach for each.",
@@ -805,14 +716,110 @@ export const SECTIONS = [
         ],
       },
       {
-        slug: "react-aria",
-        title: "React Aria: Accessible Components",
-        blurb: "Adobe's accessible primitives: React Aria Components (Button, TextField, Select, ListBox, Dialog), the hooks layer (useButton) for full control, focus management, and styling with data attributes.",
+        slug: "web-components",
+        title: "Web Components",
+        blurb: "Framework-free reusable elements: custom elements & the lifecycle callbacks, Shadow DOM encapsulation, <template> & slots, attributes vs properties, and interop with any framework.",
         further: [
-          ref("React Aria Components", "https://react-spectrum.adobe.com/react-aria/components.html"),
-          ref("React Aria hooks", "https://react-spectrum.adobe.com/react-aria/hooks.html"),
-          ref("Styling", "https://react-spectrum.adobe.com/react-aria/styling.html"),
-          ref("WAI-ARIA Authoring Practices (APG)", "https://www.w3.org/WAI/ARIA/apg/"),
+          ref("Web Components (MDN)", "https://developer.mozilla.org/en-US/docs/Web/API/Web_components"),
+          ref("Using custom elements", "https://developer.mozilla.org/en-US/docs/Web/API/Web_components/Using_custom_elements"),
+          ref("Using shadow DOM", "https://developer.mozilla.org/en-US/docs/Web/API/Web_components/Using_shadow_DOM"),
+        ],
+      },
+      {
+        slug: "htmx",
+        title: "HTMX",
+        blurb: "Hypermedia-driven apps: hx-get/post, swapping, triggers, and server-rendered partials.",
+        further: [
+          ref("htmx docs", "https://htmx.org/docs/"),
+          ref("Hypermedia Systems (book)", "https://hypermedia.systems/"),
+        ],
+      },
+      {
+        slug: "datastar",
+        title: "Datastar",
+        blurb: "Reactive signals + server-sent events: data-* attributes, SSE fragment merging, and gotchas.",
+        further: [
+          ref("Datastar docs", "https://data-star.dev/"),
+          ref("Server-Sent Events (MDN)", "https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events"),
+        ],
+      },
+      {
+        slug: "graphql",
+        title: "GraphQL for the Frontend",
+        blurb: "Queries, mutations & variables, the single-endpoint model vs REST, fragments, over/under-fetching, caching with a client, and the N+1 trap on the server.",
+        further: [
+          ref("Introduction to GraphQL", "https://graphql.org/learn/"),
+          ref("Queries & mutations", "https://graphql.org/learn/queries/"),
+          ref("Apollo Client (caching)", "https://www.apollographql.com/docs/react/"),
+        ],
+      },
+      {
+        slug: "websockets-and-realtime",
+        title: "WebSockets & Real-Time",
+        blurb: "Pushing data to the browser: the WebSocket API, Server-Sent Events (and when each fits), reconnection & heartbeats, broadcasting, and scaling real-time across servers.",
+        further: [
+          ref("WebSockets API (MDN)", "https://developer.mozilla.org/en-US/docs/Web/API/WebSockets_API"),
+          ref("Server-Sent Events (MDN)", "https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events"),
+          ref("Bun WebSockets (server)", "https://bun.com/docs/api/websockets"),
+        ],
+      },
+      {
+        slug: "web-animations",
+        title: "Animation on the Web",
+        blurb: "CSS transitions & keyframes, the Web Animations API, transform/opacity for 60fps, scroll-driven animations, and respecting prefers-reduced-motion.",
+        further: [
+          ref("CSS animations (MDN)", "https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_animations"),
+          ref("Web Animations API (MDN)", "https://developer.mozilla.org/en-US/docs/Web/API/Web_Animations_API"),
+          ref("Animations guide (web.dev)", "https://web.dev/articles/animations-guide"),
+          ref("prefers-reduced-motion (MDN)", "https://developer.mozilla.org/en-US/docs/Web/CSS/@media/prefers-reduced-motion"),
+        ],
+      },
+      {
+        slug: "progressive-web-apps",
+        title: "Progressive Web Apps",
+        blurb: "What makes an app a PWA: installability, the manifest, offline-first, and the install prompt.",
+        further: [
+          ref("PWA overview (MDN)", "https://developer.mozilla.org/en-US/docs/Web/Progressive_web_apps"),
+          ref("Learn PWA (web.dev)", "https://web.dev/learn/pwa/"),
+          ref("Installation prompt", "https://web.dev/learn/pwa/installation-prompt"),
+        ],
+      },
+      {
+        slug: "service-workers-and-offline",
+        title: "Service Workers & Offline Caching",
+        blurb: "The service-worker lifecycle, caching strategies, offline fallback, and background sync.",
+        further: [
+          ref("Service Worker API (MDN)", "https://developer.mozilla.org/en-US/docs/Web/API/Service_Worker_API"),
+          ref("Caching strategies (Workbox)", "https://developer.chrome.com/docs/workbox/modules/workbox-strategies"),
+          ref("Background Sync", "https://developer.mozilla.org/en-US/docs/Web/API/Background_Synchronization_API"),
+        ],
+      },
+      {
+        slug: "web-app-manifests",
+        title: "Web App Manifests",
+        blurb: "The manifest.webmanifest fields, icons & maskable icons, display modes, and shortcuts.",
+        further: [
+          ref("Web app manifest (MDN)", "https://developer.mozilla.org/en-US/docs/Web/Progressive_web_apps/Manifest"),
+          ref("Maskable icons", "https://web.dev/articles/maskable-icon"),
+        ],
+      },
+      {
+        slug: "testing-web-apps",
+        title: "Testing Web Apps",
+        blurb: "The testing pyramid for the frontend: unit, component, and end-to-end tests with Playwright.",
+        further: [
+          ref("Testing Library principles", "https://testing-library.com/docs/guiding-principles/"),
+          ref("Playwright", "https://playwright.dev/docs/intro"),
+          ref("Vitest", "https://vitest.dev/"),
+        ],
+      },
+      {
+        slug: "frontend-backend-integration",
+        title: "Frontend / Backend Integration & Deployment",
+        blurb: "Wiring a frontend to an API, environment config, build output, and static deployment.",
+        further: [
+          ref("Deploy static sites (MDN)", "https://developer.mozilla.org/en-US/docs/Learn_web_development/Howto/Tools_and_setup/Deployment"),
+          ref("GitHub Pages", "https://docs.github.com/en/pages"),
         ],
       },
     ],
@@ -836,11 +843,31 @@ export const SECTIONS = [
         ],
       },
       {
+        slug: "text-processing",
+        title: "Text Processing: grep, sed & awk",
+        blurb: "The Unix text toolkit: grep patterns, sed stream editing, awk field processing, and sort/uniq/cut/tr pipelines.",
+        further: [
+          ref("grep (man)", "https://man7.org/linux/man-pages/man1/grep.1.html"),
+          ref("sed (man)", "https://man7.org/linux/man-pages/man1/sed.1.html"),
+          ref("GNU awk manual", "https://www.gnu.org/software/gawk/manual/gawk.html"),
+        ],
+      },
+      {
         slug: "filesystem-layout",
         title: "Filesystem Layout",
         blurb: "The FHS: / , /etc, /var, /usr, /home, /tmp, /proc — where things live and why.",
         further: [
           ref("Filesystem Hierarchy Standard", "https://refspecs.linuxfoundation.org/FHS_3.0/fhs/index.html"),
+        ],
+      },
+      {
+        slug: "disk-and-storage",
+        title: "Disk & Storage",
+        blurb: "df/du, lsblk & partitions, filesystems & mount, /etc/fstab, swap, and an intro to LVM.",
+        further: [
+          ref("df (man)", "https://man7.org/linux/man-pages/man1/df.1.html"),
+          ref("fstab (man)", "https://man7.org/linux/man-pages/man5/fstab.5.html"),
+          ref("LVM (Arch wiki)", "https://wiki.archlinux.org/title/LVM"),
         ],
       },
       {
@@ -871,6 +898,44 @@ export const SECTIONS = [
         ],
       },
       {
+        slug: "performance-monitoring",
+        title: "Performance Monitoring",
+        blurb: "CPU, memory, disk, and network under load: top/vmstat/iostat/free/sar and the USE method in practice.",
+        further: [
+          ref("vmstat (man)", "https://man7.org/linux/man-pages/man8/vmstat.8.html"),
+          ref("iostat (man)", "https://man7.org/linux/man-pages/man1/iostat.1.html"),
+          ref("Linux performance (Brendan Gregg)", "https://www.brendangregg.com/linuxperf.html"),
+        ],
+      },
+      {
+        slug: "cron-and-systemd-timers",
+        title: "Cron & systemd Timers",
+        blurb: "crontab syntax, @reboot, and the modern alternative: systemd service + timer units.",
+        further: [
+          ref("crontab (man)", "https://man7.org/linux/man-pages/man5/crontab.5.html"),
+          ref("systemd.timer (man)", "https://man7.org/linux/man-pages/man5/systemd.timer.5.html"),
+        ],
+      },
+      {
+        slug: "systemd-deep-dive",
+        title: "systemd Deep Dive",
+        blurb: "Units & unit files, targets vs runlevels, dependencies & ordering, timers, journald, resource control with cgroups, and writing a hardened service.",
+        further: [
+          ref("systemd.unit (man)", "https://man7.org/linux/man-pages/man5/systemd.unit.5.html"),
+          ref("systemd.service (man)", "https://man7.org/linux/man-pages/man5/systemd.service.5.html"),
+          ref("journalctl (man)", "https://man7.org/linux/man-pages/man1/journalctl.1.html"),
+        ],
+      },
+      {
+        slug: "logs",
+        title: "Logs",
+        blurb: "journalctl, /var/log, tail -f, grep patterns, and log rotation with logrotate.",
+        further: [
+          ref("journalctl (man)", "https://man7.org/linux/man-pages/man1/journalctl.1.html"),
+          ref("logrotate (man)", "https://man7.org/linux/man-pages/man8/logrotate.8.html"),
+        ],
+      },
+      {
         slug: "package-managers",
         title: "Package Managers",
         blurb: "apt, dnf/yum, and pacman: install, update, search, remove, and repositories.",
@@ -897,100 +962,6 @@ export const SECTIONS = [
         ],
       },
       {
-        slug: "ssh",
-        title: "SSH",
-        blurb: "Key pairs, ssh-keygen, authorized_keys, config, agent forwarding, tunnels, and scp/rsync.",
-        further: [
-          ref("OpenSSH manual", "https://www.openssh.com/manual.html"),
-          ref("ssh_config (man)", "https://man7.org/linux/man-pages/man5/ssh_config.5.html"),
-        ],
-      },
-      {
-        slug: "logs",
-        title: "Logs",
-        blurb: "journalctl, /var/log, tail -f, grep patterns, and log rotation with logrotate.",
-        further: [
-          ref("journalctl (man)", "https://man7.org/linux/man-pages/man1/journalctl.1.html"),
-          ref("logrotate (man)", "https://man7.org/linux/man-pages/man8/logrotate.8.html"),
-        ],
-      },
-      {
-        slug: "cron-and-systemd-timers",
-        title: "Cron & systemd Timers",
-        blurb: "crontab syntax, @reboot, and the modern alternative: systemd service + timer units.",
-        further: [
-          ref("crontab (man)", "https://man7.org/linux/man-pages/man5/crontab.5.html"),
-          ref("systemd.timer (man)", "https://man7.org/linux/man-pages/man5/systemd.timer.5.html"),
-        ],
-      },
-      {
-        slug: "bash-scripting",
-        title: "Bash Scripting Basics",
-        blurb: "Shebangs, variables & quoting, conditionals, loops, functions, arguments, and set -euo pipefail.",
-        further: [
-          ref("Bash manual", "https://www.gnu.org/software/bash/manual/bash.html"),
-          ref("ShellCheck", "https://www.shellcheck.net/"),
-        ],
-      },
-      {
-        slug: "troubleshooting",
-        title: "Troubleshooting Workflow",
-        blurb: "A systematic method: is it up? reachable? resourced? logged? — plus the tools to answer each.",
-        further: [
-          ref("USE Method (Brendan Gregg)", "https://www.brendangregg.com/usemethod.html"),
-        ],
-      },
-      {
-        slug: "text-processing",
-        title: "Text Processing: grep, sed & awk",
-        blurb: "The Unix text toolkit: grep patterns, sed stream editing, awk field processing, and sort/uniq/cut/tr pipelines.",
-        further: [
-          ref("grep (man)", "https://man7.org/linux/man-pages/man1/grep.1.html"),
-          ref("sed (man)", "https://man7.org/linux/man-pages/man1/sed.1.html"),
-          ref("GNU awk manual", "https://www.gnu.org/software/gawk/manual/gawk.html"),
-        ],
-      },
-      {
-        slug: "disk-and-storage",
-        title: "Disk & Storage",
-        blurb: "df/du, lsblk & partitions, filesystems & mount, /etc/fstab, swap, and an intro to LVM.",
-        further: [
-          ref("df (man)", "https://man7.org/linux/man-pages/man1/df.1.html"),
-          ref("fstab (man)", "https://man7.org/linux/man-pages/man5/fstab.5.html"),
-          ref("LVM (Arch wiki)", "https://wiki.archlinux.org/title/LVM"),
-        ],
-      },
-      {
-        slug: "performance-monitoring",
-        title: "Performance Monitoring",
-        blurb: "CPU, memory, disk, and network under load: top/vmstat/iostat/free/sar and the USE method in practice.",
-        further: [
-          ref("vmstat (man)", "https://man7.org/linux/man-pages/man8/vmstat.8.html"),
-          ref("iostat (man)", "https://man7.org/linux/man-pages/man1/iostat.1.html"),
-          ref("Linux performance (Brendan Gregg)", "https://www.brendangregg.com/linuxperf.html"),
-        ],
-      },
-      {
-        slug: "containers-and-namespaces",
-        title: "Containers & Namespaces",
-        blurb: "What a container actually is: namespaces, cgroups, and chroot — the Linux kernel features Docker builds on.",
-        further: [
-          ref("namespaces (man)", "https://man7.org/linux/man-pages/man7/namespaces.7.html"),
-          ref("cgroups (man)", "https://man7.org/linux/man-pages/man7/cgroups.7.html"),
-          ref("unshare (man)", "https://man7.org/linux/man-pages/man1/unshare.1.html"),
-        ],
-      },
-      {
-        slug: "systemd-deep-dive",
-        title: "systemd Deep Dive",
-        blurb: "Units & unit files, targets vs runlevels, dependencies & ordering, timers, journald, resource control with cgroups, and writing a hardened service.",
-        further: [
-          ref("systemd.unit (man)", "https://man7.org/linux/man-pages/man5/systemd.unit.5.html"),
-          ref("systemd.service (man)", "https://man7.org/linux/man-pages/man5/systemd.service.5.html"),
-          ref("journalctl (man)", "https://man7.org/linux/man-pages/man1/journalctl.1.html"),
-        ],
-      },
-      {
         slug: "networking-deep-dive",
         title: "Networking Deep Dive",
         blurb: "The packet's journey: ip/routing tables, the DNS resolution path, nftables/iptables firewalls, NAT, sockets with ss, and tracing with tcpdump.",
@@ -999,6 +970,15 @@ export const SECTIONS = [
           ref("nftables wiki", "https://wiki.nftables.org/wiki-nftables/index.php/Main_Page"),
           ref("ss (man)", "https://man7.org/linux/man-pages/man8/ss.8.html"),
           ref("Beej's Guide to Network Programming", "https://beej.us/guide/bgnet/"),
+        ],
+      },
+      {
+        slug: "ssh",
+        title: "SSH",
+        blurb: "Key pairs, ssh-keygen, authorized_keys, config, agent forwarding, tunnels, and scp/rsync.",
+        further: [
+          ref("OpenSSH manual", "https://www.openssh.com/manual.html"),
+          ref("ssh_config (man)", "https://man7.org/linux/man-pages/man5/ssh_config.5.html"),
         ],
       },
       {
@@ -1012,6 +992,25 @@ export const SECTIONS = [
         ],
       },
       {
+        slug: "bash-scripting",
+        title: "Bash Scripting Basics",
+        blurb: "Shebangs, variables & quoting, conditionals, loops, functions, arguments, and set -euo pipefail.",
+        further: [
+          ref("Bash manual", "https://www.gnu.org/software/bash/manual/bash.html"),
+          ref("ShellCheck", "https://www.shellcheck.net/"),
+        ],
+      },
+      {
+        slug: "containers-and-namespaces",
+        title: "Containers & Namespaces",
+        blurb: "What a container actually is: namespaces, cgroups, and chroot — the Linux kernel features Docker builds on.",
+        further: [
+          ref("namespaces (man)", "https://man7.org/linux/man-pages/man7/namespaces.7.html"),
+          ref("cgroups (man)", "https://man7.org/linux/man-pages/man7/cgroups.7.html"),
+          ref("unshare (man)", "https://man7.org/linux/man-pages/man1/unshare.1.html"),
+        ],
+      },
+      {
         slug: "kernel-and-boot",
         title: "The Kernel & Boot Process",
         blurb: "From power-on to login: firmware/UEFI, GRUB, initramfs, the kernel & init handoff, kernel modules (lsmod/modprobe), and tuning with sysctl.",
@@ -1019,6 +1018,14 @@ export const SECTIONS = [
           ref("The Linux Boot Process (kernel docs)", "https://docs.kernel.org/admin-guide/init.html"),
           ref("GRUB manual", "https://www.gnu.org/software/grub/manual/grub/grub.html"),
           ref("sysctl (man)", "https://man7.org/linux/man-pages/man8/sysctl.8.html"),
+        ],
+      },
+      {
+        slug: "troubleshooting",
+        title: "Troubleshooting Workflow",
+        blurb: "A systematic method: is it up? reachable? resourced? logged? — plus the tools to answer each.",
+        further: [
+          ref("USE Method (Brendan Gregg)", "https://www.brendangregg.com/usemethod.html"),
         ],
       },
     ],
@@ -1097,6 +1104,38 @@ export const SECTIONS = [
         ],
       },
       {
+        slug: "kubernetes-deep-dive",
+        title: "Kubernetes: Basic to Advanced",
+        blurb: "A thorough ground-up tour: pods, Deployments & Services, ConfigMaps/Secrets, Ingress, StatefulSets, RBAC, namespaces & quotas, the scheduler, and the control-plane components.",
+        further: [
+          ref("Kubernetes concepts", "https://kubernetes.io/docs/concepts/"),
+          ref("Workloads", "https://kubernetes.io/docs/concepts/workloads/"),
+          ref("Services, Load Balancing & Networking", "https://kubernetes.io/docs/concepts/services-networking/"),
+          ref("RBAC authorization", "https://kubernetes.io/docs/reference/access-authn-authz/rbac/"),
+        ],
+      },
+      {
+        slug: "advanced-kubernetes",
+        title: "Advanced Kubernetes",
+        blurb: "Probes, resource requests/limits, HPA autoscaling, affinity & taints, PodDisruptionBudgets, and operators.",
+        further: [
+          ref("Configure liveness/readiness probes", "https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/"),
+          ref("Horizontal Pod Autoscaler", "https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale/"),
+          ref("Resource management", "https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/"),
+          ref("Operator pattern", "https://kubernetes.io/docs/concepts/extend-kubernetes/operator/"),
+        ],
+      },
+      {
+        slug: "helm-deep-dive",
+        title: "Helm: Packaging Kubernetes Apps",
+        blurb: "Charts, values, templating with the Go template engine, _helpers.tpl, dependencies, hooks, upgrades/rollbacks, and when a chart beats raw YAML.",
+        further: [
+          ref("Helm docs", "https://helm.sh/docs/"),
+          ref("Chart template guide", "https://helm.sh/docs/chart_template_guide/"),
+          ref("Chart best practices", "https://helm.sh/docs/chart_best_practices/"),
+        ],
+      },
+      {
         slug: "reverse-proxies",
         title: "Reverse Proxies",
         blurb: "Why a reverse proxy, Nginx & HAProxy & Traefik, load balancing, and L4 vs L7.",
@@ -1112,6 +1151,16 @@ export const SECTIONS = [
         further: [
           ref("Let's Encrypt how it works", "https://letsencrypt.org/how-it-works/"),
           ref("How HTTPS works (MDN TLS)", "https://developer.mozilla.org/en-US/docs/Web/Security/Transport_Layer_Security"),
+        ],
+      },
+      {
+        slug: "networking-deep-dive",
+        title: "Networking Deep Dive",
+        blurb: "DNS, TCP, TLS and HTTP/1.1/2/3 on the wire; load-balancing algorithms; service discovery; and debugging the network.",
+        further: [
+          ref("High Performance Browser Networking", "https://hpbn.co/"),
+          ref("Cloudflare: how DNS works", "https://www.cloudflare.com/learning/dns/what-is-dns/"),
+          ref("HTTP/2 (RFC 9113)", "https://www.rfc-editor.org/rfc/rfc9113.html"),
         ],
       },
       {
@@ -1133,6 +1182,37 @@ export const SECTIONS = [
         ],
       },
       {
+        slug: "terraform-deep-dive",
+        title: "Terraform: Basic to Advanced",
+        blurb: "From first provider and resource to modules, remote state & locking, workspaces, for_each/dynamic, lifecycle, and import — a full HCL walkthrough.",
+        further: [
+          ref("Terraform language docs", "https://developer.hashicorp.com/terraform/language"),
+          ref("Terraform: standard module structure", "https://developer.hashicorp.com/terraform/language/modules/develop/structure"),
+          ref("Backends & remote state", "https://developer.hashicorp.com/terraform/language/backend"),
+          ref("Terraform best practices (Google)", "https://cloud.google.com/docs/terraform/best-practices-for-terraform"),
+        ],
+      },
+      {
+        slug: "gitops",
+        title: "GitOps",
+        blurb: "Git as the source of truth, pull-based delivery with Flux, and reconciliation loops.",
+        further: [
+          ref("GitOps principles (OpenGitOps)", "https://opengitops.dev/"),
+          ref("Flux docs", "https://fluxcd.io/flux/"),
+        ],
+      },
+      {
+        slug: "flux-gitops-advanced",
+        title: "Flux & GitOps in Depth",
+        blurb: "Pull-based delivery with Flux: GitRepository & Kustomization reconciliation, Helm releases, image automation, multi-env with Kustomize overlays, and drift correction.",
+        further: [
+          ref("Flux documentation", "https://fluxcd.io/flux/"),
+          ref("Flux GitOps guide", "https://fluxcd.io/flux/guides/"),
+          ref("Flux Helm controller", "https://fluxcd.io/flux/components/helm/"),
+          ref("OpenGitOps principles", "https://opengitops.dev/"),
+        ],
+      },
+      {
         slug: "monitoring-and-logging",
         title: "Monitoring & Logging",
         blurb: "The three pillars — metrics, logs, traces — with Prometheus, Grafana, Loki, and OpenTelemetry.",
@@ -1143,12 +1223,46 @@ export const SECTIONS = [
         ],
       },
       {
-        slug: "gitops",
-        title: "GitOps",
-        blurb: "Git as the source of truth, pull-based delivery with Flux, and reconciliation loops.",
+        slug: "monitoring-prometheus-grafana",
+        title: "Monitoring with Prometheus & Grafana",
+        blurb: "A hands-on monitoring stack: Prometheus scraping & PromQL, exporters, recording & alerting rules, Alertmanager routing, and Grafana dashboards and variables.",
         further: [
-          ref("GitOps principles (OpenGitOps)", "https://opengitops.dev/"),
-          ref("Flux docs", "https://fluxcd.io/flux/"),
+          ref("Prometheus querying (PromQL)", "https://prometheus.io/docs/prometheus/latest/querying/basics/"),
+          ref("Alerting rules", "https://prometheus.io/docs/prometheus/latest/configuration/alerting_rules/"),
+          ref("Alertmanager", "https://prometheus.io/docs/alerting/latest/alertmanager/"),
+          ref("Grafana dashboards", "https://grafana.com/docs/grafana/latest/dashboards/"),
+        ],
+      },
+      {
+        slug: "observability-deep-dive",
+        title: "Observability Deep Dive",
+        blurb: "Structured logging, PromQL, RED/USE methods, OpenTelemetry instrumentation, SLO-based alerting, and dashboards.",
+        further: [
+          ref("PromQL basics", "https://prometheus.io/docs/prometheus/latest/querying/basics/"),
+          ref("OpenTelemetry instrumentation", "https://opentelemetry.io/docs/concepts/instrumentation/"),
+          ref("RED method", "https://grafana.com/blog/2018/08/02/the-red-method-how-to-instrument-your-services/"),
+          ref("Alerting on SLOs (Google SRE)", "https://sre.google/workbook/alerting-on-slos/"),
+        ],
+      },
+      {
+        slug: "database-operations",
+        title: "Database Operations",
+        blurb: "Running databases in production: migrations, backups & PITR, replication & failover, connection pooling, and tuning.",
+        further: [
+          ref("PostgreSQL high availability", "https://www.postgresql.org/docs/current/high-availability.html"),
+          ref("PgBouncer", "https://www.pgbouncer.org/"),
+          ref("Backup & PITR (Postgres)", "https://www.postgresql.org/docs/current/continuous-archiving.html"),
+        ],
+      },
+      {
+        slug: "secrets-management",
+        title: "Secrets Management",
+        blurb: "Why env/Git are not enough: Vault, External Secrets, Sealed Secrets, OIDC federation, and rotation.",
+        further: [
+          ref("HashiCorp Vault docs", "https://developer.hashicorp.com/vault/docs"),
+          ref("External Secrets Operator", "https://external-secrets.io/latest/"),
+          ref("Sealed Secrets", "https://github.com/bitnami-labs/sealed-secrets"),
+          ref("GitHub OIDC in Actions", "https://docs.github.com/en/actions/deployment/security-hardening-your-deployments/about-security-hardening-with-openid-connect"),
         ],
       },
       {
@@ -1169,48 +1283,6 @@ export const SECTIONS = [
         ],
       },
       {
-        slug: "incident-response",
-        title: "Incident Response",
-        blurb: "On-call, severity levels, runbooks, blameless postmortems, and SLOs/error budgets.",
-        further: [
-          ref("Google SRE: Managing incidents", "https://sre.google/sre-book/managing-incidents/"),
-          ref("Postmortem culture", "https://sre.google/sre-book/postmortem-culture/"),
-        ],
-      },
-      {
-        slug: "advanced-kubernetes",
-        title: "Advanced Kubernetes",
-        blurb: "Probes, resource requests/limits, HPA autoscaling, affinity & taints, PodDisruptionBudgets, and operators.",
-        further: [
-          ref("Configure liveness/readiness probes", "https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/"),
-          ref("Horizontal Pod Autoscaler", "https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale/"),
-          ref("Resource management", "https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/"),
-          ref("Operator pattern", "https://kubernetes.io/docs/concepts/extend-kubernetes/operator/"),
-        ],
-      },
-      {
-        slug: "secrets-management",
-        title: "Secrets Management",
-        blurb: "Why env/Git are not enough: Vault, External Secrets, Sealed Secrets, OIDC federation, and rotation.",
-        further: [
-          ref("HashiCorp Vault docs", "https://developer.hashicorp.com/vault/docs"),
-          ref("External Secrets Operator", "https://external-secrets.io/latest/"),
-          ref("Sealed Secrets", "https://github.com/bitnami-labs/sealed-secrets"),
-          ref("GitHub OIDC in Actions", "https://docs.github.com/en/actions/deployment/security-hardening-your-deployments/about-security-hardening-with-openid-connect"),
-        ],
-      },
-      {
-        slug: "observability-deep-dive",
-        title: "Observability Deep Dive",
-        blurb: "Structured logging, PromQL, RED/USE methods, OpenTelemetry instrumentation, SLO-based alerting, and dashboards.",
-        further: [
-          ref("PromQL basics", "https://prometheus.io/docs/prometheus/latest/querying/basics/"),
-          ref("OpenTelemetry instrumentation", "https://opentelemetry.io/docs/concepts/instrumentation/"),
-          ref("RED method", "https://grafana.com/blog/2018/08/02/the-red-method-how-to-instrument-your-services/"),
-          ref("Alerting on SLOs (Google SRE)", "https://sre.google/workbook/alerting-on-slos/"),
-        ],
-      },
-      {
         slug: "chaos-engineering",
         title: "Chaos Engineering & Resilience",
         blurb: "Deliberately injecting failure to build confidence: hypotheses, blast radius, game days, and resilience patterns.",
@@ -1218,6 +1290,15 @@ export const SECTIONS = [
           ref("Principles of Chaos Engineering", "https://principlesofchaos.org/"),
           ref("Chaos Mesh", "https://chaos-mesh.org/docs/"),
           ref("Resilience patterns (circuit breaker)", "https://martinfowler.com/bliki/CircuitBreaker.html"),
+        ],
+      },
+      {
+        slug: "incident-response",
+        title: "Incident Response",
+        blurb: "On-call, severity levels, runbooks, blameless postmortems, and SLOs/error budgets.",
+        further: [
+          ref("Google SRE: Managing incidents", "https://sre.google/sre-book/managing-incidents/"),
+          ref("Postmortem culture", "https://sre.google/sre-book/postmortem-culture/"),
         ],
       },
       {
@@ -1238,80 +1319,6 @@ export const SECTIONS = [
           ref("FinOps Foundation", "https://www.finops.org/introduction/what-is-finops/"),
           ref("AWS cost optimization", "https://aws.amazon.com/aws-cost-management/cost-optimization/"),
           ref("Kubernetes cost (OpenCost)", "https://www.opencost.io/docs/"),
-        ],
-      },
-      {
-        slug: "database-operations",
-        title: "Database Operations",
-        blurb: "Running databases in production: migrations, backups & PITR, replication & failover, connection pooling, and tuning.",
-        further: [
-          ref("PostgreSQL high availability", "https://www.postgresql.org/docs/current/high-availability.html"),
-          ref("PgBouncer", "https://www.pgbouncer.org/"),
-          ref("Backup & PITR (Postgres)", "https://www.postgresql.org/docs/current/continuous-archiving.html"),
-        ],
-      },
-      {
-        slug: "networking-deep-dive",
-        title: "Networking Deep Dive",
-        blurb: "DNS, TCP, TLS and HTTP/1.1/2/3 on the wire; load-balancing algorithms; service discovery; and debugging the network.",
-        further: [
-          ref("High Performance Browser Networking", "https://hpbn.co/"),
-          ref("Cloudflare: how DNS works", "https://www.cloudflare.com/learning/dns/what-is-dns/"),
-          ref("HTTP/2 (RFC 9113)", "https://www.rfc-editor.org/rfc/rfc9113.html"),
-        ],
-      },
-      {
-        slug: "terraform-deep-dive",
-        title: "Terraform: Basic to Advanced",
-        blurb: "From first provider and resource to modules, remote state & locking, workspaces, for_each/dynamic, lifecycle, and import — a full HCL walkthrough.",
-        further: [
-          ref("Terraform language docs", "https://developer.hashicorp.com/terraform/language"),
-          ref("Terraform: standard module structure", "https://developer.hashicorp.com/terraform/language/modules/develop/structure"),
-          ref("Backends & remote state", "https://developer.hashicorp.com/terraform/language/backend"),
-          ref("Terraform best practices (Google)", "https://cloud.google.com/docs/terraform/best-practices-for-terraform"),
-        ],
-      },
-      {
-        slug: "helm-deep-dive",
-        title: "Helm: Packaging Kubernetes Apps",
-        blurb: "Charts, values, templating with the Go template engine, _helpers.tpl, dependencies, hooks, upgrades/rollbacks, and when a chart beats raw YAML.",
-        further: [
-          ref("Helm docs", "https://helm.sh/docs/"),
-          ref("Chart template guide", "https://helm.sh/docs/chart_template_guide/"),
-          ref("Chart best practices", "https://helm.sh/docs/chart_best_practices/"),
-        ],
-      },
-      {
-        slug: "flux-gitops-advanced",
-        title: "Flux & GitOps in Depth",
-        blurb: "Pull-based delivery with Flux: GitRepository & Kustomization reconciliation, Helm releases, image automation, multi-env with Kustomize overlays, and drift correction.",
-        further: [
-          ref("Flux documentation", "https://fluxcd.io/flux/"),
-          ref("Flux GitOps guide", "https://fluxcd.io/flux/guides/"),
-          ref("Flux Helm controller", "https://fluxcd.io/flux/components/helm/"),
-          ref("OpenGitOps principles", "https://opengitops.dev/"),
-        ],
-      },
-      {
-        slug: "kubernetes-deep-dive",
-        title: "Kubernetes: Basic to Advanced",
-        blurb: "A thorough ground-up tour: pods, Deployments & Services, ConfigMaps/Secrets, Ingress, StatefulSets, RBAC, namespaces & quotas, the scheduler, and the control-plane components.",
-        further: [
-          ref("Kubernetes concepts", "https://kubernetes.io/docs/concepts/"),
-          ref("Workloads", "https://kubernetes.io/docs/concepts/workloads/"),
-          ref("Services, Load Balancing & Networking", "https://kubernetes.io/docs/concepts/services-networking/"),
-          ref("RBAC authorization", "https://kubernetes.io/docs/reference/access-authn-authz/rbac/"),
-        ],
-      },
-      {
-        slug: "monitoring-prometheus-grafana",
-        title: "Monitoring with Prometheus & Grafana",
-        blurb: "A hands-on monitoring stack: Prometheus scraping & PromQL, exporters, recording & alerting rules, Alertmanager routing, and Grafana dashboards and variables.",
-        further: [
-          ref("Prometheus querying (PromQL)", "https://prometheus.io/docs/prometheus/latest/querying/basics/"),
-          ref("Alerting rules", "https://prometheus.io/docs/prometheus/latest/configuration/alerting_rules/"),
-          ref("Alertmanager", "https://prometheus.io/docs/alerting/latest/alertmanager/"),
-          ref("Grafana dashboards", "https://grafana.com/docs/grafana/latest/dashboards/"),
         ],
       },
       {

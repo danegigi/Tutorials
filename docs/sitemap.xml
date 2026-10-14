@@ -41,6 +41,11 @@
     <priority>0.7</priority>
   </url>
   <url>
+    <loc>https://danegigi.github.io/Tutorials/golang/modules-advanced.html</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
     <loc>https://danegigi.github.io/Tutorials/golang/variables-types-functions.html</loc>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
@@ -56,6 +61,16 @@
     <priority>0.7</priority>
   </url>
   <url>
+    <loc>https://danegigi.github.io/Tutorials/golang/generics-deep-dive.html</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://danegigi.github.io/Tutorials/golang/generics-in-practice.html</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
     <loc>https://danegigi.github.io/Tutorials/golang/error-handling.html</loc>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
@@ -66,7 +81,12 @@
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://danegigi.github.io/Tutorials/golang/http-servers-and-apis.html</loc>
+    <loc>https://danegigi.github.io/Tutorials/golang/concurrency-patterns.html</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://danegigi.github.io/Tutorials/golang/context-and-cancellation.html</loc>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
@@ -76,12 +96,52 @@
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://danegigi.github.io/Tutorials/golang/testing.html</loc>
+    <loc>https://danegigi.github.io/Tutorials/golang/http-servers-and-apis.html</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://danegigi.github.io/Tutorials/golang/building-web-services.html</loc>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
     <loc>https://danegigi.github.io/Tutorials/golang/database-basics.html</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://danegigi.github.io/Tutorials/golang/grpc-and-protobuf.html</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://danegigi.github.io/Tutorials/golang/testing.html</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://danegigi.github.io/Tutorials/golang/fuzzing-and-advanced-testing.html</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://danegigi.github.io/Tutorials/golang/reflection-and-struct-tags.html</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://danegigi.github.io/Tutorials/golang/profiling-and-performance.html</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://danegigi.github.io/Tutorials/golang/memory-and-garbage-collection.html</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://danegigi.github.io/Tutorials/golang/project-layout-and-patterns.html</loc>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
@@ -92,66 +152,6 @@
   </url>
   <url>
     <loc>https://danegigi.github.io/Tutorials/golang/deployment-basics.html</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  <url>
-    <loc>https://danegigi.github.io/Tutorials/golang/generics-deep-dive.html</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  <url>
-    <loc>https://danegigi.github.io/Tutorials/golang/context-and-cancellation.html</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  <url>
-    <loc>https://danegigi.github.io/Tutorials/golang/profiling-and-performance.html</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  <url>
-    <loc>https://danegigi.github.io/Tutorials/golang/project-layout-and-patterns.html</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  <url>
-    <loc>https://danegigi.github.io/Tutorials/golang/concurrency-patterns.html</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  <url>
-    <loc>https://danegigi.github.io/Tutorials/golang/reflection-and-struct-tags.html</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  <url>
-    <loc>https://danegigi.github.io/Tutorials/golang/modules-advanced.html</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  <url>
-    <loc>https://danegigi.github.io/Tutorials/golang/grpc-and-protobuf.html</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  <url>
-    <loc>https://danegigi.github.io/Tutorials/golang/memory-and-garbage-collection.html</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  <url>
-    <loc>https://danegigi.github.io/Tutorials/golang/generics-in-practice.html</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  <url>
-    <loc>https://danegigi.github.io/Tutorials/golang/building-web-services.html</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  <url>
-    <loc>https://danegigi.github.io/Tutorials/golang/fuzzing-and-advanced-testing.html</loc>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
@@ -171,42 +171,12 @@
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://danegigi.github.io/Tutorials/bun/package-management.html</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  <url>
     <loc>https://danegigi.github.io/Tutorials/bun/typescript.html</loc>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://danegigi.github.io/Tutorials/bun/building-apis.html</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  <url>
-    <loc>https://danegigi.github.io/Tutorials/bun/file-io.html</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  <url>
-    <loc>https://danegigi.github.io/Tutorials/bun/testing.html</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  <url>
-    <loc>https://danegigi.github.io/Tutorials/bun/bundling.html</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  <url>
-    <loc>https://danegigi.github.io/Tutorials/bun/databases.html</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  <url>
-    <loc>https://danegigi.github.io/Tutorials/bun/deployment.html</loc>
+    <loc>https://danegigi.github.io/Tutorials/bun/package-management.html</loc>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
@@ -221,12 +191,37 @@
     <priority>0.7</priority>
   </url>
   <url>
+    <loc>https://danegigi.github.io/Tutorials/bun/file-io.html</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://danegigi.github.io/Tutorials/bun/building-apis.html</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
     <loc>https://danegigi.github.io/Tutorials/bun/web-frameworks.html</loc>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://danegigi.github.io/Tutorials/bun/performance-and-optimization.html</loc>
+    <loc>https://danegigi.github.io/Tutorials/bun/fullstack-dev-server.html</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://danegigi.github.io/Tutorials/bun/databases.html</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://danegigi.github.io/Tutorials/bun/testing.html</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://danegigi.github.io/Tutorials/bun/bundling.html</loc>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
@@ -241,12 +236,17 @@
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://danegigi.github.io/Tutorials/bun/fullstack-dev-server.html</loc>
+    <loc>https://danegigi.github.io/Tutorials/bun/performance-and-optimization.html</loc>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
     <loc>https://danegigi.github.io/Tutorials/bun/migrating-from-node.html</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://danegigi.github.io/Tutorials/bun/deployment.html</loc>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
@@ -257,6 +257,11 @@
   </url>
   <url>
     <loc>https://danegigi.github.io/Tutorials/web/css-fundamentals.html</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://danegigi.github.io/Tutorials/web/responsive-design.html</loc>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
@@ -286,62 +291,7 @@
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://danegigi.github.io/Tutorials/web/responsive-design.html</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  <url>
-    <loc>https://danegigi.github.io/Tutorials/web/browser-storage.html</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  <url>
-    <loc>https://danegigi.github.io/Tutorials/web/progressive-web-apps.html</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  <url>
-    <loc>https://danegigi.github.io/Tutorials/web/service-workers-and-offline.html</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  <url>
-    <loc>https://danegigi.github.io/Tutorials/web/web-app-manifests.html</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  <url>
-    <loc>https://danegigi.github.io/Tutorials/web/htmx.html</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  <url>
-    <loc>https://danegigi.github.io/Tutorials/web/datastar.html</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  <url>
-    <loc>https://danegigi.github.io/Tutorials/web/authentication-concepts.html</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  <url>
-    <loc>https://danegigi.github.io/Tutorials/web/frontend-backend-integration.html</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  <url>
     <loc>https://danegigi.github.io/Tutorials/web/web-performance.html</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  <url>
-    <loc>https://danegigi.github.io/Tutorials/web/state-management.html</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  <url>
-    <loc>https://danegigi.github.io/Tutorials/web/testing-web-apps.html</loc>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
@@ -351,12 +301,17 @@
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://danegigi.github.io/Tutorials/web/vue-fundamentals.html</loc>
+    <loc>https://danegigi.github.io/Tutorials/web/authentication-concepts.html</loc>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://danegigi.github.io/Tutorials/web/vue-advanced.html</loc>
+    <loc>https://danegigi.github.io/Tutorials/web/browser-storage.html</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://danegigi.github.io/Tutorials/web/state-management.html</loc>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
@@ -371,22 +326,7 @@
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://danegigi.github.io/Tutorials/web/web-components.html</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  <url>
-    <loc>https://danegigi.github.io/Tutorials/web/websockets-and-realtime.html</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  <url>
-    <loc>https://danegigi.github.io/Tutorials/web/web-animations.html</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  <url>
-    <loc>https://danegigi.github.io/Tutorials/web/graphql.html</loc>
+    <loc>https://danegigi.github.io/Tutorials/web/react-aria.html</loc>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
@@ -406,12 +346,72 @@
     <priority>0.7</priority>
   </url>
   <url>
+    <loc>https://danegigi.github.io/Tutorials/web/vue-fundamentals.html</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://danegigi.github.io/Tutorials/web/vue-advanced.html</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
     <loc>https://danegigi.github.io/Tutorials/web/tailwind-and-daisyui.html</loc>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://danegigi.github.io/Tutorials/web/react-aria.html</loc>
+    <loc>https://danegigi.github.io/Tutorials/web/web-components.html</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://danegigi.github.io/Tutorials/web/htmx.html</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://danegigi.github.io/Tutorials/web/datastar.html</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://danegigi.github.io/Tutorials/web/graphql.html</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://danegigi.github.io/Tutorials/web/websockets-and-realtime.html</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://danegigi.github.io/Tutorials/web/web-animations.html</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://danegigi.github.io/Tutorials/web/progressive-web-apps.html</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://danegigi.github.io/Tutorials/web/service-workers-and-offline.html</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://danegigi.github.io/Tutorials/web/web-app-manifests.html</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://danegigi.github.io/Tutorials/web/testing-web-apps.html</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://danegigi.github.io/Tutorials/web/frontend-backend-integration.html</loc>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
@@ -421,7 +421,17 @@
     <priority>0.7</priority>
   </url>
   <url>
+    <loc>https://danegigi.github.io/Tutorials/linux/text-processing.html</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
     <loc>https://danegigi.github.io/Tutorials/linux/filesystem-layout.html</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://danegigi.github.io/Tutorials/linux/disk-and-storage.html</loc>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
@@ -441,6 +451,26 @@
     <priority>0.7</priority>
   </url>
   <url>
+    <loc>https://danegigi.github.io/Tutorials/linux/performance-monitoring.html</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://danegigi.github.io/Tutorials/linux/cron-and-systemd-timers.html</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://danegigi.github.io/Tutorials/linux/systemd-deep-dive.html</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://danegigi.github.io/Tutorials/linux/logs.html</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
     <loc>https://danegigi.github.io/Tutorials/linux/package-managers.html</loc>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
@@ -456,57 +486,12 @@
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://danegigi.github.io/Tutorials/linux/ssh.html</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  <url>
-    <loc>https://danegigi.github.io/Tutorials/linux/logs.html</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  <url>
-    <loc>https://danegigi.github.io/Tutorials/linux/cron-and-systemd-timers.html</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  <url>
-    <loc>https://danegigi.github.io/Tutorials/linux/bash-scripting.html</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  <url>
-    <loc>https://danegigi.github.io/Tutorials/linux/troubleshooting.html</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  <url>
-    <loc>https://danegigi.github.io/Tutorials/linux/text-processing.html</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  <url>
-    <loc>https://danegigi.github.io/Tutorials/linux/disk-and-storage.html</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  <url>
-    <loc>https://danegigi.github.io/Tutorials/linux/performance-monitoring.html</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  <url>
-    <loc>https://danegigi.github.io/Tutorials/linux/containers-and-namespaces.html</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  <url>
-    <loc>https://danegigi.github.io/Tutorials/linux/systemd-deep-dive.html</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  <url>
     <loc>https://danegigi.github.io/Tutorials/linux/networking-deep-dive.html</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://danegigi.github.io/Tutorials/linux/ssh.html</loc>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
@@ -516,7 +501,22 @@
     <priority>0.7</priority>
   </url>
   <url>
+    <loc>https://danegigi.github.io/Tutorials/linux/bash-scripting.html</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://danegigi.github.io/Tutorials/linux/containers-and-namespaces.html</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
     <loc>https://danegigi.github.io/Tutorials/linux/kernel-and-boot.html</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://danegigi.github.io/Tutorials/linux/troubleshooting.html</loc>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
@@ -556,12 +556,32 @@
     <priority>0.7</priority>
   </url>
   <url>
+    <loc>https://danegigi.github.io/Tutorials/devops/kubernetes-deep-dive.html</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://danegigi.github.io/Tutorials/devops/advanced-kubernetes.html</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://danegigi.github.io/Tutorials/devops/helm-deep-dive.html</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
     <loc>https://danegigi.github.io/Tutorials/devops/reverse-proxies.html</loc>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
     <loc>https://danegigi.github.io/Tutorials/devops/tls-and-domains.html</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://danegigi.github.io/Tutorials/devops/networking-deep-dive.html</loc>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
@@ -576,12 +596,42 @@
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://danegigi.github.io/Tutorials/devops/monitoring-and-logging.html</loc>
+    <loc>https://danegigi.github.io/Tutorials/devops/terraform-deep-dive.html</loc>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
     <loc>https://danegigi.github.io/Tutorials/devops/gitops.html</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://danegigi.github.io/Tutorials/devops/flux-gitops-advanced.html</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://danegigi.github.io/Tutorials/devops/monitoring-and-logging.html</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://danegigi.github.io/Tutorials/devops/monitoring-prometheus-grafana.html</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://danegigi.github.io/Tutorials/devops/observability-deep-dive.html</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://danegigi.github.io/Tutorials/devops/database-operations.html</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://danegigi.github.io/Tutorials/devops/secrets-management.html</loc>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
@@ -596,27 +646,12 @@
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://danegigi.github.io/Tutorials/devops/incident-response.html</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  <url>
-    <loc>https://danegigi.github.io/Tutorials/devops/advanced-kubernetes.html</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  <url>
-    <loc>https://danegigi.github.io/Tutorials/devops/secrets-management.html</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  <url>
-    <loc>https://danegigi.github.io/Tutorials/devops/observability-deep-dive.html</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  <url>
     <loc>https://danegigi.github.io/Tutorials/devops/chaos-engineering.html</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://danegigi.github.io/Tutorials/devops/incident-response.html</loc>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
@@ -627,41 +662,6 @@
   </url>
   <url>
     <loc>https://danegigi.github.io/Tutorials/devops/cost-optimization.html</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  <url>
-    <loc>https://danegigi.github.io/Tutorials/devops/database-operations.html</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  <url>
-    <loc>https://danegigi.github.io/Tutorials/devops/networking-deep-dive.html</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  <url>
-    <loc>https://danegigi.github.io/Tutorials/devops/terraform-deep-dive.html</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  <url>
-    <loc>https://danegigi.github.io/Tutorials/devops/helm-deep-dive.html</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  <url>
-    <loc>https://danegigi.github.io/Tutorials/devops/flux-gitops-advanced.html</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  <url>
-    <loc>https://danegigi.github.io/Tutorials/devops/kubernetes-deep-dive.html</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  <url>
-    <loc>https://danegigi.github.io/Tutorials/devops/monitoring-prometheus-grafana.html</loc>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>

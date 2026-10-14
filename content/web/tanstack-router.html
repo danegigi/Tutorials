@@ -148,6 +148,72 @@ export const Route = createFileRoute("/posts/$postId")({
 });</code></pre>
 <p>Why both? The loader guarantees the data is fetched (and preloaded on hover); <code>useSuspenseQuery</code> reads from the same cache and keeps the data live afterward (background refetch, invalidation). Router owns <em>when to navigate</em>; Query owns <em>the cache lifecycle</em>.</p>
 
+<h2>Shared example: the Issues Tracker (routing &amp; preload)</h2>
+<p><span class="level advanced">Advanced</span> This continues the Issues Tracker begun in the <strong>TanStack Query</strong> lesson. We import the <em>same</em> <code>issueQueries</code> module — the router doesn't define its own fetching, it drives <em>when</em> to load the queries you already wrote. The route tree:</p>
+<pre><code>src/routes/
+  __root.tsx              → shell: nav + &lt;Outlet /&gt;, QueryClient in context
+  issues/
+    index.tsx             → /issues        (list, with ?status filter)
+    $issueId.tsx          → /issues/:id     (one issue)</code></pre>
+<p>The list route validates its <code>?status</code> filter as typed search, then preloads the matching query in its loader — so by the time the component renders, the data the Query lesson defined is already warm:</p>
+<pre><code>// src/routes/issues/index.tsx
+import { createFileRoute } from "@tanstack/react-router";
+import { useSuspenseQuery } from "@tanstack/react-query";
+import { z } from "zod";
+import { issueQueries } from "../../issues/queries"; // ← from the Query lesson
+
+const search = z.object({ status: z.enum(["open", "closed"]).optional() });
+
+export const Route = createFileRoute("/issues/")({
+  validateSearch: search,
+  // the filter from the URL feeds the SAME query key the Query lesson used
+  loaderDeps: ({ search }) =&gt; ({ status: search.status }),
+  loader: ({ context: { queryClient }, deps }) =&gt;
+    queryClient.ensureQueryData(issueQueries.list({ status: deps.status })),
+  component: IssuesList,
+});
+
+function IssuesList() {
+  const { status } = Route.useSearch();
+  const navigate = Route.useNavigate();
+  const { data: issues } = useSuspenseQuery(issueQueries.list({ status }));
+  return (
+    &lt;&gt;
+      &lt;select
+        value={status ?? ""}
+        onChange={(e) =&gt;
+          navigate({ search: { status: e.target.value || undefined } })
+        }
+      &gt;
+        &lt;option value=""&gt;All&lt;/option&gt;
+        &lt;option value="open"&gt;Open&lt;/option&gt;
+        &lt;option value="closed"&gt;Closed&lt;/option&gt;
+      &lt;/select&gt;
+      &lt;ul&gt;
+        {issues.map((i) =&gt; (
+          &lt;li key={i.id}&gt;
+            &lt;Link to="/issues/$issueId" params={{ issueId: String(i.id) }}&gt;
+              {i.title}
+            &lt;/Link&gt;
+          &lt;/li&gt;
+        ))}
+      &lt;/ul&gt;
+    &lt;/&gt;
+  );
+}</code></pre>
+<p>The detail route preloads one issue by id — and because <code>defaultPreload: "intent"</code> is on, hovering a list link prefetches the detail before the click:</p>
+<pre><code>// src/routes/issues/$issueId.tsx
+export const Route = createFileRoute("/issues/$issueId")({
+  loader: ({ context: { queryClient }, params }) =&gt;
+    queryClient.ensureQueryData(issueQueries.detail(Number(params.issueId))),
+  component: () =&gt; {
+    const { issueId } = Route.useParams();
+    const { data: issue } = useSuspenseQuery(issueQueries.detail(Number(issueId)));
+    return &lt;article&gt;&lt;h1&gt;{issue.title}&lt;/h1&gt;&lt;p&gt;Status: {issue.status}&lt;/p&gt;&lt;/article&gt;;
+  },
+});</code></pre>
+<blockquote class="tip">Notice the division of labour: the <strong>URL</strong> owns the filter (<code>?status=open</code> is shareable and survives refresh), the <strong>loader</strong> guarantees the data is fetched and preloaded on hover, and <strong>Query</strong> owns the cache afterward. The Table/Form/Store lesson renders this same list as a real grid and adds the "new issue" form.</blockquote>
+
 <h2>Common mistakes</h2>
 <blockquote class="warn">
 <ul>
