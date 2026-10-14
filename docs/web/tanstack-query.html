@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en" data-base="../">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0d1117">
+<title>TanStack Query: Basic to Advanced — Web Development</title>
+<meta name="description" content="Server-state done right: useQuery/useMutation, query keys &amp; the cache, staleTime vs gcTime, invalidation, optimistic updates, pagination/infinite queries, and the queryOptions pattern.">
+<link rel="canonical" href="https://danegigi.github.io/Tutorials/web/tanstack-query.html">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Dev Tutorials">
+<meta property="og:title" content="TanStack Query: Basic to Advanced — Web Development">
+<meta property="og:description" content="Server-state done right: useQuery/useMutation, query keys &amp; the cache, staleTime vs gcTime, invalidation, optimistic updates, pagination/infinite queries, and the queryOptions pattern.">
+<meta property="og:url" content="https://danegigi.github.io/Tutorials/web/tanstack-query.html">
+<meta property="og:image" content="https://danegigi.github.io/Tutorials/icon-512.png">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="TanStack Query: Basic to Advanced — Web Development">
+<meta name="twitter:description" content="Server-state done right: useQuery/useMutation, query keys &amp; the cache, staleTime vs gcTime, invalidation, optimistic updates, pagination/infinite queries, and the queryOptions pattern.">
+<meta name="twitter:image" content="https://danegigi.github.io/Tutorials/icon-512.png">
+<link rel="manifest" href="../manifest.webmanifest">
+<link rel="icon" href="../icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="../icon-192.png">
+<link rel="stylesheet" href="../app.css">
+<script>/* set theme before paint to avoid flash */(function(){try{var t=localStorage.getItem('tut.theme');document.documentElement.setAttribute('data-theme',t||'dark');}catch(e){document.documentElement.setAttribute('data-theme','dark');}})();</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"LearningResource","name":"TanStack Query: Basic to Advanced","description":"Server-state done right: useQuery/useMutation, query keys & the cache, staleTime vs gcTime, invalidation, optimistic updates, pagination/infinite queries, and the queryOptions pattern.","url":"https://danegigi.github.io/Tutorials/web/tanstack-query.html","inLanguage":"en","isPartOf":{"@type":"Course","name":"Web Development — Dev Tutorials","url":"https://danegigi.github.io/Tutorials/web/"},"learningResourceType":"Tutorial"},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Dev Tutorials","item":"https://danegigi.github.io/Tutorials/"},{"@type":"ListItem","position":2,"name":"Web Development","item":"https://danegigi.github.io/Tutorials/web/"},{"@type":"ListItem","position":3,"name":"TanStack Query: Basic to Advanced","item":"https://danegigi.github.io/Tutorials/web/tanstack-query.html"}]}]}</script>
+
+</head>
+<body class="lesson">
+<header class="nav">
+  <a class="brand" href="../index.html">📚 Dev Tutorials</a>
+  <span class="crumb">TanStack Query: Basic to Advanced — Web Development</span>
+  <span class="spacer"></span>
+  <a class="navbtn" href="../search.html">🔎 Search</a>
+  <button class="navbtn" id="install-btn" type="button">⬇️ Install</button>
+  <button class="navbtn" id="theme-btn" type="button" aria-label="Toggle theme">🌙 Dark</button>
+</header>
+<main class="wrap lesson-body">
+  <h1 class="page-title">TanStack Query: Basic to Advanced</h1>
+  <div class="lesson-tools" data-lesson-id="web/tanstack-query">
+    <button id="done-btn" type="button" aria-pressed="false">○ Mark complete</button>
+    <button id="mark-btn" type="button" aria-pressed="false">☆ Bookmark</button>
+    <a class="navbtn" href="index.html" style="margin-left:auto">All Web Development lessons →</a>
+  </div>
+<nav class="toc" aria-label="On this page"><strong>On this page</strong><ul>
+<li class="lvl2"><a href="#why-it-exists">Why it exists</a></li>
+<li class="lvl2"><a href="#setup-the-queryclient">Setup: the QueryClient</a></li>
+<li class="lvl2"><a href="#reading-data-with-usequery">Reading data with useQuery</a></li>
+<li class="lvl2"><a href="#query-keys">Query keys</a></li>
+<li class="lvl2"><a href="#staletime-vs-gctime-the-two-timers-everyone-confuses">staleTime vs gcTime — the two timers everyone confuses</a></li>
+<li class="lvl2"><a href="#mutations-with-usemutation">Mutations with useMutation</a></li>
+<li class="lvl2"><a href="#optimistic-updates">Optimistic updates</a></li>
+<li class="lvl2"><a href="#pagination-and-infinite-queries">Pagination and infinite queries</a></li>
+<li class="lvl2"><a href="#the-queryoptions-pattern">The queryOptions pattern</a></li>
+<li class="lvl2"><a href="#common-mistakes">Common mistakes</a></li>
+<li class="lvl2"><a href="#exercises">Exercises</a></li>
+<li class="lvl2"><a href="#mini-project-a-cached-optimistic-todo-app">Mini-project: a cached, optimistic todo app</a></li>
+</ul></nav>
+<p class="lead">TanStack Query manages <em>server state</em> — data you don't own, that lives on a backend and goes stale. It is not a replacement for <code>useState</code>; it is the layer that fetches, caches, dedupes, refetches, and invalidates remote data so you stop hand-rolling loading flags, race-condition guards, and manual cache busting in every component.</p>
+
+<h2 id="why-it-exists">Why it exists</h2>
+<p><span class="level beginner">Beginner</span> The naive approach — <code>useEffect</code> + <code>fetch</code> + three <code>useState</code>s — looks fine until you need any of the things real apps need:</p>
+<pre><code>// the problem it solves — every one of these is a line YOU don't write with Query:
+// • caching (don't refetch the same data twice)
+// • request deduplication (two components, one network call)
+// • background refetching (keep the screen fresh)
+// • stale-while-revalidate (show cached data instantly, update quietly)
+// • retry on failure, with backoff
+// • garbage collection of unused data
+// • race-condition safety (ignore a response that arrived out of order)</code></pre>
+<p>Install it alongside React:</p>
+<pre><code>npm install @tanstack/react-query
+# optional but recommended in dev:
+npm install -D @tanstack/react-query-devtools</code></pre>
+
+<h2 id="setup-the-queryclient">Setup: the QueryClient</h2>
+<p>Create one <code>QueryClient</code> for the whole app and wrap your tree in its provider. The client <em>is</em> the cache:</p>
+<pre><code>// src/main.tsx
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
+import { createRoot } from "react-dom/client";
+import App from "./App";
+
+const queryClient = new QueryClient();
+
+createRoot(document.getElementById("root")!).render(
+  &lt;QueryClientProvider client={queryClient}&gt;
+    &lt;App /&gt;
+    &lt;ReactQueryDevtools initialIsOpen={false} /&gt;
+  &lt;/QueryClientProvider&gt;,
+);</code></pre>
+<blockquote class="tip">Create the <code>QueryClient</code> <em>outside</em> the component (module scope), or in a <code>useState(() =&gt; new QueryClient())</code> if you must create it inside. Creating it inline in render makes a brand-new cache on every render and throws your data away.</blockquote>
+
+<h2 id="reading-data-with-usequery">Reading data with useQuery</h2>
+<p>A query needs two things: a <strong>query key</strong> (the cache address) and a <strong>query function</strong> that returns a promise. Query functions must <em>throw</em> on failure so Query can mark the query as errored:</p>
+<pre><code>import { useQuery } from "@tanstack/react-query";
+
+type Todo = { id: number; title: string; done: boolean };
+
+async function fetchTodos(): Promise&lt;Todo[]&gt; {
+  const res = await fetch("/api/todos");
+  if (!res.ok) throw new Error(`HTTP ${res.status}`); // MUST throw on error
+  return res.json();
+}
+
+function TodoList() {
+  const { data, isPending, isError, error } = useQuery({
+    queryKey: ["todos"],
+    queryFn: fetchTodos,
+  });
+
+  if (isPending) return &lt;p&gt;Loading…&lt;/p&gt;;
+  if (isError) return &lt;p&gt;Error: {error.message}&lt;/p&gt;;
+
+  return (
+    &lt;ul&gt;
+      {data.map((t) =&gt; (
+        &lt;li key={t.id}&gt;{t.title}&lt;/li&gt;
+      ))}
+    &lt;/ul&gt;
+  );
+}</code></pre>
+<blockquote class="warn"><code>fetch</code> does <strong>not</strong> reject on a 4xx/5xx — it only rejects on a network failure. If you forget the <code>if (!res.ok) throw</code> check, Query thinks a 500 was a success and caches the error page as your data.</blockquote>
+
+<h2 id="query-keys">Query keys</h2>
+<p>The query key is an array that uniquely identifies the data. Query uses it to cache, dedupe, and refetch. Treat it like a dependency array — <strong>every input the query function reads must be in the key</strong>:</p>
+<pre><code>// a list, filtered — the filter is part of the identity
+useQuery({ queryKey: ["todos", { done: true }], queryFn: () =&gt; fetchTodos({ done: true }) });
+
+// a single item by id
+useQuery({ queryKey: ["todos", todoId], queryFn: () =&gt; fetchTodo(todoId) });</code></pre>
+<p>Keys are hierarchical: <code>["todos"]</code> is a <em>prefix</em> of <code>["todos", 5]</code>, which lets you invalidate a whole family at once (shown below). Objects in keys are compared structurally and are order-independent, so <code>{ a: 1, b: 2 }</code> and <code>{ b: 2, a: 1 }</code> are the same key.</p>
+
+<h2 id="staletime-vs-gctime-the-two-timers-everyone-confuses">staleTime vs gcTime — the two timers everyone confuses</h2>
+<p><span class="level intermediate">Intermediate</span> These control <em>freshness</em> and <em>retention</em>, and they are completely independent:</p>
+<table>
+  <thead><tr><th>Option</th><th>Default</th><th>Meaning</th></tr></thead>
+  <tbody>
+    <tr><td><code>staleTime</code></td><td><code>0</code></td><td>How long data is considered <strong>fresh</strong>. While fresh, Query serves the cache and does <em>not</em> refetch. After it, data is <strong>stale</strong> and will refetch on the next trigger (mount, window focus, reconnect).</td></tr>
+    <tr><td><code>gcTime</code></td><td>5&nbsp;min</td><td>How long an <strong>unused</strong> (no mounted observer) query stays in cache before garbage collection. It only starts counting once nothing is using the query.</td></tr>
+  </tbody>
+</table>
+<pre><code>useQuery({
+  queryKey: ["todos"],
+  queryFn: fetchTodos,
+  staleTime: 60_000,   // treat as fresh for 1 min → no refetch storm on remount
+  gcTime: 5 * 60_000,  // keep in cache 5 min after the last component unmounts
+});</code></pre>
+<blockquote class="warn">The default <code>staleTime: 0</code> means data is stale <em>immediately</em>, so you'll see a background refetch on every mount and window focus. That is intentional (freshness-first), but if it causes a refetch storm, raise <code>staleTime</code> — do not disable refetching globally.</blockquote>
+
+<h2 id="mutations-with-usemutation">Mutations with useMutation</h2>
+<p>Reads are queries; writes are <strong>mutations</strong>. A mutation doesn't cache — it runs an async side effect and gives you status flags. After it succeeds you <em>invalidate</em> the affected queries so they refetch:</p>
+<pre><code>import { useMutation, useQueryClient } from "@tanstack/react-query";
+
+function AddTodo() {
+  const queryClient = useQueryClient();
+
+  const addTodo = useMutation({
+    mutationFn: (title: string) =&gt;
+      fetch("/api/todos", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title }),
+      }).then((r) =&gt; {
+        if (!r.ok) throw new Error("create failed");
+        return r.json();
+      }),
+    onSuccess: () =&gt; {
+      // mark everything under ["todos"] stale → it refetches
+      queryClient.invalidateQueries({ queryKey: ["todos"] });
+    },
+  });
+
+  return (
+    &lt;button
+      disabled={addTodo.isPending}
+      onClick={() =&gt; addTodo.mutate("Buy milk")}
+    &gt;
+      {addTodo.isPending ? "Adding…" : "Add todo"}
+    &lt;/button&gt;
+  );
+}</code></pre>
+
+<h2 id="optimistic-updates">Optimistic updates</h2>
+<p><span class="level advanced">Advanced</span> For a snappy UI, apply the change to the cache <em>before</em> the server responds, and roll back if it fails. The pattern has four hooks — <code>onMutate</code>, <code>onError</code>, <code>onSettled</code> — and uses the cache snapshot as the rollback point:</p>
+<pre><code>const toggle = useMutation({
+  mutationFn: (todo: Todo) =&gt; updateTodo(todo),
+
+  // 1. Before the request: snapshot + apply the optimistic change
+  onMutate: async (next) =&gt; {
+    await queryClient.cancelQueries({ queryKey: ["todos"] }); // stop in-flight refetches
+    const previous = queryClient.getQueryData&lt;Todo[]&gt;(["todos"]);
+    queryClient.setQueryData&lt;Todo[]&gt;(["todos"], (old) =&gt;
+      old?.map((t) =&gt; (t.id === next.id ? next : t)),
+    );
+    return { previous }; // becomes `context` below
+  },
+
+  // 2. On failure: restore the snapshot
+  onError: (_err, _next, context) =&gt; {
+    if (context?.previous) queryClient.setQueryData(["todos"], context.previous);
+  },
+
+  // 3. Always: resync with the server
+  onSettled: () =&gt; queryClient.invalidateQueries({ queryKey: ["todos"] }),
+});</code></pre>
+<blockquote class="tip">The <code>cancelQueries</code> call matters: without it, a background refetch that was already in flight can land <em>after</em> your optimistic write and overwrite it with stale server data.</blockquote>
+
+<h2 id="pagination-and-infinite-queries">Pagination and infinite queries</h2>
+<p>For "load more" / infinite scroll, use <code>useInfiniteQuery</code>. It stores an array of pages and derives the next page param from the last one:</p>
+<pre><code>import { useInfiniteQuery } from "@tanstack/react-query";
+
+const query = useInfiniteQuery({
+  queryKey: ["todos", "infinite"],
+  queryFn: ({ pageParam }) =&gt; fetchTodoPage(pageParam),
+  initialPageParam: 0,
+  getNextPageParam: (lastPage) =&gt; lastPage.nextCursor ?? undefined, // undefined = no more
+});
+
+// render: query.data.pages.flatMap(p =&gt; p.items)
+// load more: &lt;button onClick={() =&gt; query.fetchNextPage()} disabled={!query.hasNextPage}&gt;</code></pre>
+<p>For classic page-number pagination, keep the page in the key (<code>["todos", { page }]</code>) and add <code>placeholderData: keepPreviousData</code> so the old page stays on screen while the next one loads instead of flashing a spinner.</p>
+
+<h2 id="the-queryoptions-pattern">The queryOptions pattern</h2>
+<p>Define a query once and reuse it across <code>useQuery</code>, prefetching, and imperative reads — fully typed — with the <code>queryOptions</code> helper. This is the recommended way to organize queries in a real app:</p>
+<pre><code>import { queryOptions } from "@tanstack/react-query";
+
+export const todoQueries = {
+  all: () =&gt; queryOptions({ queryKey: ["todos"], queryFn: fetchTodos }),
+  detail: (id: number) =&gt;
+    queryOptions({ queryKey: ["todos", id], queryFn: () =&gt; fetchTodo(id) }),
+};
+
+// in a component
+useQuery(todoQueries.detail(5));
+// in a route loader (prefetch before render)
+await queryClient.ensureQueryData(todoQueries.detail(5));
+// imperatively
+const data = queryClient.getQueryData(todoQueries.detail(5).queryKey); // typed!</code></pre>
+
+<h2 id="common-mistakes">Common mistakes</h2>
+<blockquote class="warn">
+<ul>
+  <li><strong>Not throwing in the query function.</strong> <code>fetch</code> resolves on a 404/500; you must <code>throw</code> yourself or Query caches the failure as data.</li>
+  <li><strong>Missing values in the query key.</strong> If the query function reads <code>userId</code> but the key is just <code>["profile"]</code>, switching users shows the wrong cached data. Put every input in the key.</li>
+  <li><strong>Confusing <code>staleTime</code> and <code>gcTime</code>.</strong> <code>staleTime</code> = when to refetch; <code>gcTime</code> = when to forget. Raising <code>gcTime</code> does not stop refetches.</li>
+  <li><strong>Creating the QueryClient inside render.</strong> A new client every render = an empty cache every render.</li>
+  <li><strong>Using Query for client-only state.</strong> Form inputs, modal open/closed, the current tab — that's <code>useState</code>. Query is for data that lives on a server.</li>
+  <li><strong>Forgetting <code>cancelQueries</code> in optimistic updates.</strong> An in-flight refetch can clobber your optimistic write.</li>
+</ul>
+</blockquote>
+
+<h2 id="exercises">Exercises</h2>
+<ul>
+  <li>Set up a <code>QueryClient</code> and fetch a list from a public API (e.g. <code>jsonplaceholder</code>) with <code>useQuery</code>, rendering the three states (pending/error/data).</li>
+  <li>Add a <code>useMutation</code> that POSTs a new item and invalidates the list on success; confirm the list refetches.</li>
+  <li>Set <code>staleTime: 30_000</code> and watch the Devtools: confirm no refetch on remount within 30s, then a background refetch after.</li>
+  <li>Convert a page-number list to <code>keepPreviousData</code> so switching pages doesn't flash a spinner.</li>
+  <li>Implement an optimistic "toggle done" with full rollback, then force the server to 500 and confirm the UI reverts.</li>
+</ul>
+
+<h2 id="mini-project-a-cached-optimistic-todo-app">Mini-project: a cached, optimistic todo app</h2>
+<p>Build a todo app backed by any mock API (<code>json-server</code> or an in-memory handler). Requirements:</p>
+<ul>
+  <li>A <code>todoQueries</code> module using <code>queryOptions</code> for the list and the per-item detail.</li>
+  <li>The list uses <code>useQuery</code> with a sensible <code>staleTime</code>; the detail view prefetches on hover.</li>
+  <li>Add / toggle / delete are mutations. <strong>Toggle</strong> is optimistic with rollback; <strong>add</strong> and <strong>delete</strong> invalidate the list on success.</li>
+  <li>A "has unsaved network activity" indicator driven by <code>useIsFetching()</code> / <code>useIsMutating()</code>.</li>
+  <li>Open the Devtools and verify: one network call feeds multiple components (dedupe), the cache survives navigation, and an unused query is garbage-collected after <code>gcTime</code>.</li>
+</ul>
+<p>This exercises the whole model — keys, caching, freshness, invalidation, optimistic writes, and the <code>queryOptions</code> organization you'll use in production.</p>
+
+<section class="further"><h2 id="further-reading">Further reading</h2>
+<p>Official documentation for the tools and APIs covered on this page:</p>
+<ul class="further-list"><li><a href="https://tanstack.com/query/latest/docs/framework/react/overview" target="_blank" rel="noopener">TanStack Query overview ↗</a></li>
+<li><a href="https://tanstack.com/query/latest/docs/framework/react/guides/important-defaults" target="_blank" rel="noopener">Important defaults (staleTime/gcTime) ↗</a></li>
+<li><a href="https://tanstack.com/query/latest/docs/framework/react/reference/queryOptions" target="_blank" rel="noopener">queryOptions ↗</a></li>
+<li><a href="https://tanstack.com/query/latest/docs/framework/react/guides/optimistic-updates" target="_blank" rel="noopener">Optimistic updates ↗</a></li></ul></section>
+  <nav class="pager">
+<a class="prev" href="graphql.html"><small>Previous</small>🌐 GraphQL for the Frontend</a>
+<a class="next" href="tanstack-router.html"><small>Next</small>🌐 TanStack Router: Type-Safe Routing</a>
+  </nav>
+</main>
+<button type="button" class="fab top" id="fab-top" aria-label="Back to top">↑ Top</button>
+<div class="banner" id="update-banner" role="status">A new version is available.<button type="button">Reload</button></div>
+<div class="banner" id="offline-banner" role="status">You're offline — showing cached lessons.</div>
+<script src="../app.js" defer></script>
+</body>
+</html>

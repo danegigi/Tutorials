@@ -1,0 +1,199 @@
+<p class="lead">TanStack also ships a family of <em>headless</em> libraries — Table, Form, Store, Virtual, and the newer DB. "Headless" means they give you the logic and state (sorting, filtering, validation, reactivity) but render <strong>nothing</strong>: you supply the markup. You get full control over the HTML and styling while the hard state management is handled for you.</p>
+
+<h2>What "headless" means and why it wins</h2>
+<p><span class="level beginner">Beginner</span> A traditional data-grid component renders its own <code>&lt;table&gt;</code>, its own styles, its own sort arrows — and the moment your design doesn't match, you fight it. A headless table hands you a <em>model</em> (rows, header groups, sort state) and lets you render a plain <code>&lt;table&gt;</code> (or a <code>&lt;div&gt;</code> grid, or cards). The payoff: your markup, your CSS, zero override battles — the library only owns the behavior.</p>
+
+<h2>TanStack Table</h2>
+<p>Install the React adapter. The core is framework-agnostic; adapters exist for React, Vue, Solid, Svelte:</p>
+<pre><code>npm install @tanstack/react-table</code></pre>
+<p>You define <strong>column definitions</strong>, pass your data and columns to <code>useReactTable</code> with the row model(s) you want, and then render from the returned <code>table</code> instance:</p>
+<pre><code>import {
+  createColumnHelper,
+  flexRender,
+  getCoreRowModel,
+  getSortedRowModel,
+  useReactTable,
+} from "@tanstack/react-table";
+import { useState } from "react";
+
+type Person = { id: number; name: string; age: number; email: string };
+const col = createColumnHelper&lt;Person&gt;();
+
+const columns = [
+  col.accessor("name", { header: "Name" }),
+  col.accessor("age", { header: "Age" }),
+  col.accessor("email", {
+    header: "Email",
+    cell: (info) =&gt; &lt;a href={`mailto:${info.getValue()}`}&gt;{info.getValue()}&lt;/a&gt;,
+  }),
+];
+
+function PeopleTable({ data }: { data: Person[] }) {
+  const [sorting, setSorting] = useState([]);
+  const table = useReactTable({
+    data,
+    columns,
+    state: { sorting },
+    onSortingChange: setSorting,
+    getCoreRowModel: getCoreRowModel(),
+    getSortedRowModel: getSortedRowModel(), // opt in to sorting
+  });
+
+  return (
+    &lt;table&gt;
+      &lt;thead&gt;
+        {table.getHeaderGroups().map((hg) =&gt; (
+          &lt;tr key={hg.id}&gt;
+            {hg.headers.map((h) =&gt; (
+              &lt;th key={h.id} onClick={h.column.getToggleSortingHandler()}&gt;
+                {flexRender(h.column.columnDef.header, h.getContext())}
+                {{ asc: " ▲", desc: " ▼" }[h.column.getIsSorted() as string] ?? ""}
+              &lt;/th&gt;
+            ))}
+          &lt;/tr&gt;
+        ))}
+      &lt;/thead&gt;
+      &lt;tbody&gt;
+        {table.getRowModel().rows.map((row) =&gt; (
+          &lt;tr key={row.id}&gt;
+            {row.getVisibleCells().map((cell) =&gt; (
+              &lt;td key={cell.id}&gt;{flexRender(cell.column.columnDef.cell, cell.getContext())}&lt;/td&gt;
+            ))}
+          &lt;/tr&gt;
+        ))}
+      &lt;/tbody&gt;
+    &lt;/table&gt;
+  );
+}</code></pre>
+<blockquote class="warn"><strong>Row models are opt-in.</strong> Sorting does nothing unless you pass <code>getSortedRowModel()</code>; filtering needs <code>getFilteredRowModel()</code>; pagination needs <code>getPaginationRowModel()</code>. Forgetting the model is the #1 "my sort button doesn't work" cause.</blockquote>
+<blockquote class="tip">Always render cells and headers through <code>flexRender</code> — it handles both plain strings and JSX cell renderers. Reading <code>cell.getValue()</code> directly skips your custom <code>cell</code> renderer.</blockquote>
+
+<h2>Filtering, pagination, and controlled vs uncontrolled state</h2>
+<p><span class="level intermediate">Intermediate</span> Add the row models and the matching state to opt into more features. You choose where the state lives — let the table manage it internally, or control it yourself (needed if the URL or a server drives it):</p>
+<pre><code>const table = useReactTable({
+  data,
+  columns,
+  state: { sorting, columnFilters, pagination },
+  onSortingChange: setSorting,
+  onColumnFiltersChange: setColumnFilters,
+  onPaginationChange: setPagination,
+  getCoreRowModel: getCoreRowModel(),
+  getSortedRowModel: getSortedRowModel(),
+  getFilteredRowModel: getFilteredRowModel(),
+  getPaginationRowModel: getPaginationRowModel(),
+});
+
+// controls:
+table.getColumn("name")?.setFilterValue("ada");
+table.nextPage(); table.previousPage();
+table.getState().pagination.pageIndex;</code></pre>
+<p>For <strong>server-side</strong> data (the server sorts/filters/paginates), set <code>manualSorting</code>, <code>manualFiltering</code>, <code>manualPagination</code> to <code>true</code>, give <code>rowCount</code>, and refetch when the state changes — the table then stops doing the work client-side and just reflects the state.</p>
+
+<h2>Virtualization for huge tables</h2>
+<p><span class="level advanced">Advanced</span> Rendering 50,000 <code>&lt;tr&gt;</code> elements kills the browser. Pair Table with <strong>TanStack Virtual</strong> to render only the rows in view:</p>
+<pre><code>import { useVirtualizer } from "@tanstack/react-virtual";
+
+const rows = table.getRowModel().rows;
+const parentRef = useRef&lt;HTMLDivElement&gt;(null);
+const rowVirtualizer = useVirtualizer({
+  count: rows.length,
+  getScrollElement: () =&gt; parentRef.current,
+  estimateSize: () =&gt; 36,     // row height in px
+  overscan: 10,
+});
+// render only rowVirtualizer.getVirtualItems(), offset with a translateY
+</code></pre>
+
+<h2>TanStack Form</h2>
+<p>TanStack Form is a headless, type-safe form library. State and validation live in a <code>form</code> instance; each field is a render-prop component that gives you the value, change handler, and errors — you render the input:</p>
+<pre><code>npm install @tanstack/react-form</code></pre>
+<pre><code>import { useForm } from "@tanstack/react-form";
+import { z } from "zod";
+
+function SignupForm() {
+  const form = useForm({
+    defaultValues: { email: "", password: "" },
+    onSubmit: async ({ value }) =&gt; { await api.signup(value); },
+  });
+
+  return (
+    &lt;form onSubmit={(e) =&gt; { e.preventDefault(); form.handleSubmit(); }}&gt;
+      &lt;form.Field
+        name="email"
+        validators={{ onChange: z.string().email("Invalid email") }}
+      &gt;
+        {(field) =&gt; (
+          &lt;&gt;
+            &lt;input
+              value={field.state.value}
+              onBlur={field.handleBlur}
+              onChange={(e) =&gt; field.handleChange(e.target.value)}
+            /&gt;
+            {field.state.meta.errors.length &gt; 0 &amp;&amp; (
+              &lt;em&gt;{String(field.state.meta.errors[0])}&lt;/em&gt;
+            )}
+          &lt;/&gt;
+        )}
+      &lt;/form.Field&gt;
+
+      &lt;form.Subscribe selector={(s) =&gt; [s.canSubmit, s.isSubmitting]}&gt;
+        {([canSubmit, isSubmitting]) =&gt; (
+          &lt;button type="submit" disabled={!canSubmit}&gt;
+            {isSubmitting ? "…" : "Sign up"}
+          &lt;/button&gt;
+        )}
+      &lt;/form.Subscribe&gt;
+    &lt;/form&gt;
+  );
+}</code></pre>
+<blockquote class="tip">Form is schema-agnostic: validators accept a Zod/Valibot/ArkType schema <em>or</em> a plain function. Use <code>onChange</code> for live validation and <code>onSubmit</code>/<code>onBlur</code> validators for less noisy UX. <code>form.Subscribe</code> re-renders only the button when submit-ability changes, not the whole form.</blockquote>
+
+<h2>TanStack Store</h2>
+<p>Store is the tiny reactive core the other libraries use internally — a framework-agnostic signal store. Reach for it when you need shared client state without pulling in Redux/Zustand:</p>
+<pre><code>npm install @tanstack/react-store</code></pre>
+<pre><code>import { Store, useStore } from "@tanstack/react-store";
+
+const cartStore = new Store({ items: [] as string[] });
+const addItem = (name: string) =&gt;
+  cartStore.setState((s) =&gt; ({ ...s, items: [...s.items, name] }));
+
+function CartCount() {
+  // selector → re-renders only when the count changes
+  const count = useStore(cartStore, (s) =&gt; s.items.length);
+  return &lt;span&gt;{count}&lt;/span&gt;;
+}</code></pre>
+
+<h2>TanStack DB — where it's headed</h2>
+<p>TanStack DB is the newest member: a reactive client store built on <em>collections</em> and <strong>live queries</strong> that stay in sync, designed to sit on top of TanStack Query for sync. You define collections, write differential queries against them, and the UI updates incrementally as data changes — with optimistic mutations built in. It's younger than the others, so pin versions and read the current docs before adopting it in production; the collection + live-query model is the thing to understand.</p>
+
+<h2>Common mistakes</h2>
+<blockquote class="warn">
+<ul>
+  <li><strong>Forgetting a row model.</strong> No <code>getSortedRowModel()</code> → sorting silently does nothing. Each feature needs its model.</li>
+  <li><strong>Unstable <code>columns</code>/<code>data</code> references.</strong> Defining columns inline in render (new array each time) causes churn — hoist them to module scope or memoize.</li>
+  <li><strong>Bypassing <code>flexRender</code>.</strong> Reading <code>getValue()</code> directly skips custom cell renderers and loses JSX cells.</li>
+  <li><strong>Mixing manual and automatic models.</strong> If the server paginates, set <code>manualPagination</code>; otherwise the table paginates the <em>partial</em> data it already has.</li>
+  <li><strong>Subscribing to the whole store.</strong> In Store, always pass a selector to <code>useStore</code> so a component re-renders only on the slice it reads.</li>
+  <li><strong>Rendering 10k rows without virtualization.</strong> Headless makes it <em>possible</em>; it doesn't make it fast. Add TanStack Virtual for large sets.</li>
+</ul>
+</blockquote>
+
+<h2>Exercises</h2>
+<ul>
+  <li>Render a sortable table of 20 people with a custom email cell; confirm clicking a header toggles asc/desc/none.</li>
+  <li>Add a global text filter and client-side pagination with prev/next and a page indicator.</li>
+  <li>Build a signup form with TanStack Form validated by a Zod schema, showing per-field errors and a submit button disabled until valid.</li>
+  <li>Create a TanStack Store for a shopping cart and two components that read different selectors; verify each re-renders only when its slice changes.</li>
+  <li>Virtualize a 10,000-row table with TanStack Virtual and confirm the DOM holds only the visible rows.</li>
+</ul>
+
+<h2>Mini-project: a headless admin data grid</h2>
+<p>Build a users admin screen that combines the family:</p>
+<ul>
+  <li><strong>Table</strong> with sortable columns, a text filter, and pagination, rendered as your own styled <code>&lt;table&gt;</code> (no component library markup).</li>
+  <li><strong>Form</strong> in a side panel to add/edit a user, validated with Zod, disabling submit until valid.</li>
+  <li><strong>Store</strong> holding UI state (which row is selected, panel open/closed) with selector-scoped subscriptions.</li>
+  <li>Load the user list with TanStack Query (from the Query lesson); on add/edit, mutate and invalidate so the table refreshes.</li>
+  <li>If the dataset is large, drop in TanStack Virtual and confirm scrolling stays smooth.</li>
+</ul>
+<p>This shows the headless philosophy in one app: TanStack owns the behavior and state across table/form/store/query, while every pixel of markup and style is yours.</p>

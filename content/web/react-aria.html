@@ -1,0 +1,143 @@
+<p class="lead">React Aria (from Adobe's React Spectrum project) gives you the <em>behavior and accessibility</em> of UI components without any styling. It handles the parts that are genuinely hard to get right — keyboard interaction, focus management, ARIA attributes, screen-reader announcements, touch, and internationalization — and leaves the look entirely to you. There are two layers: ready-made <strong>Components</strong> and lower-level <strong>hooks</strong>.</p>
+
+<h2>The accessibility problem it solves</h2>
+<p><span class="level beginner">Beginner</span> A "simple" custom select is a trap: it needs roving focus, type-ahead, <code>aria-activedescendant</code>, correct roles, Escape-to-close, click-outside, and screen-reader labels — and most hand-rolled ones get several of these wrong. React Aria implements the <a href="https://www.w3.org/WAI/ARIA/apg/">WAI-ARIA Authoring Practices</a> for you, tested across real assistive tech, so your component is accessible by default and you only write the markup and CSS.</p>
+
+<h2>React Aria Components — the easy layer</h2>
+<p>Start with <code>react-aria-components</code>: styled-nothing but fully-behaving components you compose like normal JSX.</p>
+<pre><code>npm install react-aria-components</code></pre>
+<pre><code>import { Button } from "react-aria-components";
+
+&lt;Button onPress={() =&gt; alert("hi")} className="btn"&gt;
+  Press me
+&lt;/Button&gt;</code></pre>
+<blockquote class="tip">Note <code>onPress</code>, not <code>onClick</code>. React Aria normalizes mouse, touch, and keyboard into a single <em>press</em> interaction — it fires correctly on Enter/Space for keyboard users and handles touch without the 300ms delay. This consistency is the whole point.</blockquote>
+
+<h2>A real example: an accessible Select</h2>
+<p>The compositional API mirrors the ARIA structure. You get full keyboard support, type-ahead, and correct roles for free:</p>
+<pre><code>import { Select, SelectValue, Button, Popover, ListBox, ListBoxItem, Label } from "react-aria-components";
+
+function FruitPicker() {
+  return (
+    &lt;Select&gt;
+      &lt;Label&gt;Favorite fruit&lt;/Label&gt;
+      &lt;Button&gt;
+        &lt;SelectValue /&gt;
+        &lt;span aria-hidden="true"&gt;▾&lt;/span&gt;
+      &lt;/Button&gt;
+      &lt;Popover&gt;
+        &lt;ListBox&gt;
+          &lt;ListBoxItem id="apple"&gt;Apple&lt;/ListBoxItem&gt;
+          &lt;ListBoxItem id="banana"&gt;Banana&lt;/ListBoxItem&gt;
+          &lt;ListBoxItem id="cherry"&gt;Cherry&lt;/ListBoxItem&gt;
+        &lt;/ListBox&gt;
+      &lt;/Popover&gt;
+    &lt;/Select&gt;
+  );
+}</code></pre>
+<p>Try it with the keyboard: the listbox opens on Enter/Space/↓, arrows move the selection, typing "ch" jumps to Cherry, Escape closes, and focus returns to the button — none of which you wrote.</p>
+
+<h2>Forms: TextField and validation</h2>
+<p><span class="level intermediate">Intermediate</span> Form components wire up labels, descriptions, and error messages with the right <code>aria-describedby</code>/<code>aria-invalid</code> relationships automatically. React Aria also integrates with native HTML form validation:</p>
+<pre><code>import { TextField, Label, Input, FieldError, Text } from "react-aria-components";
+
+&lt;TextField name="email" type="email" isRequired&gt;
+  &lt;Label&gt;Email&lt;/Label&gt;
+  &lt;Input /&gt;
+  &lt;Text slot="description"&gt;We'll never share it.&lt;/Text&gt;
+  &lt;FieldError /&gt;   {/* announces validation errors to screen readers */}
+&lt;/TextField&gt;</code></pre>
+<p>Wrap fields in the <code>Form</code> component to get submit handling and server-error display. The label is associated, the description is linked via <code>aria-describedby</code>, and errors are announced — automatically.</p>
+
+<h2>Styling with data attributes</h2>
+<p>Components expose their state as <strong>data attributes</strong>, so you style every interaction state in CSS without JS. <code>className</code> and <code>style</code> also accept a function receiving the current state:</p>
+<pre><code>/* style states via data-* attributes */
+.react-aria-Button[data-pressed]  { transform: translateY(1px); }
+.react-aria-Button[data-focus-visible] { outline: 2px solid var(--focus); }
+.react-aria-ListBoxItem[data-selected] { font-weight: 600; }
+.react-aria-ListBoxItem[data-disabled] { opacity: 0.4; }</code></pre>
+<pre><code>&lt;Button
+  className={({ isPressed, isFocusVisible }) =&gt;
+    `btn ${isPressed ? "btn-active" : ""} ${isFocusVisible ? "ring" : ""}`
+  }
+&gt;Save&lt;/Button&gt;</code></pre>
+<blockquote class="tip">Because state is exposed as data attributes, React Aria pairs perfectly with Tailwind: use the <code>data-[pressed]:</code> and <code>data-[focus-visible]:</code> variants to style states inline, keeping all styling in your utility classes.</blockquote>
+
+<h2>Focus management and overlays</h2>
+<p>Overlays (Dialog, Popover, Modal) handle the fiddly accessibility obligations: focus is trapped inside while open, scroll is locked, focus returns to the trigger on close, and Escape/click-outside dismiss. You just compose them:</p>
+<pre><code>import { DialogTrigger, Button, Modal, Dialog, Heading } from "react-aria-components";
+
+&lt;DialogTrigger&gt;
+  &lt;Button&gt;Delete&lt;/Button&gt;
+  &lt;Modal&gt;
+    &lt;Dialog&gt;
+      {({ close }) =&gt; (
+        &lt;&gt;
+          &lt;Heading slot="title"&gt;Are you sure?&lt;/Heading&gt;
+          &lt;Button onPress={close}&gt;Cancel&lt;/Button&gt;
+          &lt;Button onPress={close}&gt;Delete&lt;/Button&gt;
+        &lt;/&gt;
+      )}
+    &lt;/Dialog&gt;
+  &lt;/Modal&gt;
+&lt;/DialogTrigger&gt;</code></pre>
+
+<h2>The hooks layer — full control</h2>
+<p><span class="level advanced">Advanced</span> When you need to build a bespoke component or integrate with your own DOM structure, drop to the hooks (<code>react-aria</code>) + state (<code>react-stately</code>) packages. A hook returns the exact props to spread onto <em>your</em> elements:</p>
+<pre><code>npm install react-aria react-stately</code></pre>
+<pre><code>import { useButton } from "react-aria";
+import { useRef } from "react";
+
+function MyButton(props) {
+  const ref = useRef(null);
+  const { buttonProps, isPressed } = useButton(props, ref);
+  return (
+    &lt;button {...buttonProps} ref={ref} data-pressed={isPressed || undefined}&gt;
+      {props.children}
+    &lt;/button&gt;
+  );
+}</code></pre>
+<p>Here <code>useButton</code> gives you a correct, cross-device button: it merges your handlers, adds the right ARIA, and reports <code>isPressed</code>. The component layer is built from exactly these hooks — so if a component is 90% right but you need custom internals, you own the markup while keeping the behavior.</p>
+
+<h2>React Aria vs daisyUI vs a component library</h2>
+<table>
+  <thead><tr><th>Tool</th><th>Gives you</th><th>You still provide</th></tr></thead>
+  <tbody>
+    <tr><td>daisyUI</td><td>CSS styling (looks)</td><td>Behavior, state, accessibility wiring</td></tr>
+    <tr><td>React Aria</td><td>Behavior + accessibility</td><td>All styling (looks)</td></tr>
+    <tr><td>MUI / Chakra</td><td>Both — opinionated looks + behavior</td><td>Less control; harder to restyle</td></tr>
+  </tbody>
+</table>
+<p>A powerful combination: <strong>React Aria for behavior/accessibility + Tailwind/daisyUI for the styling</strong>. You get a fully accessible component that looks exactly like your design system.</p>
+
+<h2>Common mistakes</h2>
+<blockquote class="warn">
+<ul>
+  <li><strong>Using <code>onClick</code> instead of <code>onPress</code>.</strong> <code>onPress</code> is the normalized, keyboard/touch-correct event. Reaching back to <code>onClick</code> loses that.</li>
+  <li><strong>Spreading hook props onto the wrong element or forgetting the <code>ref</code>.</strong> Each hook expects its props on a specific element plus the ref it was given.</li>
+  <li><strong>Re-adding ARIA that the hook/component already provides.</strong> Double <code>role</code>/<code>aria-*</code> attributes can confuse screen readers — let React Aria own them.</li>
+  <li><strong>Styling state with JS when a data attribute exists.</strong> Prefer <code>[data-pressed]</code>/<code>[data-focus-visible]</code> in CSS over manual state tracking.</li>
+  <li><strong>Removing focus outlines entirely.</strong> Style <code>[data-focus-visible]</code> instead — never ship a component with no visible keyboard focus.</li>
+  <li><strong>Reaching for the hooks layer first.</strong> Start with React Aria Components; only drop to hooks when you need custom internals.</li>
+</ul>
+</blockquote>
+
+<h2>Exercises</h2>
+<ul>
+  <li>Render a React Aria <code>Button</code> and style its <code>data-pressed</code> and <code>data-focus-visible</code> states in CSS; test entirely with the keyboard.</li>
+  <li>Build the <code>Select</code> example and verify type-ahead, arrow navigation, Escape-to-close, and focus return work without extra code.</li>
+  <li>Create a <code>TextField</code> with <code>isRequired</code> and a <code>FieldError</code>; submit empty and confirm the error is announced and linked via <code>aria-describedby</code>.</li>
+  <li>Build a confirm <code>Dialog</code> via <code>DialogTrigger</code>/<code>Modal</code> and verify focus is trapped and returns to the trigger on close.</li>
+  <li>Reimplement a toggle button with the <code>useButton</code> hook on your own <code>&lt;button&gt;</code>, exposing <code>isPressed</code> as a data attribute.</li>
+</ul>
+
+<h2>Mini-project: an accessible, branded form</h2>
+<p>Build a settings form that is accessible by construction and styled to your brand (pair with Tailwind/daisyUI):</p>
+<ul>
+  <li>A <code>Form</code> with a <code>TextField</code> (name), an email field with validation and <code>FieldError</code>, a <code>Select</code> for a plan, and a <code>Switch</code> for notifications.</li>
+  <li>A "Save" <code>Button</code> and a confirm <code>Dialog</code> that opens on destructive actions, with focus trapped.</li>
+  <li>Style every component purely through its data attributes / render-prop state — no inline event-driven styling.</li>
+  <li>Audit it: tab through with the keyboard only (every control reachable, visible focus everywhere), then run a screen reader and confirm labels, descriptions, and errors are announced.</li>
+  <li>Run an automated check (axe DevTools or Lighthouse Accessibility) and confirm zero violations.</li>
+</ul>
+<p>The result demonstrates React Aria's promise: you wrote markup and CSS, and got a form that works flawlessly with keyboard, touch, and screen readers.</p>

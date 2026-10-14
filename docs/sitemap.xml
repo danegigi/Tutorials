@@ -391,6 +391,31 @@
     <priority>0.7</priority>
   </url>
   <url>
+    <loc>https://danegigi.github.io/Tutorials/web/tanstack-query.html</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://danegigi.github.io/Tutorials/web/tanstack-router.html</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://danegigi.github.io/Tutorials/web/tanstack-table-form-store.html</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://danegigi.github.io/Tutorials/web/tailwind-and-daisyui.html</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://danegigi.github.io/Tutorials/web/react-aria.html</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
     <loc>https://danegigi.github.io/Tutorials/linux/shell-basics.html</loc>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
@@ -637,6 +662,11 @@
   </url>
   <url>
     <loc>https://danegigi.github.io/Tutorials/devops/monitoring-prometheus-grafana.html</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://danegigi.github.io/Tutorials/devops/grpc-go-and-bun.html</loc>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>

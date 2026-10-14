@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en" data-base="../">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0d1117">
+<title>Tailwind CSS 4 &amp; daisyUI — Web Development</title>
+<meta name="description" content="The v4 rewrite: the Vite plugin, CSS-first config with @theme, @import &quot;tailwindcss&quot;, @utility &amp; @variant; then daisyUI 5 semantic components (btn/card/modal), themes, and when to reach for each.">
+<link rel="canonical" href="https://danegigi.github.io/Tutorials/web/tailwind-and-daisyui.html">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Dev Tutorials">
+<meta property="og:title" content="Tailwind CSS 4 &amp; daisyUI — Web Development">
+<meta property="og:description" content="The v4 rewrite: the Vite plugin, CSS-first config with @theme, @import &quot;tailwindcss&quot;, @utility &amp; @variant; then daisyUI 5 semantic components (btn/card/modal), themes, and when to reach for each.">
+<meta property="og:url" content="https://danegigi.github.io/Tutorials/web/tailwind-and-daisyui.html">
+<meta property="og:image" content="https://danegigi.github.io/Tutorials/icon-512.png">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Tailwind CSS 4 &amp; daisyUI — Web Development">
+<meta name="twitter:description" content="The v4 rewrite: the Vite plugin, CSS-first config with @theme, @import &quot;tailwindcss&quot;, @utility &amp; @variant; then daisyUI 5 semantic components (btn/card/modal), themes, and when to reach for each.">
+<meta name="twitter:image" content="https://danegigi.github.io/Tutorials/icon-512.png">
+<link rel="manifest" href="../manifest.webmanifest">
+<link rel="icon" href="../icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="../icon-192.png">
+<link rel="stylesheet" href="../app.css">
+<script>/* set theme before paint to avoid flash */(function(){try{var t=localStorage.getItem('tut.theme');document.documentElement.setAttribute('data-theme',t||'dark');}catch(e){document.documentElement.setAttribute('data-theme','dark');}})();</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"LearningResource","name":"Tailwind CSS 4 & daisyUI","description":"The v4 rewrite: the Vite plugin, CSS-first config with @theme, @import \"tailwindcss\", @utility & @variant; then daisyUI 5 semantic components (btn/card/modal), themes, and when to reach for each.","url":"https://danegigi.github.io/Tutorials/web/tailwind-and-daisyui.html","inLanguage":"en","isPartOf":{"@type":"Course","name":"Web Development — Dev Tutorials","url":"https://danegigi.github.io/Tutorials/web/"},"learningResourceType":"Tutorial"},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Dev Tutorials","item":"https://danegigi.github.io/Tutorials/"},{"@type":"ListItem","position":2,"name":"Web Development","item":"https://danegigi.github.io/Tutorials/web/"},{"@type":"ListItem","position":3,"name":"Tailwind CSS 4 & daisyUI","item":"https://danegigi.github.io/Tutorials/web/tailwind-and-daisyui.html"}]}]}</script>
+
+</head>
+<body class="lesson">
+<header class="nav">
+  <a class="brand" href="../index.html">📚 Dev Tutorials</a>
+  <span class="crumb">Tailwind CSS 4 &amp; daisyUI — Web Development</span>
+  <span class="spacer"></span>
+  <a class="navbtn" href="../search.html">🔎 Search</a>
+  <button class="navbtn" id="install-btn" type="button">⬇️ Install</button>
+  <button class="navbtn" id="theme-btn" type="button" aria-label="Toggle theme">🌙 Dark</button>
+</header>
+<main class="wrap lesson-body">
+  <h1 class="page-title">Tailwind CSS 4 &amp; daisyUI</h1>
+  <div class="lesson-tools" data-lesson-id="web/tailwind-and-daisyui">
+    <button id="done-btn" type="button" aria-pressed="false">○ Mark complete</button>
+    <button id="mark-btn" type="button" aria-pressed="false">☆ Bookmark</button>
+    <a class="navbtn" href="index.html" style="margin-left:auto">All Web Development lessons →</a>
+  </div>
+<nav class="toc" aria-label="On this page"><strong>On this page</strong><ul>
+<li class="lvl2"><a href="#what-changed-in-v4">What changed in v4</a></li>
+<li class="lvl2"><a href="#install-with-vite">Install with Vite</a></li>
+<li class="lvl2"><a href="#css-first-theming-with-theme">CSS-first theming with @theme</a></li>
+<li class="lvl2"><a href="#custom-utilities-and-variants">Custom utilities and variants</a></li>
+<li class="lvl2"><a href="#daisyui-5-semantic-components-on-top">daisyUI 5 — semantic components on top</a></li>
+<li class="lvl2"><a href="#themes">Themes</a></li>
+<li class="lvl2"><a href="#tailwind-vs-daisyui-when-to-reach-for-each">Tailwind vs daisyUI — when to reach for each</a></li>
+<li class="lvl2"><a href="#common-mistakes">Common mistakes</a></li>
+<li class="lvl2"><a href="#exercises">Exercises</a></li>
+<li class="lvl2"><a href="#mini-project-a-themeable-dashboard-shell">Mini-project: a themeable dashboard shell</a></li>
+</ul></nav>
+<p class="lead">Tailwind CSS 4 is a ground-up rewrite: a new Rust-powered engine, a Vite plugin that replaces the old PostCSS pipeline, and <em>CSS-first configuration</em> — your theme lives in your stylesheet, not a <code>tailwind.config.js</code>. daisyUI 5 then sits on top as a plugin, adding semantic component classes like <code>btn</code> and <code>card</code> so you write far less markup. This lesson covers both, basic to advanced.</p>
+
+<h2 id="what-changed-in-v4">What changed in v4</h2>
+<p><span class="level beginner">Beginner</span> If you've used Tailwind 3, the big shifts are:</p>
+<ul>
+  <li><strong>One import, no directives.</strong> <code>@import "tailwindcss";</code> replaces the old <code>@tailwind base/components/utilities</code> trio.</li>
+  <li><strong>CSS-first config.</strong> Design tokens are declared with <code>@theme</code> in CSS. The <code>tailwind.config.js</code> file is optional (and mostly gone).</li>
+  <li><strong>Automatic content detection.</strong> Tailwind scans your project for class names on its own — no <code>content: [...]</code> globs to maintain.</li>
+  <li><strong>A dedicated engine + Vite plugin.</strong> No PostCSS/autoprefixer config needed; vendor prefixing and nesting are built in.</li>
+</ul>
+
+<h2 id="install-with-vite">Install with Vite</h2>
+<p>The recommended setup for a Vite app (React, Vue, Svelte, vanilla — all the same) is the official plugin:</p>
+<pre><code>npm install tailwindcss @tailwindcss/vite</code></pre>
+<pre><code>// vite.config.ts
+import { defineConfig } from "vite";
+import tailwindcss from "@tailwindcss/vite";
+
+export default defineConfig({
+  plugins: [tailwindcss()],
+});</code></pre>
+<p>Then add a single import to your main CSS file and import that CSS from your entry point:</p>
+<pre><code>/* src/style.css */
+@import "tailwindcss";</code></pre>
+<pre><code>// src/main.ts(x)
+import "./style.css";</code></pre>
+<p>That's the whole install — no <code>init</code>, no PostCSS file, no content array. Start using utilities immediately:</p>
+<pre><code>&lt;h1 class="text-3xl font-bold text-indigo-600"&gt;It works&lt;/h1&gt;</code></pre>
+<blockquote class="tip">Not using Vite? There's also <code>@tailwindcss/postcss</code> (for a PostCSS pipeline) and a standalone CLI (<code>npx @tailwindcss/cli -i in.css -o out.css --watch</code>). The Vite plugin is the fastest and simplest when you have a bundler.</blockquote>
+
+<h2 id="css-first-theming-with-theme">CSS-first theming with @theme</h2>
+<p><span class="level intermediate">Intermediate</span> Instead of editing a JS config, you declare design tokens in CSS with <code>@theme</code>. Each token becomes both a CSS variable <em>and</em> a utility class:</p>
+<pre><code>/* style.css */
+@import "tailwindcss";
+
+@theme {
+  --color-brand: oklch(0.62 0.19 260);  /* → bg-brand, text-brand, border-brand */
+  --font-display: "Inter", sans-serif;   /* → font-display */
+  --spacing-18: 4.5rem;                   /* → p-18, m-18, gap-18 */
+  --breakpoint-3xl: 120rem;               /* → 3xl: variant */
+}</code></pre>
+<pre><code>&lt;button class="bg-brand font-display px-18"&gt;Branded&lt;/button&gt;
+/* and the raw variable is available too: */
+.custom { color: var(--color-brand); }</code></pre>
+<blockquote class="tip">v4 uses the modern <code>oklch()</code> color space for its default palette — colors stay vivid and perceptually consistent. You can mix in hex/rgb freely; <code>oklch</code> just gives nicer gradients and opacity math.</blockquote>
+
+<h2 id="custom-utilities-and-variants">Custom utilities and variants</h2>
+<p><span class="level advanced">Advanced</span> v4 adds directives to extend the engine from CSS. <code>@utility</code> defines a reusable utility; <code>@variant</code> applies a variant inside custom CSS; <code>@custom-variant</code> defines your own variant:</p>
+<pre><code>/* a reusable utility */
+@utility content-auto {
+  content-visibility: auto;
+}
+
+/* your own variant — e.g. a theme toggle driven by a data attribute */
+@custom-variant dark (&amp;:where([data-theme="dark"] *));
+
+/* apply an existing variant inside a rule */
+.card {
+  background: white;
+  @variant dark {
+    background: black;
+  }
+}</code></pre>
+<p>Arbitrary values and the <code>@apply</code> directive still work for extracting repeated utility runs into a component class:</p>
+<pre><code>.btn-legacy { @apply inline-flex items-center rounded-lg px-4 py-2 font-medium; }
+/* arbitrary value, no config needed: */
+&lt;div class="top-[117px] grid-cols-[1fr_500px_2fr]"&gt;…&lt;/div&gt;</code></pre>
+
+<h2 id="daisyui-5-semantic-components-on-top">daisyUI 5 — semantic components on top</h2>
+<p>Tailwind utilities are low-level: a button is a dozen classes you repeat everywhere. daisyUI adds <strong>semantic component classes</strong> — <code>btn</code>, <code>card</code>, <code>modal</code>, <code>tabs</code> — so you write one class and still customize with utilities. daisyUI 5 is built for Tailwind 4, has zero dependencies, and installs as a plugin in your CSS:</p>
+<pre><code>npm install -D daisyui@latest</code></pre>
+<pre><code>/* style.css */
+@import "tailwindcss";
+@plugin "daisyui";</code></pre>
+<p>Now the semantic classes exist. Compare the two styles — same button, far less markup:</p>
+<pre><code>&lt;!-- pure Tailwind --&gt;
+&lt;button class="inline-flex items-center rounded-lg bg-indigo-600 px-4 py-2
+               font-medium text-white hover:bg-indigo-700"&gt;Save&lt;/button&gt;
+
+&lt;!-- daisyUI --&gt;
+&lt;button class="btn btn-primary"&gt;Save&lt;/button&gt;
+&lt;!-- still fully customizable with utilities: --&gt;
+&lt;button class="btn btn-primary btn-sm rounded-full"&gt;Save&lt;/button&gt;</code></pre>
+<pre><code>&lt;div class="card bg-base-100 w-80 shadow-md"&gt;
+  &lt;div class="card-body"&gt;
+    &lt;h2 class="card-title"&gt;Plan&lt;/h2&gt;
+    &lt;p&gt;Semantic markup, Tailwind underneath.&lt;/p&gt;
+    &lt;div class="card-actions justify-end"&gt;
+      &lt;button class="btn btn-primary"&gt;Buy&lt;/button&gt;
+    &lt;/div&gt;
+  &lt;/div&gt;
+&lt;/div&gt;</code></pre>
+
+<h2 id="themes">Themes</h2>
+<p>daisyUI's killer feature is its theme system. Semantic color names (<code>primary</code>, <code>base-100</code>, <code>accent</code>, <code>error</code>) are driven by CSS variables, so switching themes is one attribute. Enable the built-in themes you want in the plugin config, then set <code>data-theme</code>:</p>
+<pre><code>@plugin "daisyui" {
+  themes: light --default, dark --prefersdark, cupcake, synthwave;
+}</code></pre>
+<pre><code>&lt;html data-theme="dark"&gt;  &lt;!-- flip the whole app's palette --&gt;
+&lt;!-- or per-section --&gt;
+&lt;div data-theme="cupcake"&gt;…scoped theme…&lt;/div&gt;</code></pre>
+<p>A theme toggle is just swapping that attribute (persist the choice in <code>localStorage</code>):</p>
+<pre><code>const t = localStorage.theme ?? "light";
+document.documentElement.dataset.theme = t;
+toggle.onclick = () =&gt; {
+  const next = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
+  document.documentElement.dataset.theme = next;
+  localStorage.theme = next;
+};</code></pre>
+<blockquote class="tip">Define your own theme with the <code>@plugin "daisyui/theme"</code> block (or the theme generator on daisyui.com), setting the semantic variables to your brand colors. Because components reference the semantic names, your whole UI re-skins at once.</blockquote>
+
+<h2 id="tailwind-vs-daisyui-when-to-reach-for-each">Tailwind vs daisyUI — when to reach for each</h2>
+<table>
+  <thead><tr><th>Use</th><th>For</th></tr></thead>
+  <tbody>
+    <tr><td>Tailwind utilities</td><td>Layout (fl/grid/gap), spacing, one-off styling, anything bespoke.</td></tr>
+    <tr><td>daisyUI classes</td><td>Common components (buttons, cards, modals, form controls, alerts) and app-wide theming.</td></tr>
+  </tbody>
+</table>
+<p>They compose: use daisyUI for the component, Tailwind utilities to adjust it (<code>class="btn btn-primary w-full md:w-auto"</code>). daisyUI is pure CSS — it styles elements; it does <em>not</em> manage behavior, so your framework (React/Vue) still owns state, events, and accessibility wiring.</p>
+
+<h2 id="common-mistakes">Common mistakes</h2>
+<blockquote class="warn">
+<ul>
+  <li><strong>Carrying v3 habits into v4.</strong> No <code>@tailwind base;</code> directives, no <code>content</code> array, no PostCSS config — just <code>@import "tailwindcss";</code> and the Vite plugin.</li>
+  <li><strong>Still writing <code>tailwind.config.js</code> for theme values.</strong> Put tokens in <code>@theme</code> in CSS. A JS config is only needed for a few advanced cases.</li>
+  <li><strong>Classes built from string concatenation.</strong> <code>`text-${color}-500`</code> isn't detected by the scanner and won't be generated. Map to full class names.</li>
+  <li><strong>Expecting daisyUI to add behavior.</strong> <code>modal</code> styles a dialog; opening/closing and focus trapping are still your job (or use the native <code>&lt;dialog&gt;</code> element).</li>
+  <li><strong>Hard-coding colors instead of semantic ones.</strong> Use <code>bg-primary</code>/<code>text-base-content</code> so themes work; <code>bg-indigo-600</code> ignores the theme.</li>
+  <li><strong>Forgetting to enable a theme.</strong> Setting <code>data-theme="synthwave"</code> does nothing unless that theme is listed in the plugin config.</li>
+</ul>
+</blockquote>
+
+<h2 id="exercises">Exercises</h2>
+<ul>
+  <li>Create a Vite app, install Tailwind 4 via the plugin, and style a heading — confirm it works with zero config files.</li>
+  <li>Add an <code>@theme</code> block defining <code>--color-brand</code> and a custom spacing token; use both a utility (<code>bg-brand</code>) and the raw variable.</li>
+  <li>Define a custom utility with <code>@utility</code> and use it on an element.</li>
+  <li>Add daisyUI and rebuild a card + button with semantic classes; then tweak them with Tailwind utilities.</li>
+  <li>Enable the <code>light</code> and <code>dark</code> themes and wire a toggle that persists the choice in <code>localStorage</code>.</li>
+</ul>
+
+<h2 id="mini-project-a-themeable-dashboard-shell">Mini-project: a themeable dashboard shell</h2>
+<p>Build a small dashboard layout combining both tools:</p>
+<ul>
+  <li>Layout (sidebar + topbar + content grid) built with <strong>Tailwind utilities</strong> and responsive variants.</li>
+  <li>Components (navbar, cards, stat tiles, a modal, form inputs) built with <strong>daisyUI</strong> semantic classes.</li>
+  <li>An <code>@theme</code> block defining your brand color, plus a custom daisyUI theme that uses it as <code>--color-primary</code>.</li>
+  <li>A working theme switcher (light / dark / your custom theme) persisted across reloads, flipping the entire palette via <code>data-theme</code>.</li>
+  <li>Everything styled with semantic colors (<code>bg-base-100</code>, <code>text-base-content</code>, <code>btn-primary</code>) so a theme change re-skins the whole shell at once.</li>
+</ul>
+<p>You'll have internalized the v4 model (import + CSS-first theme), custom utilities/variants, and the daisyUI component + theming layer that sits on top.</p>
+
+<section class="further"><h2 id="further-reading">Further reading</h2>
+<p>Official documentation for the tools and APIs covered on this page:</p>
+<ul class="further-list"><li><a href="https://tailwindcss.com/docs/installation/using-vite" target="_blank" rel="noopener">Tailwind CSS v4 (Vite install) ↗</a></li>
+<li><a href="https://tailwindcss.com/docs/theme" target="_blank" rel="noopener">Theme variables (@theme) ↗</a></li>
+<li><a href="https://tailwindcss.com/docs/functions-and-directives" target="_blank" rel="noopener">Functions &amp; directives ↗</a></li>
+<li><a href="https://daisyui.com/docs/intro/" target="_blank" rel="noopener">daisyUI 5 docs ↗</a></li>
+<li><a href="https://daisyui.com/docs/themes/" target="_blank" rel="noopener">daisyUI themes ↗</a></li></ul></section>
+  <nav class="pager">
+<a class="prev" href="tanstack-table-form-store.html"><small>Previous</small>🌐 TanStack Table, Form &amp; Store</a>
+<a class="next" href="react-aria.html"><small>Next</small>🌐 React Aria: Accessible Components</a>
+  </nav>
+</main>
+<button type="button" class="fab top" id="fab-top" aria-label="Back to top">↑ Top</button>
+<div class="banner" id="update-banner" role="status">A new version is available.<button type="button">Reload</button></div>
+<div class="banner" id="offline-banner" role="status">You're offline — showing cached lessons.</div>
+<script src="../app.js" defer></script>
+</body>
+</html>

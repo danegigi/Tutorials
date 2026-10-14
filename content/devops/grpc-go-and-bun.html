@@ -1,0 +1,196 @@
+<p class="lead">gRPC lets services talk to each other over a fast, strongly-typed, binary protocol defined by a shared schema. This lesson builds one service end to end as a <em>polyglot</em> system: a Protobuf schema as the contract, a <strong>Go</strong> server, and a type-safe <strong>Bun/TypeScript</strong> client — generated from the same <code>.proto</code> with modern tooling (Buf + ConnectRPC) that works cleanly in both ecosystems.</p>
+
+<h2>What gRPC is, and why a schema-first contract</h2>
+<p><span class="level beginner">Beginner</span> REST sends JSON over HTTP/1.1 and the "contract" lives in documentation you hope is current. gRPC flips that: you write a <strong>Protocol Buffers</strong> schema, and both server and client generate code from it. The win:</p>
+<ul>
+  <li><strong>One source of truth.</strong> The <code>.proto</code> defines messages and methods; drift between client and server becomes a compile error.</li>
+  <li><strong>Compact + fast.</strong> Protobuf is a binary format over HTTP/2 (multiplexed, header-compressed) — smaller and faster than JSON/HTTP1.</li>
+  <li><strong>Streaming.</strong> Unary, server-stream, client-stream, and bidirectional streaming are first-class.</li>
+  <li><strong>Polyglot.</strong> Generate a Go server and a TypeScript client from the identical schema.</li>
+</ul>
+<blockquote class="tip">We use <strong>ConnectRPC</strong> rather than the classic <code>grpc-go</code> + <code>protoc-gen-grpc</code> stack. Connect speaks the gRPC, gRPC-Web, <em>and</em> its own HTTP/JSON protocol from one server on one port — and its TypeScript client runs on Bun, in Node, and in browsers with no native addon. That interop is what makes a Go server + Bun client painless.</blockquote>
+
+<h2>The schema — the contract</h2>
+<p>Define the service once. This is a greeter with a unary call and a server-streaming call:</p>
+<pre><code># proto/greet/v1/greet.proto
+syntax = "proto3";
+
+package greet.v1;
+option go_package = "example/gen/greet/v1;greetv1";
+
+message GreetRequest  { string name = 1; }
+message GreetResponse { string greeting = 1; }
+
+service GreetService {
+  rpc Greet(GreetRequest) returns (GreetResponse);
+  // server streaming: emit a countdown of greetings
+  rpc GreetStream(GreetRequest) returns (stream GreetResponse);
+}</code></pre>
+<blockquote class="warn">Field numbers (<code>= 1</code>, <code>= 2</code>) are the wire identity, not the names. Never renumber or reuse a field number in a deployed schema — it silently corrupts decoding. To remove a field, mark it <code>reserved</code>.</blockquote>
+
+<h2>Code generation with Buf</h2>
+<p><span class="level intermediate">Intermediate</span> <a href="https://buf.build/docs/">Buf</a> is the modern replacement for raw <code>protoc</code>: it lints schemas, detects breaking changes, and drives codegen from a config file. Install the CLI, then declare the plugins for each language:</p>
+<pre><code># buf.yaml — the module
+version: v2
+modules:
+  - path: proto</code></pre>
+<pre><code># buf.gen.yaml — what to generate
+version: v2
+plugins:
+  # Go: messages + Connect service code
+  - remote: buf.build/protocolbuffers/go
+    out: gen
+    opt: paths=source_relative
+  - remote: buf.build/connectrpc/go
+    out: gen
+    opt: paths=source_relative
+  # TypeScript: messages + Connect client (for Bun)
+  - remote: buf.build/bufbuild/es
+    out: web/src/gen
+    opt: target=ts</code></pre>
+<pre><code># generate everything in one command
+buf lint          # catch schema problems early
+buf generate      # writes Go into gen/ and TS into web/src/gen/</code></pre>
+<blockquote class="tip">The <code>remote:</code> plugins run on Buf's hosted registry, so you don't install a protoc toolchain locally — great for a mixed Go/Bun repo. For fully offline builds, switch to <code>local:</code> plugins and install the binaries.</blockquote>
+
+<h2>The Go server</h2>
+<p>ConnectRPC generates a handler interface. You implement it and mount it on a standard <code>net/http</code> server — no special gRPC server object:</p>
+<pre><code>// cmd/server/main.go
+package main
+
+import (
+    "context"
+    "log"
+    "net/http"
+
+    "connectrpc.com/connect"
+    greetv1 "example/gen/greet/v1"
+    "example/gen/greet/v1/greetv1connect"
+    "golang.org/x/net/http2"
+    "golang.org/x/net/http2/h2c"
+)
+
+type GreetServer struct{}
+
+func (s *GreetServer) Greet(
+    ctx context.Context, req *connect.Request[greetv1.GreetRequest],
+) (*connect.Response[greetv1.GreetResponse], error) {
+    name := req.Msg.Name
+    if name == "" {
+        return nil, connect.NewError(connect.CodeInvalidArgument,
+            errors.New("name is required"))
+    }
+    return connect.NewResponse(&amp;greetv1.GreetResponse{
+        Greeting: "Hello, " + name + "!",
+    }), nil
+}
+
+func main() {
+    mux := http.NewServeMux()
+    path, handler := greetv1connect.NewGreetServiceHandler(&amp;GreetServer{})
+    mux.Handle(path, handler)
+
+    // h2c serves HTTP/2 without TLS for local dev (gRPC needs HTTP/2)
+    log.Println("listening on :8080")
+    http.ListenAndServe(":8080", h2c.NewHandler(mux, &amp;http2.Server{}))
+}</code></pre>
+<pre><code># deps + run
+go mod init example
+go get connectrpc.com/connect golang.org/x/net/http2
+go run ./cmd/server</code></pre>
+<blockquote class="warn">Plain gRPC requires <strong>HTTP/2</strong>. For local dev without certificates, wrap the mux in <code>h2c</code> (HTTP/2 cleartext). In production you terminate TLS (next section) — don't ship <code>h2c</code> to the open internet.</blockquote>
+
+<h2>The Bun / TypeScript client</h2>
+<p>Connect's TypeScript client runs natively on Bun. Install the runtime packages, create a transport pointing at the server, and call the generated methods — fully typed:</p>
+<pre><code>bun add @connectrpc/connect @connectrpc/connect-node @bufbuild/protobuf</code></pre>
+<pre><code>// web/src/client.ts
+import { createClient } from "@connectrpc/connect";
+import { createGrpcTransport } from "@connectrpc/connect-node";
+import { GreetService } from "./gen/greet/v1/greet_pb";
+
+const transport = createGrpcTransport({
+  baseUrl: "http://localhost:8080",
+});
+
+const client = createClient(GreetService, transport);
+
+// unary call — req/res are typed from the schema
+const res = await client.greet({ name: "Ada" });
+console.log(res.greeting); // "Hello, Ada!"
+
+// server streaming — async iterator
+for await (const msg of client.greetStream({ name: "Ada" })) {
+  console.log(msg.greeting);
+}</code></pre>
+<pre><code>bun run web/src/client.ts</code></pre>
+<p>Change the schema (say, add a field), run <code>buf generate</code>, and both the Go server and this Bun client get the update — a mismatch now fails to compile instead of failing at 3 a.m. in production.</p>
+
+<h2>Running it locally with TLS</h2>
+<p><span class="level advanced">Advanced</span> HTTP/2 in production means TLS. Generate a dev cert, serve with <code>ListenAndServeTLS</code>, and point the client at <code>https://</code>:</p>
+<pre><code># a local cert (mkcert installs a trusted local CA)
+mkcert localhost
+# → localhost.pem + localhost-key.pem</code></pre>
+<pre><code>// Go server — swap the h2c line for:
+http.ListenAndServeTLS(":8443", "localhost.pem", "localhost-key.pem", mux)</code></pre>
+<pre><code>// Bun client — https base URL; Connect negotiates HTTP/2 over TLS automatically
+const transport = createGrpcTransport({ baseUrl: "https://localhost:8443" });</code></pre>
+<p>Debug a running service without writing a client using <a href="https://github.com/fullstorydev/grpcurl">grpcurl</a> — if you enable server reflection it can list and call methods:</p>
+<pre><code>grpcurl -d '{"name":"Ada"}' localhost:8080 greet.v1.GreetService/Greet</code></pre>
+
+<h2>Errors, deadlines, and interceptors</h2>
+<p>Production gRPC leans on three things REST handles ad hoc:</p>
+<ul>
+  <li><strong>Status codes.</strong> Return <code>connect.NewError(connect.CodeNotFound, …)</code> rather than a 404 body; clients branch on the typed code.</li>
+  <li><strong>Deadlines.</strong> The client sets a timeout that propagates to the server as a context deadline — set one on every call so a slow dependency can't hang a request forever.</li>
+  <li><strong>Interceptors.</strong> The gRPC equivalent of middleware — logging, auth, metrics — applied uniformly on both server and client.</li>
+</ul>
+<pre><code>// client: a 5s deadline + a logging interceptor
+import { Code, ConnectError } from "@connectrpc/connect";
+try {
+  await client.greet({ name: "Ada" }, { timeout: 5000 });
+} catch (e) {
+  if (e instanceof ConnectError &amp;&amp; e.code === Code.DeadlineExceeded) {
+    console.error("server too slow");
+  }
+}</code></pre>
+
+<h2>Deploying it</h2>
+<p>Containerize the Go server like any HTTP service; the only gRPC-specific rules are at the edge:</p>
+<ul>
+  <li>Your load balancer / ingress must support <strong>HTTP/2 end-to-end</strong> (an L7 proxy that downgrades to HTTP/1.1 breaks gRPC). On Kubernetes, annotate the Ingress for gRPC/HTTP2 backends.</li>
+  <li>gRPC holds <strong>long-lived connections</strong>, so naive connection-count load balancing sends all traffic to one pod. Use an L7/gRPC-aware balancer (or client-side LB / a mesh) that balances per-request.</li>
+  <li>Expose a health check — the <a href="https://grpc.io/docs/guides/health-checking/">standard gRPC health service</a> — and wire it to your orchestrator's probes.</li>
+  <li>Put <code>buf lint</code> and <code>buf breaking</code> in CI so a schema change that would break existing clients fails the build.</li>
+</ul>
+
+<h2>Common mistakes</h2>
+<blockquote class="warn">
+<ul>
+  <li><strong>Serving plain gRPC over HTTP/1.1.</strong> gRPC needs HTTP/2 — use <code>h2c</code> locally and real TLS in prod; an HTTP/1-only proxy in front silently breaks it.</li>
+  <li><strong>Reusing or renumbering Protobuf field numbers.</strong> The number is the wire identity. Reserve removed numbers; never recycle them.</li>
+  <li><strong>Editing generated code.</strong> Files under <code>gen/</code> are overwritten by <code>buf generate</code>. Change the <code>.proto</code> and regenerate.</li>
+  <li><strong>No deadlines.</strong> Without a client timeout, a hung server dependency ties up the caller indefinitely. Set a deadline on every RPC.</li>
+  <li><strong>Connection-count load balancing.</strong> Long-lived HTTP/2 connections defeat it; use a gRPC-aware L7 balancer so requests spread across pods.</li>
+  <li><strong>Returning errors as normal responses.</strong> Use gRPC status codes so clients can branch on <code>NotFound</code> vs <code>InvalidArgument</code> vs <code>Internal</code>.</li>
+</ul>
+</blockquote>
+
+<h2>Exercises</h2>
+<ul>
+  <li>Write the <code>greet.proto</code> schema, set up <code>buf.yaml</code>/<code>buf.gen.yaml</code>, and run <code>buf lint</code> + <code>buf generate</code>; confirm Go and TS code appear.</li>
+  <li>Implement the Go <code>Greet</code> handler, serve it with <code>h2c</code>, and call it from a Bun client — print the greeting.</li>
+  <li>Add the server-streaming <code>GreetStream</code> method and consume it in Bun with <code>for await</code>.</li>
+  <li>Add TLS with <code>mkcert</code> and switch the client to <code>https://</code>; verify it still works.</li>
+  <li>Return <code>CodeInvalidArgument</code> for an empty name and handle that specific code on the Bun side; add a 2-second client deadline and trigger <code>DeadlineExceeded</code>.</li>
+</ul>
+
+<h2>Mini-project: a polyglot todo service</h2>
+<p>Build a small todo service with a Go server and a Bun CLI client, both from one schema:</p>
+<ul>
+  <li>Define <code>todo/v1/todo.proto</code> with <code>CreateTodo</code>, <code>ListTodos</code> (unary), and <code>WatchTodos</code> (server stream that emits on each change).</li>
+  <li>Generate Go + TS with Buf; wire <code>buf lint</code> and <code>buf breaking</code> into a CI step.</li>
+  <li>Implement the Go server over an in-memory store, with proper status codes (<code>AlreadyExists</code>, <code>NotFound</code>) and a logging interceptor.</li>
+  <li>Build a Bun CLI that creates todos, lists them, and tails <code>WatchTodos</code> live — all type-safe against the generated client.</li>
+  <li>Add TLS, a gRPC health check, and a Dockerfile for the server; document how an HTTP/2-aware ingress would route it.</li>
+</ul>
+<p>You'll have a working polyglot gRPC system — Go and Bun sharing one contract — plus the operational pieces (TLS, health, CI schema checks) that make it production-ready.</p>
