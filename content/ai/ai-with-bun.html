@@ -1,0 +1,373 @@
+<p class="lead">Bun is a fast TypeScript runtime that's excellent for building AI-powered apps: zero-dependency <code>fetch()</code> for API calls, <code>Bun.serve()</code> for streaming endpoints, and native support for the Vercel AI SDK. This lesson covers calling LLM APIs, streaming with the AI SDK and raw fetch, function calling, structured output, multi-provider routing, retry and caching patterns, and the polyglot Go-backend + Bun-frontend architecture — basic through advanced.</p>
+
+<h2>Why Bun for AI apps</h2>
+<p><span class="level beginner">Beginner</span> Python dominates AI research, but production AI apps need fast streaming, TypeScript type safety, and a full-stack story. Bun excels at exactly this:</p>
+
+<table>
+  <thead><tr><th>Need</th><th>Why Bun is good at it</th></tr></thead>
+  <tbody>
+    <tr><td>Fast streaming endpoints</td><td><code>Bun.serve()</code> streams a fetch Response body directly with zero copying</td></tr>
+    <tr><td>Low latency, no cold start</td><td>V8-based — no interpreter, no runtime startup cost</td></tr>
+    <tr><td>Type safety</td><td>TypeScript end-to-end — type your API calls, tool definitions, and structured output</td></tr>
+    <tr><td>Full-stack monorepos</td><td>Same language for frontend, API, and AI layer — no context switching</td></tr>
+    <tr><td>No dependencies for basic calls</td><td><code>fetch()</code> is built in — no SDK needed for simple API calls</td></tr>
+    <tr><td>AI SDK support</td><td>The Vercel AI SDK runs natively under Bun with full streaming and tool support</td></tr>
+  </tbody>
+</table>
+
+<h2>Calling an LLM API: the fundamentals</h2>
+<p><span class="level beginner">Beginner</span> Every LLM API is the same shape: send a prompt, get a completion. Bun's built-in <code>fetch()</code> is all you need — no SDK required for basic calls:</p>
+
+<pre><code>// No dependency needed — just fetch()
+const resp = await fetch("https://api.anthropic.com/v1/messages", {
+  method: "POST",
+  headers: {
+    "x-api-key": Bun.env.ANTHROPIC_API_KEY!,
+    "anthropic-version": "2023-06-01",
+    "content-type": "application/json",
+  },
+  body: JSON.stringify({
+    model: "claude-sonnet-4-5",
+    max_tokens: 1024,
+    messages: [{ role: "user", content: "Explain goroutines in one sentence." }],
+  }),
+});
+
+const data = await resp.json();
+console.log(data.content[0].text);
+// "A goroutine is a lightweight thread of execution managed by the Go runtime..."
+</code></pre>
+
+<h3>OpenAI API with fetch</h3>
+<pre><code>const resp = await fetch("https://api.openai.com/v1/chat/completions", {
+  method: "POST",
+  headers: {
+    "Authorization": `Bearer ${Bun.env.OPENAI_API_KEY}`,
+    "Content-Type": "application/json",
+  },
+  body: JSON.stringify({
+    model: "gpt-4o",
+    messages: [{ role: "user", content: "Explain goroutines in one sentence." }],
+  }),
+});
+
+const data = await resp.json();
+console.log(data.choices[0].message.content);
+</code></pre>
+
+<blockquote class="tip">For simple one-off calls, raw <code>fetch()</code> is all you need. Reach for the Vercel AI SDK (covered below) when you want streaming, function calling, structured output, or multi-provider routing — it wraps all of that with clean TypeScript types.</blockquote>
+
+<h2>Streaming responses</h2>
+<p><span class="level beginner">Beginner</span> Streaming lets the user see tokens as they're generated instead of waiting for the full response. This is critical for chat UIs — perceived latency drops from 3 seconds to 200ms.</p>
+
+<h3>With the Vercel AI SDK</h3>
+<pre><code>// bun add ai @ai-sdk/anthropic
+
+import { AnthropicStream } from "ai";
+import Anthropic from "@ai-sdk/anthropic";
+
+Bun.serve({
+  port: 3000,
+  async fetch(req) {
+    const { messages } = await req.json();
+    const result = await AnthropicStream({
+      model: Anthropic("claude-sonnet-4-5"),
+      messages,
+      max_tokens: 1024,
+    });
+    return result.toDataStreamResponse();  // returns a streaming Response
+  },
+});
+
+// Frontend: consume the stream
+// const res = await fetch("/stream", { method: "POST", body: JSON.stringify({ messages }) });
+// for await (const chunk of res.body) { appendToUI(chunk); }
+</code></pre>
+
+<h3>Raw streaming without any SDK</h3>
+<p>Bun can pipe a fetch Response body directly to the HTTP response with zero copying. This makes it trivial to build a streaming proxy — receive from the LLM API, pipe to the client, no buffering:</p>
+
+<pre><code>// No dependencies — pure fetch streaming
+Bun.serve({
+  port: 3000,
+  async fetch(req) {
+    const { prompt } = await req.json();
+
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "x-api-key": Bun.env.ANTHROPIC_API_KEY!,
+        "anthropic-version": "2023-06-01",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "claude-sonnet-4-5",
+        max_tokens: 1024,
+        stream: true,  // enables streaming from the API
+        messages: [{ role: "user", content: prompt }],
+      }),
+    });
+
+    // Pipe the SSE stream directly to the client — zero copying in Bun
+    return new Response(response.body, {
+      headers: { "content-type": "text/event-stream" },
+    });
+  },
+});
+</code></pre>
+
+<blockquote class="tip">Bun streams a fetch Response body directly to the HTTP response with zero copying — you receive from the LLM API and pipe to the client in one line. This is Bun's key advantage for streaming proxies: no buffering, no intermediate streams, no manual flushing.</blockquote>
+
+<h2>Function calling with the AI SDK</h2>
+<p><span class="level intermediate">Intermediate</span> Function calling lets the model request that your code run a function it can't do itself — query a database, call an API, read a file — and feed the result back. The Vercel AI SDK handles the agent loop for you with <code>maxSteps</code>:</p>
+
+<pre><code>// bun add ai @ai-sdk/anthropic zod
+
+import { streamText, tool } from "ai";
+import Anthropic from "@ai-sdk/anthropic";
+import { z } from "zod";
+
+Bun.serve({
+  port: 3000,
+  async fetch(req) {
+    const { messages } = await req.json();
+
+    const result = streamText({
+      model: Anthropic("claude-sonnet-4-5"),
+      messages,
+      maxSteps: 5,  // allow up to 5 tool-call rounds
+      tools: {
+        get_weather: tool({
+          description: "Get the current weather for a city",
+          parameters: z.object({
+            city: z.string().describe("The city name"),
+          }),
+          execute: async ({ city }) =&gt; {
+            // In reality: call a weather API
+            return `It's 72°F and sunny in ${city}`;
+          },
+        }),
+        query_db: tool({
+          description: "Run a read-only SQL query on the database",
+          parameters: z.object({
+            sql: z.string().describe("SELECT query"),
+          }),
+          execute: async ({ sql }) =&gt; {
+            const db = require("bun:sqlite").default(":memory:");
+            const rows = db.query(sql).all();
+            return JSON.stringify(rows);
+          },
+        }),
+      },
+    });
+
+    return result.toDataStreamResponse();
+  },
+});
+</code></pre>
+
+<blockquote class="tip">The AI SDK's <code>maxSteps: 5</code> handles the agent loop for you — the model calls a tool, the result goes back, the model decides whether to call another tool or answer. In Go (see the AI with Go lesson), you write this loop manually, which gives more control but is more code. Bun + AI SDK is faster to build; Go is more explicit.</blockquote>
+
+<h2>The Vercel AI SDK: beyond basics</h2>
+<p><span class="level intermediate">Intermediate</span> The Vercel AI SDK is the dominant TypeScript AI library and runs natively under Bun. It abstracts streaming, tool use, structured output, and multi-provider switching:</p>
+
+<h3>Multi-provider switching</h3>
+<pre><code>// bun add ai @ai-sdk/anthropic @ai-sdk/openai zod
+
+import { generateText, streamText, generateObject, tool } from "ai";
+import Anthropic from "@ai-sdk/anthropic";
+import OpenAI from "@ai-sdk/openai";
+import { z } from "zod";
+
+// Switch models with one line
+const claude = Anthropic("claude-sonnet-4-5");
+const gpt = OpenAI("gpt-4o");
+
+// Simple generation
+const { text } = await generateText({
+  model: claude,
+  prompt: "Write a Go HTTP handler for health checks.",
+});
+console.log(text);
+</code></pre>
+
+<h3>Structured output (enforced schema)</h3>
+<pre><code>// generateObject enforces a Zod schema — the model must return valid JSON
+const { object } = await generateObject({
+  model: claude,
+  schema: z.object({
+    title: z.string(),
+    severity: z.enum(["critical", "moderate", "minor"]),
+    description: z.string(),
+    fix: z.string(),
+  }),
+  prompt: "Review this Go function for bugs:\n\nfunc divide(a, b float64) float64 { return a / b }",
+});
+// { title: "Division by zero", severity: "critical", description: "...", fix: "..." }
+</code></pre>
+
+<h3>Multi-provider routing (cost optimization)</h3>
+<pre><code>// Use cheap model for simple tasks, powerful model for complex ones
+async function smartGenerate(prompt: string) {
+  const model = prompt.length &lt; 200
+    ? Anthropic("claude-haiku-4-5")   // cheap, fast
+    : Anthropic("claude-sonnet-4-5"); // powerful, more expensive
+  return generateText({ model, prompt });
+}
+</code></pre>
+
+<blockquote class="tip">Multi-provider routing is a practical cost saver: route short, simple prompts to a cheap model (Haiku) and complex prompts to a powerful one (Sonnet). The AI SDK makes this a one-line change — no code restructuring needed.</blockquote>
+
+<h2>Production patterns in Bun</h2>
+<p><span class="level advanced">Advanced</span></p>
+
+<h3>Rate limiting and retry with backoff</h3>
+<pre><code>// Exponential backoff with jitter
+async function callWithRetry(fn: () =&gt; Promise&lt;Response&gt;, maxRetries = 3) {
+  for (let attempt = 0; attempt &lt; maxRetries; attempt++) {
+    try {
+      const res = await fn();
+      if (res.status === 429) {
+        // Rate limited — get retry-after header
+        const retryAfter = parseInt(res.headers.get("retry-after") || "5");
+        const jitter = Math.random() * 1000;  // 0-1s jitter
+        await Bun.sleep((retryAfter * 1000) + jitter);
+        continue;
+      }
+      return res;
+    } catch (err) {
+      if (attempt === maxRetries - 1) throw err;
+      const delay = Math.pow(2, attempt) * 1000 + Math.random() * 500;
+      await Bun.sleep(delay);
+    }
+  }
+  throw new Error("Max retries exceeded");
+}
+</code></pre>
+
+<h3>Timeouts with AbortSignal</h3>
+<pre><code>// Always set a timeout — an LLM API can hang for minutes
+const controller = new AbortController();
+const timeout = setTimeout(() =&gt; controller.abort(), 30_000);  // 30s
+
+try {
+  const res = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "x-api-key": Bun.env.ANTHROPIC_API_KEY!,
+      "anthropic-version": "2023-06-01",
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      model: "claude-sonnet-4-5",
+      max_tokens: 1024,
+      messages: [{ role: "user", content: prompt }],
+    }),
+    signal: controller.signal,  // abort after 30s
+  });
+  const data = await res.json();
+  return data.content[0].text;
+} catch (err) {
+  if (err.name === "AbortError") {
+    throw new Error("LLM call timed out after 30s");
+  }
+  throw err;
+} finally {
+  clearTimeout(timeout);
+}
+</code></pre>
+
+<h3>Caching common responses</h3>
+<pre><code>// Cache by prompt hash to avoid redundant API calls
+import { createHash } from "crypto";
+
+const cache = new Map&lt;string, string&gt;();
+
+async function cachedGenerate(prompt: string, model: string) {
+  const key = createHash("sha256").update(`${model}:${prompt}`).digest("hex");
+
+  if (cache.has(key)) {
+    return cache.get(key)!;  // cache hit — no API call
+  }
+
+  const result = await generateText({ model, prompt });
+  cache.set(key, result.text);
+  return result.text;
+}
+
+// For distributed cache: use Redis instead of Map
+// const cached = await redis.get(key);
+// if (cached) return cached;
+</code></pre>
+
+<blockquote class="warn">Caching by prompt hash only works for deterministic prompts. If your prompt includes timestamps, random IDs, or user-specific context, the hash changes every time and the cache never hits. Strip variable parts before hashing, or cache at a higher level (e.g. "review this file" keyed by file content hash, not the full prompt).</blockquote>
+
+<h2>Polyglot pattern: Go backend + Bun frontend</h2>
+<p><span class="level advanced">Advanced</span> A common production architecture: Go handles the heavy API gateway (auth, rate limiting, budget tracking, database), and Bun serves the streaming chat frontend that calls through to Go. This gives you the best of both: Go's type safety and performance for the API layer, Bun's streaming and TypeScript for the frontend.</p>
+
+<pre><code>// Go gateway (port 8080) — handles auth, rate limiting, budget tracking
+// See the AI with Go lesson for the full implementation
+
+// Bun frontend (port 3000) — serves UI and proxies to Go
+Bun.serve({
+  port: 3000,
+  async fetch(req) {
+    // Proxy chat requests to the Go gateway
+    if (req.url.startsWith("/api/chat")) {
+      return fetch("http://localhost:8080/ai", {
+        method: "POST",
+        headers: { ...req.headers, "Authorization": `Bearer ${sessionToken}` },
+        body: await req.text(),
+      });
+    }
+    // Serve the chat UI
+    return new Response(Bun.file("chat.html"));
+  },
+});
+
+// chat.html — frontend that renders the streaming review
+// const res = await fetch("/api/chat", {
+//   method: "POST",
+//   headers: { "Content-Type": "application/json" },
+//   body: JSON.stringify({ prompt: "Review this diff for bugs..." }),
+// });
+// const reader = res.body.getReader();
+// while (true) {
+//   const { done, value } = await reader.read();
+//   if (done) break;
+//   document.getElementById("output").innerHTML += new TextDecoder().decode(value);
+// }
+</code></pre>
+
+<blockquote class="tip">This split gives you the best of both: the LLM API call happens in Go (with budget tracking, rate limiting, connection pooling), and the stream flows through Bun to the browser. Go handles the "hard" parts (auth, quotas, database); Bun handles the "fast" parts (streaming, UI, TypeScript).</blockquote>
+
+<h2>Common mistakes</h2>
+<ul>
+  <li><strong>No timeout on LLM calls.</strong> An LLM API can hang for minutes. Always use <code>AbortSignal</code> — 30 seconds is a reasonable default.</li>
+  <li><strong>Not streaming.</strong> Waiting for a full 3-second response when you could stream the first token in 200ms feels broken. Always stream for user-facing chat.</li>
+  <li><strong>No retry on 429.</strong> LLM APIs rate-limit aggressively. Implement exponential backoff with jitter and respect the <code>retry-after</code> header.</li>
+  <li><strong>Not tracking cost.</strong> LLM APIs charge per token. Without usage tracking, you won't notice a runaway loop until the bill arrives. Log input + output tokens per request.</li>
+  <li><strong>Exposing the API key to the client.</strong> Never call the LLM API directly from the browser. Route through your backend (Bun or Go) so the key stays server-side.</li>
+  <li><strong>Not caching.</strong> Repeated identical prompts (FAQs, common queries) can be cached by prompt hash. This can cut API costs dramatically for high-traffic services.</li>
+  <li><strong>Caching non-deterministic prompts.</strong> If your prompt includes timestamps or random IDs, the cache never hits. Strip variable parts before hashing.</li>
+</ul>
+
+<h2>Exercises</h2>
+<ol>
+  <li>Build a Bun server that proxies a Claude API call using raw <code>fetch()</code> and streams the response to the client. Test it in a browser.</li>
+  <li>Rebuild the same endpoint using the Vercel AI SDK's <code>AnthropicStream</code>. Compare the code complexity and the streaming experience.</li>
+  <li>Add function calling: give the model a <code>query_db</code> tool that runs a SQL query via <code>bun:sqlite</code>. Test the <code>maxSteps</code> agent loop end-to-end.</li>
+  <li>Add cost tracking: log input + output tokens per request. Add a <code>/stats</code> endpoint that reports the session cost.</li>
+  <li>Build a polyglot pipeline: set up a Go gateway (from the AI with Go lesson) that handles auth and rate limiting, with a Bun frontend that streams the chat to the browser.</li>
+</ol>
+
+<h2>Mini-project: AI code review frontend in Bun</h2>
+<p>Build a Bun frontend that pairs with the Go code review service from the AI with Go lesson. Requirements:</p>
+<ul>
+  <li>A Bun server that serves a chat UI and proxies review requests to the Go gateway at <code>http://localhost:8080</code>.</li>
+  <li>Use the Vercel AI SDK to stream the review response and render it as markdown in the browser as tokens arrive.</li>
+  <li>Use <code>generateObject</code> with a Zod schema to parse the Go service's JSON output into structured findings: <code>{ findings: [{ title, severity, file, line, description, fix }] }</code>.</li>
+  <li>Render severity badges (critical = red, moderate = orange, minor = yellow) in the UI.</li>
+  <li>Cache identical diffs by SHA-256 hash so re-reviewing the same change doesn't call the Go service again.</li>
+  <li>Add a <code>/stats</code> endpoint that proxies to the Go service's <code>/stats</code> to show session cost.</li>
+</ul>

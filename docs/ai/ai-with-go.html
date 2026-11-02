@@ -1,0 +1,566 @@
+<!DOCTYPE html>
+<html lang="en" data-base="../">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0d1117">
+<title>AI with Go — AI</title>
+<meta name="description" content="Build AI-powered services in Go — calling LLM APIs with the official SDKs, streaming over SSE, function calling and the agent loop, the Eino framework, cost tracking, context timeouts, and production patterns for high-throughput AI backends.">
+<link rel="canonical" href="https://danegigi.github.io/Tutorials/ai/ai-with-go.html">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Dev Tutorials">
+<meta property="og:title" content="AI with Go — AI">
+<meta property="og:description" content="Build AI-powered services in Go — calling LLM APIs with the official SDKs, streaming over SSE, function calling and the agent loop, the Eino framework, cost tracking, context timeouts, and production patterns for high-throughput AI backends.">
+<meta property="og:url" content="https://danegigi.github.io/Tutorials/ai/ai-with-go.html">
+<meta property="og:image" content="https://danegigi.github.io/Tutorials/icon-512.png">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="AI with Go — AI">
+<meta name="twitter:description" content="Build AI-powered services in Go — calling LLM APIs with the official SDKs, streaming over SSE, function calling and the agent loop, the Eino framework, cost tracking, context timeouts, and production patterns for high-throughput AI backends.">
+<meta name="twitter:image" content="https://danegigi.github.io/Tutorials/icon-512.png">
+<link rel="manifest" href="../manifest.webmanifest">
+<link rel="icon" href="../icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="../icon-192.png">
+<link rel="stylesheet" href="../app.css">
+<script>/* set theme before paint to avoid flash */(function(){try{var t=localStorage.getItem('tut.theme');document.documentElement.setAttribute('data-theme',t||'dark');}catch(e){document.documentElement.setAttribute('data-theme','dark');}})();</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"LearningResource","name":"AI with Go","description":"Build AI-powered services in Go — calling LLM APIs with the official SDKs, streaming over SSE, function calling and the agent loop, the Eino framework, cost tracking, context timeouts, and production patterns for high-throughput AI backends.","url":"https://danegigi.github.io/Tutorials/ai/ai-with-go.html","inLanguage":"en","isPartOf":{"@type":"Course","name":"AI — Dev Tutorials","url":"https://danegigi.github.io/Tutorials/ai/"},"learningResourceType":"Tutorial"},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Dev Tutorials","item":"https://danegigi.github.io/Tutorials/"},{"@type":"ListItem","position":2,"name":"AI","item":"https://danegigi.github.io/Tutorials/ai/"},{"@type":"ListItem","position":3,"name":"AI with Go","item":"https://danegigi.github.io/Tutorials/ai/ai-with-go.html"}]}]}</script>
+
+</head>
+<body class="lesson">
+<header class="nav">
+  <a class="brand" href="../index.html">📚 Dev Tutorials</a>
+  <span class="crumb">AI with Go — AI</span>
+  <span class="spacer"></span>
+  <a class="navbtn" href="../search.html">🔎 Search</a>
+  <button class="navbtn" id="install-btn" type="button">⬇️ Install</button>
+  <button class="navbtn" id="theme-btn" type="button" aria-label="Toggle theme">🌙 Dark</button>
+</header>
+<main class="wrap lesson-body">
+  <h1 class="page-title">AI with Go</h1>
+  <div class="lesson-tools" data-lesson-id="ai/ai-with-go">
+    <button id="done-btn" type="button" aria-pressed="false">○ Mark complete</button>
+    <button id="mark-btn" type="button" aria-pressed="false">☆ Bookmark</button>
+    <a class="navbtn" href="index.html" style="margin-left:auto">All AI lessons →</a>
+  </div>
+<nav class="toc" aria-label="On this page"><strong>On this page</strong><ul>
+<li class="lvl2"><a href="#why-go-for-ai-backends">Why Go for AI backends</a></li>
+<li class="lvl2"><a href="#calling-an-llm-api-the-fundamentals">Calling an LLM API: the fundamentals</a></li>
+<li class="lvl3"><a href="#openai-go-sdk">OpenAI Go SDK</a></li>
+<li class="lvl2"><a href="#streaming-responses-over-sse">Streaming responses over SSE</a></li>
+<li class="lvl2"><a href="#function-calling-and-the-agent-loop">Function calling and the agent loop</a></li>
+<li class="lvl2"><a href="#go-ai-frameworks-eino">Go AI frameworks: Eino</a></li>
+<li class="lvl3"><a href="#eino-building-a-chat-chain">Eino: building a chat chain</a></li>
+<li class="lvl3"><a href="#eino-composable-rag-pipeline">Eino: composable RAG pipeline</a></li>
+<li class="lvl2"><a href="#production-patterns-in-go">Production patterns in Go</a></li>
+<li class="lvl3"><a href="#cost-tracking-and-budgeting">Cost tracking and budgeting</a></li>
+<li class="lvl3"><a href="#context-timeouts">Context timeouts</a></li>
+<li class="lvl3"><a href="#rate-limiting-with-a-semaphore">Rate limiting with a semaphore</a></li>
+<li class="lvl3"><a href="#retry-with-exponential-backoff">Retry with exponential backoff</a></li>
+<li class="lvl2"><a href="#common-mistakes">Common mistakes</a></li>
+<li class="lvl2"><a href="#exercises">Exercises</a></li>
+<li class="lvl2"><a href="#mini-project-ai-code-review-service-in-go">Mini-project: AI code review service in Go</a></li>
+</ul></nav>
+<p class="lead">Go is an excellent language for building AI-powered backends: compiled binaries, goroutines for high concurrency, a strong standard library for HTTP and streaming, and official SDKs from both Anthropic and OpenAI. This lesson covers calling LLM APIs, streaming responses over SSE, function calling and the agent loop, the Eino framework, and the production patterns (cost tracking, context timeouts) that keep an AI service from burning money — basic through advanced.</p>
+
+<h2 id="why-go-for-ai-backends">Why Go for AI backends</h2>
+<p><span class="level beginner">Beginner</span> Python dominates AI research, but production AI services have different priorities. The AI model is a remote API call — your code's job is to wrap that call with error handling, streaming, rate limiting, and caching. Go excels at exactly this:</p>
+
+<table>
+  <thead><tr><th>Need</th><th>Why Go is good at it</th></tr></thead>
+  <tbody>
+    <tr><td>High-concurrency API gateways</td><td>Goroutines are lightweight and built for fan-out/fan-in patterns</td></tr>
+    <tr><td>Low latency, minimal overhead</td><td>Compiled binary, no interpreter, no GC pauses in hot paths</td></tr>
+    <tr><td>Streaming responses (SSE)</td><td><code>net/http</code> handles chunked transfer and flushing natively</td></tr>
+    <tr><td>Type safety</td><td>Static types catch errors at compile time, not runtime</td></tr>
+    <tr><td>Existing infra integration</td><td>Go is already in most cloud-native stacks (Kubernetes, gRPC, Terraform)</td></tr>
+    <tr><td>Single-binary deployment</td><td>No runtime dependencies, no virtual environments, no <code>pip install</code></td></tr>
+  </tbody>
+</table>
+
+<h2 id="calling-an-llm-api-the-fundamentals">Calling an LLM API: the fundamentals</h2>
+<p><span class="level beginner">Beginner</span> Every LLM API is the same shape: send a prompt, get a completion. Here's the raw call with the official Anthropic Go SDK:</p>
+
+<pre><code>// go get github.com/anthropics/anthropic-sdk-go
+
+package main
+
+import (
+    "context"
+    "fmt"
+    "github.com/anthropics/anthropic-sdk-go"
+    "github.com/anthropics/anthropic-sdk-go/option"
+)
+
+func main() {
+    // Reads ANTHROPIC_API_KEY from the environment
+    client := anthropic.NewClient(option.WithAPIKey(""))
+
+    resp, err := client.Messages.New(context.Background(), anthropic.MessageNewParams{
+        Model:     anthropic.F("claude-sonnet-4-5"),
+        MaxTokens: anthropic.F(int64(1024)),
+        Messages: anthropic.F([]anthropic.MessageParam{
+            anthropic.NewUserMessage(anthropic.NewTextBlock("Explain goroutines in one sentence.")),
+        }),
+    })
+    if err != nil {
+        panic(err)
+    }
+    fmt.Println(resp.Content[0].Text)
+    // "A goroutine is a lightweight thread of execution managed by the Go runtime..."
+}
+</code></pre>
+
+<h3 id="openai-go-sdk">OpenAI Go SDK</h3>
+<pre><code>// go get github.com/openai/openai-go
+
+package main
+
+import (
+    "context"
+    "fmt"
+    "github.com/openai/openai-go"
+    "github.com/openai/openai-go/option"
+)
+
+func main() {
+    client := openai.NewClient(option.WithAPIKey(""))  // reads OPENAI_API_KEY
+
+    resp, err := client.Chat.Completions.New(context.Background(), openai.ChatCompletionNewParams{
+        Model: openai.F("gpt-4o"),
+        Messages: openai.F([]openai.ChatCompletionMessageParam{
+            openai.UserMessage("Explain goroutines in one sentence."),
+        }),
+    })
+    if err != nil {
+        panic(err)
+    }
+    fmt.Println(resp.Choices[0].Message.Content)
+}
+</code></pre>
+
+<blockquote class="tip">Both SDKs auto-read their API key from the environment (<code>ANTHROPIC_API_KEY</code> / <code>OPENAI_API_KEY</code>). In production, inject the key from your secret manager, never hard-code it. In CI, use a masked environment variable.</blockquote>
+
+<h2 id="streaming-responses-over-sse">Streaming responses over SSE</h2>
+<p><span class="level beginner">Beginner</span> Streaming lets the user see tokens as they're generated instead of waiting for the full response. This is critical for chat UIs — perceived latency drops from 3 seconds to 200ms. Go's <code>net/http</code> package handles chunked transfer encoding and <code>http.Flusher</code> gives you control over when to flush:</p>
+
+<pre><code>// stream.go — streaming a Claude response over HTTP
+package main
+
+import (
+    "context"
+    "encoding/json"
+    "fmt"
+    "net/http"
+    "github.com/anthropics/anthropic-sdk-go"
+    "github.com/anthropics/anthropic-sdk-go/option"
+)
+
+func streamHandler(w http.ResponseWriter, r *http.Request) {
+    // SSE headers
+    w.Header().Set("Content-Type", "text/event-stream")
+    w.Header().Set("Cache-Control", "no-cache")
+    w.Header().Set("Connection", "keep-alive")
+
+    client := anthropic.NewClient()
+    stream := client.Messages.NewStreaming(context.Background(), anthropic.MessageNewParams{
+        Model:     anthropic.F("claude-sonnet-4-5"),
+        MaxTokens: anthropic.F(int64(1024)),
+        Messages: anthropic.F([]anthropic.MessageParam{
+            anthropic.NewUserMessage(anthropic.NewTextBlock("Write a haiku about Go.")),
+        }),
+    })
+
+    for stream.Next() {
+        event := stream.Current()
+        if event.Delta != nil {
+            // Send each text delta as an SSE event
+            data, _ := json.Marshal(map[string]string{
+                "text": event.Delta.Text,
+            })
+            fmt.Fprintf(w, "data: %s\n\n", data)
+            w.(http.Flusher).Flush()  // flush immediately — don't buffer
+        }
+    }
+    if err := stream.Err(); err != nil {
+        fmt.Fprintf(w, "data: {\"error\": \"%s\"}\n\n", err.Error())
+        w.(http.Flusher).Flush()
+    }
+    fmt.Fprintf(w, "data: [DONE]\n\n")
+    w.(http.Flusher).Flush()
+}
+
+func main() {
+    http.HandleFunc("/stream", streamHandler)
+    fmt.Println("Listening on :8080")
+    http.ListenAndServe(":8080", nil)
+}
+</code></pre>
+
+<p>Test it with <code>curl -N http://localhost:8080/stream</code> — you'll see tokens arrive one at a time.</p>
+
+<blockquote class="warn">Don't forget <code>w.(http.Flusher).Flush()</code> after each write. Without it, Go's <code>net/http</code> buffers the response and the client sees nothing until the full response is done — defeating the point of streaming.</blockquote>
+
+<h2 id="function-calling-and-the-agent-loop">Function calling and the agent loop</h2>
+<p><span class="level intermediate">Intermediate</span> Function calling lets the model request that your code run a function it can't do itself — query a database, call an API, read a file — and feed the result back. In Go, you write the agent loop manually, which gives you full control:</p>
+
+<pre><code>// agent.go — a Go agent that can call tools
+package main
+
+import (
+    "context"
+    "fmt"
+    "github.com/anthropics/anthropic-sdk-go"
+)
+
+type Tool struct {
+    Name        string
+    Description string
+    InputSchema map[string]any
+    Handler     func(params map[string]any) (string, error)
+}
+
+func main() {
+    client := anthropic.NewClient()
+
+    // Define tools the model can call
+    tools := map[string]Tool{
+        "get_weather": {
+            Name:        "get_weather",
+            Description: "Get the current weather for a city",
+            InputSchema: map[string]any{
+                "type": "object",
+                "properties": map[string]any{
+                    "city": map[string]any{
+                        "type":        "string",
+                        "description": "The city name",
+                    },
+                },
+                "required": []string{"city"},
+            },
+            Handler: func(params map[string]any) (string, error) {
+                city := params["city"].(string)
+                // In reality: call a weather API
+                return fmt.Sprintf("It's 72°F and sunny in %s", city), nil
+            },
+        },
+        "query_db": {
+            Name:        "query_db",
+            Description: "Run a read-only SQL query on the database",
+            InputSchema: map[string]any{
+                "type": "object",
+                "properties": map[string]any{
+                    "sql": map[string]any{
+                        "type":        "string",
+                        "description": "SELECT query to run",
+                    },
+                },
+                "required": []string{"sql"},
+            },
+            Handler: func(params map[string]any) (string, error) {
+                sql := params["sql"].(string)
+                // In reality: run the query
+                return `[{"id":1,"name":"Alice"},{"id":2,"name":"Bob"}]`, nil
+            },
+        },
+    }
+
+    // The agent loop
+    ctx := context.Background()
+    messages := []anthropic.MessageParam{
+        anthropic.NewUserMessage(anthropic.NewTextBlock("What's the weather in Tokyo?")),
+    }
+
+    // Build the tool list for the API
+    toolParams := make([]anthropic.ToolParam, 0, len(tools))
+    for _, t := range tools {
+        toolParams = append(toolParams, anthropic.ToolParam{
+            Name:        anthropic.F(t.Name),
+            Description: anthropic.F(t.Description),
+            InputSchema: anthropic.F(t.InputSchema),
+        })
+    }
+
+    for {
+        resp, err := client.Messages.New(ctx, anthropic.MessageNewParams{
+            Model:     anthropic.F("claude-sonnet-4-5"),
+            MaxTokens: anthropic.F(int64(1024)),
+            Messages:  anthropic.F(messages),
+            Tools:     anthropic.F(toolParams),
+        })
+        if err != nil {
+            panic(err)
+        }
+
+        // Check if the model wants to call a tool
+        if resp.StopReason == "tool_use" {
+            for _, block := range resp.Content {
+                if block.Type == "tool_use" {
+                    tool := tools[block.Name]
+                    result, err := tool.Handler(block.Input)
+                    if err != nil {
+                        result = fmt.Sprintf("Error: %v", err)
+                    }
+
+                    // Feed the tool result back to the model
+                    messages = append(messages,
+                        anthropic.NewAssistantMessage(resp.Content...),
+                        anthropic.NewUserMessage(anthropic.NewToolResultBlock(block.ID, result, false)),
+                    )
+                }
+            }
+            continue  // loop back to let the model process the result
+        }
+
+        // No tool call — the model is done
+        fmt.Println(resp.Content[0].Text)
+        break
+    }
+}
+</code></pre>
+
+<p>The loop is explicit: call the API, check if it wants a tool, execute the tool, feed the result back, repeat. This is more code than a framework-based approach, but you have complete control over retries, timeouts, logging, and safety at every step.</p>
+
+<blockquote class="tip">Always add a loop limit (e.g. <code>for i := 0; i &lt; 10; i++</code>) to prevent infinite tool-call cycles. An agent that keeps calling tools without converging on an answer will burn through tokens and never terminate.</blockquote>
+
+<h2 id="go-ai-frameworks-eino">Go AI frameworks: Eino</h2>
+<p><span class="level intermediate">Intermediate</span> Go's AI ecosystem has matured. The main frameworks as of 2026:</p>
+
+<table>
+  <thead><tr><th>Framework</th><th>Maintainer</th><th>Status</th><th>Best for</th></tr></thead>
+  <tbody>
+    <tr><td><strong>Eino</strong></td><td>ByteDance / CloudWeGo</td><td>Active, fast-moving</td><td>Composable LLM pipelines, agents</td></tr>
+    <tr><td>Google ADK Go</td><td>Google</td><td>Active</td><td>Google Cloud AI integration</td></tr>
+    <tr><td>Genkit Go</td><td>Firebase</td><td>Active</td><td>Full-stack Go + JS apps</td></tr>
+    <tr><td>LangChainGo</td><td>Community</td><td>Unmaintained</td><td>Legacy — migrate away</td></tr>
+  </tbody>
+</table>
+
+<h3 id="eino-building-a-chat-chain">Eino: building a chat chain</h3>
+<pre><code>// go get github.com/cloudwego/eino
+
+package main
+
+import (
+    "context"
+    "fmt"
+    "github.com/cloudwego/eino"
+    "github.com/cloudwego/eino/components/model"
+    "github.com/cloudwego/eino/schema"
+)
+
+func main() {
+    ctx := context.Background()
+
+    // Create a chat model (supports OpenAI, Anthropic, local models)
+    chatModel, err := model.GetChatModel(ctx, &amp;model.Config{
+        // Configure provider, model name, API key, etc.
+    })
+    if err != nil {
+        panic(err)
+    }
+
+    // Build a chain: system prompt + user message
+    messages := []*schema.Message{
+        {Role: schema.System, Content: "You are a helpful Go programming assistant."},
+        {Role: schema.User, Content: "How do I read a file line by line?"},
+    }
+
+    // Generate
+    result, err := chatModel.Generate(ctx, messages)
+    if err != nil {
+        panic(err)
+    }
+    fmt.Println(result.Content)
+}
+</code></pre>
+
+<h3 id="eino-composable-rag-pipeline">Eino: composable RAG pipeline</h3>
+<pre><code>// Build a RAG pipeline with Eino's graph API
+import (
+    "github.com/cloudwego/eino"
+    "github.com/cloudwego/eino/components/retriever"
+    "github.com/cloudwego/eino/components/prompt"
+)
+
+func buildRAGPipeline(ctx context.Context) {
+    // Define nodes in a graph
+    g := graph.New()
+
+    // Node 1: format the prompt with retrieved context
+    g.AddLambdaNode("prompt_builder", func(ctx context.Context, input map[string]any) (map[string]any, error) {
+        query := input["query"].(string)
+        context := input["retrieved_docs"].([]string)
+        prompt := fmt.Sprintf("Context:\n%s\n\nQuestion: %s\n\nAnswer:", join(context), query)
+        return map[string]any{"prompt": prompt}, nil
+    })
+
+    // Node 2: call the LLM
+    g.AddChatModelNode("llm", chatModel)
+
+    // Connect: retriever → prompt_builder → llm
+    g.AddEdge("retriever", "prompt_builder")
+    g.AddEdge("prompt_builder", "llm")
+
+    // Run the pipeline
+    result, err := g.Invoke(ctx, map[string]any{"query": "How do I configure pgvector?"})
+}
+</code></pre>
+
+<blockquote class="warn">Don't use LangChainGo in new projects — it's effectively unmaintained. Use Eino for new Go projects, or call the Anthropic/OpenAI Go SDKs directly. The SDKs are well-maintained and give you everything you need for most use cases.</blockquote>
+
+<h2 id="production-patterns-in-go">Production patterns in Go</h2>
+<p><span class="level advanced">Advanced</span></p>
+
+<h3 id="cost-tracking-and-budgeting">Cost tracking and budgeting</h3>
+<pre><code>// Track token usage per request with a thread-safe counter
+type UsageTracker struct {
+    mu        sync.Mutex
+    totalIn   int64
+    totalOut  int64
+    costPerM  float64  // cost per 1M tokens
+}
+
+func (t *UsageTracker) Record(usage anthropic.Usage) {
+    t.mu.Lock()
+    defer t.mu.Unlock()
+    t.totalIn += usage.InputTokens
+    t.totalOut += usage.OutputTokens
+}
+
+func (t *UsageTracker) Cost() float64 {
+    return (float64(t.totalIn) + float64(t.totalOut)) * t.costPerM / 1_000_000
+}
+
+// Per-request budget guard
+func callWithBudget(client *anthropic.Client, msg anthropic.MessageNewParams, maxTokens int64) (*anthropic.Message, error) {
+    if msg.MaxTokens.Value &gt; maxTokens {
+        return nil, fmt.Errorf("requested %d tokens exceeds budget %d", msg.MaxTokens.Value, maxTokens)
+    }
+    resp, err := client.Messages.New(context.Background(), msg)
+    if err != nil {
+        return nil, err
+    }
+    tracker.Record(resp.Usage)
+    if tracker.Cost() &gt; monthlyBudget {
+        return nil, errors.New("monthly budget exceeded")
+    }
+    return resp, nil
+}
+</code></pre>
+
+<h3 id="context-timeouts">Context timeouts</h3>
+<pre><code>// ALWAYS set a context timeout on LLM calls — they can hang for minutes
+ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+defer cancel()
+
+resp, err := client.Messages.New(ctx, anthropic.MessageNewParams{
+    // ...
+})
+if err != nil {
+    if errors.Is(err, context.DeadlineExceeded) {
+        return fmt.Errorf("LLM call timed out after 30s")
+    }
+    return err
+}
+</code></pre>
+
+<h3 id="rate-limiting-with-a-semaphore">Rate limiting with a semaphore</h3>
+<pre><code>// Limit concurrent LLM API calls to avoid rate-limit (429) errors
+var llmSem = make(chan struct{}, 5)  // max 5 concurrent calls
+
+func callLLM(ctx context.Context, prompt string) (string, error) {
+    // Acquire a slot (blocks if 5 calls are in flight)
+    llmSem &lt;- struct{}{}
+    defer func() { &lt;-llmSem }()  // release when done
+
+    ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+    defer cancel()
+
+    resp, err := client.Messages.New(ctx, anthropic.MessageNewParams{
+        Model:     anthropic.F("claude-sonnet-4-5"),
+        MaxTokens: anthropic.F(int64(1024)),
+        Messages:  anthropic.F([]anthropic.MessageParam{
+            anthropic.NewUserMessage(anthropic.NewTextBlock(prompt)),
+        }),
+    })
+    if err != nil {
+        return "", err
+    }
+    return resp.Content[0].Text, nil
+}
+</code></pre>
+
+<h3 id="retry-with-exponential-backoff">Retry with exponential backoff</h3>
+<pre><code>func callWithRetry(ctx context.Context, prompt string, maxRetries int) (string, error) {
+    var lastErr error
+    for attempt := 0; attempt &lt; maxRetries; attempt++ {
+        result, err := callLLM(ctx, prompt)
+        if err == nil {
+            return result, nil
+        }
+        lastErr = err
+
+        // Check for rate limit error
+        if isRateLimited(err) {
+            backoff := time.Duration(1&lt;&lt;attempt) * time.Second
+            jitter := time.Duration(rand.Intn(500)) * time.Millisecond
+            select {
+            case &lt;-time.After(backoff + jitter):
+            case &lt;-ctx.Done():
+                return "", ctx.Err()
+            }
+            continue
+        }
+        // Non-retryable error
+        break
+    }
+    return "", fmt.Errorf("after %d retries: %w", maxRetries, lastErr)
+}
+</code></pre>
+
+<h2 id="common-mistakes">Common mistakes</h2>
+<ul>
+  <li><strong>No context timeout on LLM calls.</strong> An LLM API can hang for minutes. Always use <code>context.WithTimeout</code> — 30 seconds is a reasonable default.</li>
+  <li><strong>Not flushing in streaming handlers.</strong> Without <code>w.(http.Flusher).Flush()</code>, Go buffers the response and the client sees nothing until the full response is done.</li>
+  <li><strong>No retry on 429.</strong> LLM APIs rate-limit aggressively. Implement exponential backoff with jitter and respect the <code>retry-after</code> header.</li>
+  <li><strong>Not tracking cost.</strong> LLM APIs charge per token. Without usage tracking, you won't notice a runaway agent loop until the bill arrives. Log input + output tokens per request.</li>
+  <li><strong>No agent loop limit.</strong> An agent that keeps calling tools without converging will burn tokens and never terminate. Always cap the loop iterations.</li>
+  <li><strong>Exposing the API key.</strong> Never hard-code the key. Read from the environment or a secret manager.</li>
+  <li><strong>Using LangChainGo in new projects.</strong> It's unmaintained. Use Eino or call the SDKs directly.</li>
+</ul>
+
+<h2 id="exercises">Exercises</h2>
+<ol>
+  <li>Build a Go HTTP server that proxies a Claude API call and streams the response to the client over SSE. Test with <code>curl -N http://localhost:8080/stream</code>.</li>
+  <li>Add function calling: give the model a <code>query_db</code> tool that runs a SQL query via <code>database/sql</code>. Test the agent loop end-to-end with a real SQLite database.</li>
+  <li>Add cost tracking: log input + output tokens for each request with a <code>sync.Mutex</code>-protected counter. Add a <code>/usage</code> endpoint that reports the session cost.</li>
+  <li>Add a 30-second context timeout and a concurrent-call semaphore (limit to 5). Test with 10 concurrent requests and verify 5 are rate-limited.</li>
+  <li>Build a RAG pipeline using Eino's graph API: retrieve chunks from a vector store, format them into a prompt, and call the LLM. Return the answer with source citations.</li>
+</ol>
+
+<h2 id="mini-project-ai-code-review-service-in-go">Mini-project: AI code review service in Go</h2>
+<p>Build a Go service that reviews code diffs and returns structured findings. Requirements:</p>
+<ul>
+  <li>An HTTP endpoint that accepts a diff and calls the Claude API with a code-review system prompt. Stream the response to the client.</li>
+  <li>Include a <code>get_file</code> tool so the model can read surrounding context from the repository.</li>
+  <li>Add cost tracking with a <code>sync.Mutex</code>-protected counter and a <code>/stats</code> endpoint.</li>
+  <li>Add a 30-second context timeout, a 5-concurrent-call semaphore, and retry on 429 with exponential backoff.</li>
+  <li>Cache identical diffs by SHA-256 hash so re-reviewing the same change doesn't call the API again.</li>
+  <li>See the AI with Bun lesson for a Bun frontend that renders the streaming review as markdown with severity badges.</li>
+</ul>
+
+<section class="further"><h2 id="further-reading">Further reading</h2>
+<p>Official documentation for the tools and APIs covered on this page:</p>
+<ul class="further-list"><li><a href="https://github.com/anthropics/anthropic-sdk-go" target="_blank" rel="noopener">Anthropic Go SDK ↗</a></li>
+<li><a href="https://github.com/openai/openai-go" target="_blank" rel="noopener">OpenAI Go SDK ↗</a></li>
+<li><a href="https://github.com/cloudwego/eino" target="_blank" rel="noopener">Eino framework (Go) ↗</a></li></ul></section>
+  <nav class="pager">
+<a class="prev" href="claude-cli.html"><small>Previous</small>🤖 Claude CLI</a>
+<a class="next" href="ai-with-bun.html"><small>Next</small>🤖 AI with Bun</a>
+  </nav>
+</main>
+<button type="button" class="fab top" id="fab-top" aria-label="Back to top">↑ Top</button>
+<div class="banner" id="update-banner" role="status">A new version is available.<button type="button">Reload</button></div>
+<div class="banner" id="offline-banner" role="status">You're offline — showing cached lessons.</div>
+<script src="../app.js" defer></script>
+</body>
+</html>

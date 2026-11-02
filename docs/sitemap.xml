@@ -736,7 +736,12 @@
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://danegigi.github.io/Tutorials/ai/ai-with-go-and-bun.html</loc>
+    <loc>https://danegigi.github.io/Tutorials/ai/ai-with-go.html</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://danegigi.github.io/Tutorials/ai/ai-with-bun.html</loc>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>

@@ -1465,14 +1465,23 @@ export const SECTIONS = [
         ],
       },
       {
-        slug: "ai-with-go-and-bun",
-        title: "AI with Go and Bun",
-        blurb: "Build AI-powered services and apps in Go and Bun — direct API calls, streaming, function calling, the Eino and Vercel AI SDK ecosystems, vector stores, and the production patterns that make a polyglot AI stack hold up.",
+        slug: "ai-with-go",
+        title: "AI with Go",
+        blurb: "Build AI-powered services in Go — calling LLM APIs with the official SDKs, streaming over SSE, function calling and the agent loop, the Eino framework, cost tracking, context timeouts, and production patterns for high-throughput AI backends.",
         further: [
-          ref("Eino framework (Go)", "https://github.com/cloudwego/eino"),
-          ref("Vercel AI SDK", "https://sdk.vercel.ai/docs"),
           ref("Anthropic Go SDK", "https://github.com/anthropics/anthropic-sdk-go"),
           ref("OpenAI Go SDK", "https://github.com/openai/openai-go"),
+          ref("Eino framework (Go)", "https://github.com/cloudwego/eino"),
+        ],
+      },
+      {
+        slug: "ai-with-bun",
+        title: "AI with Bun",
+        blurb: "Build AI-powered apps in Bun — calling LLM APIs with fetch, streaming with the Vercel AI SDK, function calling, structured output, multi-provider routing, retry/caching patterns, and the polyglot Go-backend + Bun-frontend architecture.",
+        further: [
+          ref("Vercel AI SDK", "https://sdk.vercel.ai/docs"),
+          ref("Anthropic API reference", "https://docs.anthropic.com/en/api/messages"),
+          ref("OpenAI API reference", "https://platform.openai.com/docs/api-reference"),
         ],
       },
     ],
