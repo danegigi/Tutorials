@@ -1404,6 +1404,16 @@ export const SECTIONS = [
         ],
       },
       {
+        slug: "creating-skills",
+        title: "Creating Skills (SKILL.md)",
+        blurb: "The open Agent Skills standard — build portable instruction packages with SKILL.md files, progressive disclosure, bundled scripts and references, validation, publishing, and the security model for installing community skills.",
+        further: [
+          ref("Agent Skills specification", "https://agentskills.io/"),
+          ref("Kiro: Agent Skills", "https://kiro.dev/docs/skills/"),
+          ref("Anthropic skills repository", "https://github.com/anthropics/skills"),
+        ],
+      },
+      {
         slug: "local-models-with-ollama",
         title: "Local Models with Ollama",
         blurb: "Run LLMs on your own machine — install Ollama, pull models, chat, serve the API, create custom Modelfiles, pick the right model, and integrate with editors and agents.",

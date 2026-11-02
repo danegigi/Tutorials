@@ -1,0 +1,531 @@
+<p class="lead">An <strong>Agent Skill</strong> is a folder of instructions that teaches an AI agent how to do a specific task — packaged in a single <code>SKILL.md</code> file with YAML frontmatter and Markdown body. Published as an open standard by Anthropic in December 2025, the format has been adopted by 40+ agent platforms including Claude Code, Codex CLI, Kiro CLI, GitHub Copilot, Cursor, and Gemini CLI. This lesson covers the full format, progressive disclosure, building skills from scratch, bundling scripts and references, validation, publishing, and the security model — basic through advanced.</p>
+
+<h2>What a skill is (and isn't)</h2>
+<p><span class="level beginner">Beginner</span> Three concepts are easy to confuse:</p>
+
+<table>
+  <thead><tr><th>Concept</th><th>What it is</th><th>Analogy</th></tr></thead>
+  <tbody>
+    <tr><td><strong>AGENTS.md</strong> / <strong>CLAUDE.md</strong></td><td>Persistent project rules loaded every session</td><td>The company handbook</td></tr>
+    <tr><td><strong>MCP tools</strong></td><td>Callable functions with typed parameters</td><td>API endpoints (verbs)</td></tr>
+    <tr><td><strong>Skills (SKILL.md)</strong></td><td>Task-specific instruction packages loaded on demand</td><td>Playbooks / runbooks</td></tr>
+  </tbody>
+</table>
+
+<p>Skills sit <strong>above</strong> tools: they encode the judgment layer — when to call which tool, in what order, and how to interpret the result. An MCP tool exposes <code>query_database(sql)</code>; a skill teaches the agent <em>when</em> to query the database, <em>what</em> SQL to write, and <em>how</em> to interpret the results for this specific workflow.</p>
+
+<blockquote class="tip">The key insight is <strong>progressive disclosure</strong>: the agent reads only the skill's name and description at startup (~100 tokens), loads the full instructions only when a task matches, and pulls in bundled scripts and references only when the instructions reference them. An agent with 50 installed skills spends ~5,000 tokens at startup — a fraction of its context window.</blockquote>
+
+<h2>The SKILL.md format</h2>
+<p><span class="level beginner">Beginner</span> A skill is a directory containing at minimum a <code>SKILL.md</code> file:</p>
+
+<pre><code>my-skill/
+├── SKILL.md          # Required: metadata (frontmatter) + instructions (body)
+├── scripts/          # Optional: executable code the agent can run
+├── references/       # Optional: documentation loaded on demand
+└── assets/           # Optional: templates, data files, static resources
+</code></pre>
+
+<p>The <code>SKILL.md</code> file has two parts: YAML frontmatter and a Markdown body.</p>
+
+<h3>Required frontmatter</h3>
+<pre><code>---
+name: commit-format
+description: Format git commit messages using conventional commits with scope. Use when committing code or writing commit messages.
+---
+</code></pre>
+
+<p>Only two fields are required, but they carry the most weight:</p>
+
+<table>
+  <thead><tr><th>Field</th><th>Rules</th><th>Why it matters</th></tr></thead>
+  <tbody>
+    <tr><td><code>name</code></td><td>1-64 chars, lowercase alphanumeric + hyphens, must match directory name</td><td>The agent's identifier; registries index by it</td></tr>
+    <tr><td><code>description</code></td><td>Up to 1,024 chars; describe what the skill does <em>and when to use it</em></td><td>The agent reads this to decide whether to activate — vague descriptions mean unreliable activation</td></tr>
+  </tbody>
+</table>
+
+<blockquote class="warn">The <code>name</code> field must match the parent directory name. <code>my-skill/SKILL.md</code> with <code>name: my-skill</code> is valid; <code>name: MySkill</code> or <code>name: my_skill</code> in that directory will fail validation.</blockquote>
+
+<h3>Optional frontmatter</h3>
+<pre><code>---
+name: db-migrate
+description: Run and manage database migrations with alembic. Use when the user mentions migrations, schema changes, or database updates.
+license: Apache-2.0
+compatibility: Requires Python 3.10+ and alembic
+metadata:
+  author: example-org
+  version: "1.0"
+allowed-tools: Bash Read
+---
+</code></pre>
+
+<table>
+  <thead><tr><th>Field</th><th>What it does</th><th>Example</th></tr></thead>
+  <tbody>
+    <tr><td><code>license</code></td><td>License name or reference to bundled LICENSE.txt</td><td><code>Apache-2.0</code></td></tr>
+    <tr><td><code>compatibility</code></td><td>Environment requirements (up to 500 chars)</td><td><code>Requires Python 3.10+ and alembic</code></td></tr>
+    <tr><td><code>metadata</code></td><td>Arbitrary key-value pairs (author, version, etc.)</td><td><code>author: example-org, version: "1.0"</code></td></tr>
+    <tr><td><code>allowed-tools</code></td><td>Pre-approved tools (experimental, varies by agent)</td><td><code>Bash(git:*) Read</code></td></tr>
+  </tbody>
+</table>
+
+<h2>Building your first skill</h2>
+<p><span class="level beginner">Beginner</span> Start with a real, repeated workflow where your agent struggles or needs the same instructions every time. Here's a commit-formatting skill:</p>
+
+<pre><code># Create the skill directory (name must match the frontmatter name)
+mkdir -p commit-format/references
+
+# commit-format/SKILL.md
+cat &gt; commit-format/SKILL.md &lt;&lt; 'SKILL'
+---
+name: commit-format
+description: Format git commit messages using conventional commits with scope. Use when committing code or writing commit messages.
+---
+
+Format all commit messages as:
+
+    &lt;type&gt;(&lt;scope&gt;): &lt;subject&gt;
+
+Types: feat, fix, docs, style, refactor, test, chore, perf, ci, build
+Scope: the module or component affected (optional but recommended)
+Subject: imperative mood, lowercase, no period, max 72 chars
+
+Body (optional, blank line after subject):
+- Explain what and why, not how
+- Wrap at 72 chars
+
+Footer (optional, blank line after body):
+- BREAKING CHANGE: description
+- Closes #123, Refs #456
+
+## Rules
+
+1. If the change is a new feature: type = feat
+2. If the change fixes a bug: type = fix
+3. If the change is documentation only: type = docs
+4. Always include a scope when the project has multiple modules
+5. Never use "updated" or "changed" in the subject — be specific
+
+See [examples](references/examples.md) for real-world samples.
+SKILL
+
+# commit-format/references/examples.md
+cat &gt; commit-format/references/examples.md &lt;&lt; 'REF'
+# Commit Message Examples
+
+## Feature
+feat(auth): add OAuth2 login flow with Google
+
+Adds Google OAuth2 as an alternative login method.
+Users can now sign in with their Google account alongside
+the existing email/password flow.
+
+Closes #142
+
+## Bug fix
+fix(api): handle nil pointer in user handler
+
+The /api/users/:id endpoint panicked when the database
+returned a nil user. Added a nil check and return 404.
+
+Refs #98
+
+## Breaking change
+feat(db)!: switch from JSON columns to typed schema
+
+BREAKING CHANGE: the users.preferences column is replaced
+by separate columns. Run the migration script before upgrading.
+REF
+</code></pre>
+
+<p>That's a complete, working skill. The agent reads the name and description at startup, loads the body when the user mentions commits, and pulls in <code>references/examples.md</code> only when it needs to see real examples.</p>
+
+<h2>Where agents discover skills</h2>
+<p><span class="level beginner">Beginner</span> Agents load skills from multiple locations, with workspace-level skills taking highest precedence:</p>
+
+<pre><code># Discovery order (highest priority first)
+&lt;workspace&gt;/skills/              # workspace skills (project-specific)
+&lt;workspace&gt;/.agents/skills/      # project agent skills
+~/.agents/skills/                 # personal skills (all projects)
+~/.kiro/skills/                   # managed/bundled skills
+# + any extra directories configured by the agent
+</code></pre>
+
+<p>When the same skill name exists in multiple locations, the higher-priority source wins. This lets you override a bundled skill with a project-specific version without changing global config.</p>
+
+<h3>Installing skills in Kiro</h3>
+<pre><code># Install a skill from the registry
+kiro skills install @author/skill-name
+
+# Install globally (all projects)
+kiro skills install @author/skill-name --global
+
+# List installed skills
+kiro skills list
+
+# Search the public registry
+kiro skills search "database migration"
+</code></pre>
+
+<h3>Installing skills in Claude Code</h3>
+<pre><code># Claude Code auto-discovers skills in these paths:
+# ./skills/               (project)
+# ~/.claude/skills/        (personal)
+# Managed registry skills
+
+# Install from registry
+claude skills install @anthropic/skill-name
+</code></pre>
+
+<h2>Progressive disclosure in depth</h2>
+<p><span class="level intermediate">Intermediate</span> The three-stage loading model is what makes skills scalable:</p>
+
+<table>
+  <thead><tr><th>Stage</th><th>When</th><th>What loads</th><th>Token cost</th></tr></thead>
+  <tbody>
+    <tr><td><strong>1. Discovery</strong></td><td>Agent startup</td><td>name + description only</td><td>~100 tokens per skill</td></tr>
+    <tr><td><strong>2. Activation</strong></td><td>Task matches description</td><td>Full SKILL.md body</td><td>&lt; 5,000 tokens recommended</td></tr>
+    <tr><td><strong>3. Resource loading</strong></td><td>Instructions reference a file</td><td>scripts/, references/, assets/</td><td>Only when needed</td></tr>
+  </tbody>
+</table>
+
+<p>This shapes how you structure a skill:</p>
+
+<pre><code># DON'T: cram everything into SKILL.md (slow activation, wastes context)
+my-skill/
+└── SKILL.md   # 2000 lines — everything is here
+
+# DO: keep the body lean, push detail to references/
+my-skill/
+├── SKILL.md              # 100 lines: core steps, decision rules
+├── references/
+│   ├── api-schema.md     # loaded only when the agent needs the schema
+│   ├── error-codes.md    # loaded only when debugging errors
+│   └── provider-config.md # loaded only for specific cloud providers
+├── scripts/
+│   └── validate.sh       # loaded only when the agent runs validation
+└── assets/
+    └── template.json     # loaded only when generating output
+</code></pre>
+
+<blockquote class="tip">The specification recommends keeping the SKILL.md body under <strong>500 lines</strong> and <strong>5,000 tokens</strong>. If your instructions exceed that, split reference material into subdirectories. The agent will find and load referenced files when needed — you're not hiding information, you're staging it.</blockquote>
+
+<h2>A complete skill: database migrations</h2>
+<p><span class="level intermediate">Intermediate</span> Here's a more complete skill that demonstrates good patterns — step-by-step procedures, explicit commands, edge case handling, and reference files:</p>
+
+<pre><code># db-migrate/SKILL.md
+---
+name: db-migrate
+description: Run and manage database migrations with alembic. Use when the user mentions migrations, schema changes, alembic, or database updates. Handles creating, running, and rolling back migrations safely.
+compatibility: Requires Python 3.10+ and alembic
+---
+
+## Creating a Migration
+
+1. Check current state: `alembic current`
+2. Generate a migration: `alembic revision --autogenerate -m "&lt;description&gt;"`
+3. Review the generated file in `alembic/versions/`
+4. Verify both `upgrade()` and `downgrade()` functions are correct
+5. Test locally: `alembic upgrade head` then `alembic downgrade -1`
+
+## Running Migrations
+
+- Upgrade to latest: `alembic upgrade head`
+- Upgrade one step: `alembic upgrade +1`
+- Downgrade one step: `alembic downgrade -1`
+- Downgrade to specific revision: `alembic downgrade &lt;revision&gt;`
+- Show current state: `alembic current`
+- Show history: `alembic history --verbose`
+
+## Safety Rules
+
+1. NEVER modify a migration that has been applied to production
+2. ALWAYS test migrations locally before pushing
+3. For data migrations (not schema), create a separate file and mark it
+4. If autogenerate misses a change, write the migration manually
+5. Include a `downgrade()` for every migration — no exceptions
+6. For large tables, use batch mode: `alembic batch_alter_table`
+
+## Edge Cases
+
+- If the migration adds a NOT NULL column to a table with rows,
+  add it as nullable first, backfill data, then alter to NOT NULL
+- If renaming a column, do it in three steps: add new, copy data, drop old
+  (alembic autogenerate does NOT detect renames — it sees add+drop)
+
+See [naming conventions](references/naming.md) for revision file naming rules.
+See [provider config](references/providers.md) for database-specific settings.
+</code></pre>
+
+<pre><code># db-migrate/references/naming.md
+# Migration Naming Conventions
+
+Revision files use the format: `&lt;timestamp&gt;_&lt;snake_case_description&gt;.py`
+
+Examples:
+- 20260101_001_add_user_preferences.py
+- 20260115_002_rename_preferences_to_settings.py
+- 20260201_003_add_index_on_user_email.py
+
+Rules:
+1. Always use a descriptive name, not "migration_001"
+2. Prefix with the action: add_, remove_, rename_, alter_, drop_
+3. Never reuse a revision ID, even for reverted migrations
+</code></pre>
+
+<h2>Skills with bundled scripts</h2>
+<p><span class="level advanced">Advanced</span> Skills can include executable scripts that the agent runs:</p>
+
+<pre><code># deploy-check/SKILL.md
+---
+name: deploy-check
+description: Validate a deployment is healthy after shipping. Use when the user mentions deploying, deployment verification, or post-deploy checks. Runs health checks, smoke tests, and rollback validation.
+---
+
+## Post-Deploy Validation
+
+1. Run the health check script: `bash scripts/health-check.sh $SERVICE_URL`
+2. If any check fails, see [rollback procedures](references/rollback.md)
+3. If all checks pass, run smoke tests: `bash scripts/smoke-tests.sh $SERVICE_URL`
+
+## What the health check verifies
+
+- HTTP 200 from /health endpoint
+- Database connectivity (check /health/db)
+- Cache connectivity (check /health/cache)
+- Response time &lt; 500ms for /health
+- No 5xx errors in the last 60 seconds (via logs API)
+
+## Rollback
+
+If health checks fail:
+1. Check [rollback procedures](references/rollback.md) for the specific service
+2. Run: `bash scripts/rollback.sh $SERVICE_NAME`
+3. Verify the previous version is healthy
+</code></pre>
+
+<pre><code># deploy-check/scripts/health-check.sh
+#!/bin/bash
+# Usage: bash health-check.sh https://my-service.example.com
+set -euo pipefail
+
+URL="$1"
+EXIT_CODE=0
+
+echo "Checking $URL ..."
+
+# Health endpoint
+STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$URL/health")
+if [ "$STATUS" != "200" ]; then
+  echo "FAIL: /health returned $STATUS (expected 200)"
+  EXIT_CODE=1
+else
+  echo "OK: /health returned 200"
+fi
+
+# Database check
+STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$URL/health/db")
+if [ "$STATUS" != "200" ]; then
+  echo "FAIL: /health/db returned $STATUS"
+  EXIT_CODE=1
+else
+  echo "OK: /health/db returned 200"
+fi
+
+# Response time
+TIME=$(curl -s -o /dev/null -w "%{time_total}" "$URL/health")
+if (( $(echo "$TIME &gt; 0.5" | bc -l) )); then
+  echo "WARN: /health response time ${TIME}s (&gt; 500ms)"
+else
+  echo "OK: /health response time ${TIME}s"
+fi
+
+exit $EXIT_CODE
+</code></pre>
+
+<blockquote class="warn">Scripts in a skill run with the same permissions as the agent. A skill that bundles <code>scripts/health-check.sh</code> can execute arbitrary code on your machine. <strong>Always read bundled scripts before installing a community skill</strong>. See the Security section below.</blockquote>
+
+<h2>Writing effective instructions</h2>
+<p><span class="level intermediate">Intermediate</span> The quality of the Markdown body determines whether the skill actually helps. Vague instructions produce inconsistent results:</p>
+
+<pre><code># BAD: the agent doesn't know what to do
+---
+name: git-helper
+description: Helps with Git operations.
+---
+Help the user with Git commands when they ask.
+</code></pre>
+
+<pre><code># GOOD: specific, conditional, with decision rules
+---
+name: git-helper
+description: Run Git operations safely — branch, commit, merge, rebase, resolve conflicts, and clean up. Use when the user mentions Git commands, branching, merging, or resolving merge conflicts.
+---
+
+## Branching
+- Always branch from the latest main: `git checkout main && git pull && git checkout -b &lt;branch&gt;`
+- Use descriptive names: feat/add-login, fix/null-pointer, docs/api-reference
+
+## Committing
+- Stage specific files, not `git add .`: `git add src/handler.go src/handler_test.go`
+- Write conventional commit messages (see [commit format](references/commit-format.md))
+- If the pre-commit hook fails, fix the issue and create a NEW commit (never --amend after a hook failure)
+
+## Merging
+- If the branch is behind main, rebase: `git rebase main`
+- If there are conflicts, prefer the incoming change for feature work, the current change for config files
+- After merging, delete the local branch: `git branch -d &lt;branch&gt;`
+
+## What NOT to do
+- Don't force push to main or master
+- Don't use --no-verify unless explicitly asked
+- Don't squash if the PR has meaningful individual commits
+- Don't `git add -A` — stage explicit file paths
+</code></pre>
+
+<p>Good instruction patterns:</p>
+<ul>
+  <li><strong>Step-by-step procedures</strong> for the primary workflow (numbered lists).</li>
+  <li><strong>Conditional rules</strong>: "If the user asks for X, do Y. If the file contains Z, handle it by doing W."</li>
+  <li><strong>Input/output examples</strong> so the agent knows what success looks like.</li>
+  <li><strong>Edge cases and error handling</strong> for common failure modes.</li>
+  <li><strong>Explicit "don't" rules</strong> — tell the agent what NOT to do, not just what to do.</li>
+  <li><strong>Clear boundaries</strong> stating what the skill does not cover.</li>
+</ul>
+
+<h2>Validation and testing</h2>
+<p><span class="level intermediate">Intermediate</span> Validate before publishing:</p>
+
+<pre><code># Validate with the skills-ref reference library
+skills-ref validate ./my-skill
+
+# Checks:
+#   - name matches directory name
+#   - name is lowercase, alphanumeric + hyphens only
+#   - description is present and under 1024 chars
+#   - frontmatter is valid YAML
+#   - no missing required fields
+</code></pre>
+
+<p>For testing, put the skill in your workspace's <code>skills/</code> directory, start a new agent session, and give it a task that should trigger the skill:</p>
+
+<pre><code># Test: does the agent activate the skill?
+mkdir -p ./skills/
+cp -r my-skill ./skills/
+
+# Start a new session (skills are loaded at startup)
+claude   # or: kiro chat
+
+# Give it a task that matches the description
+&gt; "I need to create a new database migration for adding a user preferences table"
+
+# Check: did the agent follow the skill's instructions?
+# Did it use the naming conventions? Did it handle the edge cases?
+</code></pre>
+
+<h2>Publishing skills</h2>
+<p><span class="level advanced">Advanced</span> Share skills through registries. The public skills registry (skills.sh) hosts community skills:</p>
+
+<pre><code># Publish to the registry (if supported by your agent)
+# Claude Code:
+claude skills publish ./my-skill
+
+# Kiro:
+kiro skills publish ./my-skill
+
+# Other registries (ClawHub, GitHub):
+# Push the skill directory to a GitHub repo
+# The registry indexes it from the repo URL
+</code></pre>
+
+<p>Install community skills:</p>
+
+<pre><code># Search the registry
+kiro skills search "pdf processing"
+
+# Install
+kiro skills install @author/pdf-processing
+
+# Verify before installing (read the SKILL.md and bundled scripts)
+kiro skills inspect @author/pdf-processing
+</code></pre>
+
+<h2>Security: the supply chain</h2>
+<p><span class="level advanced">Advanced</span> Skills run with the same permissions as the agent — filesystem access, shell execution, network access. A compromised or malicious skill can:</p>
+
+<ul>
+  <li>Read environment variables (including API keys and secrets)</li>
+  <li>Execute arbitrary shell commands</li>
+  <li>Access and exfiltrate files from your project</li>
+  <li>Modify your code in unexpected ways</li>
+</ul>
+
+<p>Before installing any community skill:</p>
+
+<pre><code># 1. Read the SKILL.md — does it do what it claims?
+kiro skills inspect @author/skill-name
+
+# 2. Read ALL bundled scripts — not just SKILL.md
+# Skills can hide malicious code in scripts/ or reference files
+cat skills/@author/skill-name/scripts/*.sh
+cat skills/@author/skill-name/scripts/*.py
+
+# 3. Check the metadata — who is the author? Is the repo trusted?
+kiro skills info @author/skill-name
+
+# 4. Verify the skill's allowed-tools — does it need the tools it claims?
+# A "formatting" skill that requests Bash access is suspicious
+
+# 5. Prefer skills from organizations you trust
+# Anthropic's official skills repo: github.com/anthropics/skills
+# Your team's internal registry
+</code></pre>
+
+<blockquote class="warn">In early 2026, security researchers discovered hundreds of typosquatted malicious skills on community registries. A skill named <code>pdf-procesing</code> (missing an "s") looked identical to the legitimate <code>pdf-processing</code> but ran malware. Always verify the exact author and skill name before installing, and read bundled scripts — not just the SKILL.md.</blockquote>
+
+<h2>Skills vs AGENTS.md vs MCP: when to use what</h2>
+<p><span class="level intermediate">Intermediate</span></p>
+
+<table>
+  <thead><tr><th>Need</th><th>Use</th><th>Why</th></tr></thead>
+  <tbody>
+    <tr><td>Project rules that apply to every task</td><td><strong>AGENTS.md</strong></td><td>Always loaded; sets conventions, commands, don'ts</td></tr>
+    <tr><td>A reusable workflow for a specific task</td><td><strong>Skill</strong></td><td>Loaded on demand; packaged with instructions + scripts + references</td></tr>
+    <tr><td>Expose a callable function to agents</td><td><strong>MCP server</strong></td><td>Standardized protocol; any agent can call it</td></tr>
+    <tr><td>Teach the agent <em>when</em> to call an MCP tool and <em>how</em> to interpret results</td><td><strong>Skill + MCP</strong></td><td>Skill wraps the MCP tool with procedural knowledge</td></tr>
+    <tr><td>Share a workflow across teams/projects</td><td><strong>Skill</strong></td><td>Portable; publish to registry; versioned</td></tr>
+    <tr><td>Persistent model behavior (tone, format)</td><td><strong>AGENTS.md</strong></td><td>Always in context; applies to every interaction</td></tr>
+  </tbody>
+</table>
+
+<h2>Common mistakes</h2>
+<ul>
+  <li><strong>Vague description.</strong> "Helps with Git" doesn't tell the agent when to activate. Include specific keywords and trigger conditions: "Use when the user mentions branching, merging, or resolving conflicts."</li>
+  <li><strong>Cramming everything in SKILL.md.</strong> If the body exceeds 500 lines, move reference material to <code>references/</code>. The agent loads it on demand — you're staging, not hiding.</li>
+  <li><strong>Name doesn't match directory.</strong> <code>name: my-skill</code> in a directory called <code>my_skill/</code> fails validation. The name must match the parent directory exactly.</li>
+  <li><strong>No "don't" rules.</strong> Telling the agent what NOT to do is as important as what to do. Without boundaries, the agent will guess and sometimes guess wrong.</li>
+  <li><strong>Not testing activation.</strong> Write a skill, start a new session, give a matching task, and verify the agent actually activated and followed the instructions. A skill that never activates is dead weight.</li>
+  <li><strong>Installing community skills without reading scripts.</strong> A SKILL.md that looks benign can bundle a script that reads your <code>.env</code> or exfiltrates data. Read <em>every</em> file before installing.</li>
+  <li><strong>One mega-skill instead of focused skills.</strong> "Git helper" that covers branching, committing, merging, rebasing, and conflict resolution is too broad. Split into focused skills the agent can activate independently.</li>
+</ul>
+
+<h2>Exercises</h2>
+<ol>
+  <li>Create a <code>commit-format</code> skill with the examples from this lesson. Install it in your workspace's <code>skills/</code> directory, start a new agent session, and ask it to "commit my changes." Verify it follows the format.</li>
+  <li>Build a skill for your project's test workflow: how to run tests, what the test command is, what a failing test looks like, and how to debug. Include a <code>references/debug-guide.md</code> for common failure patterns.</li>
+  <li>Write a skill that bundles a script — a <code>lint-check</code> skill with <code>scripts/run-linter.sh</code>. The agent should run the script when activated and interpret the output.</li>
+  <li>Validate your skill with <code>skills-ref validate</code>. Fix any issues. Then test activation by starting a new session and giving a task that should trigger it.</li>
+  <li>Audit a community skill from the registry: read the SKILL.md, read every bundled script, and identify whether it needs the permissions it requests. Report any concerns.</li>
+</ol>
+
+<h2>Mini-project: Code review skill package</h2>
+<p>Build a complete, publishable skill that teaches an agent to review code. Requirements:</p>
+<ul>
+  <li><code>SKILL.md</code> with a description that activates on "review this code," "check for bugs," or "audit this PR."</li>
+  <li>Step-by-step instructions: read the diff, check for bugs (null dereference, resource leaks, race conditions), check security (injection, auth bypass), rate severity (critical/moderate/minor), output a structured review.</li>
+  <li>A <code>references/severity-guide.md</code> with criteria for each severity level and examples.</li>
+  <li>A <code>scripts/parse-diff.sh</code> that extracts changed files and line ranges from a git diff.</li>
+  <li>Explicit "don't" rules: don't review style nitpicks as critical, don't suggest unrelated refactors, don't approve your own changes.</li>
+  <li>Validate the skill, test activation in a real session, and confirm the agent follows the instructions on a real diff.</li>
+</ul>

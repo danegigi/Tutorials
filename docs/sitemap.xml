@@ -706,6 +706,11 @@
     <priority>0.7</priority>
   </url>
   <url>
+    <loc>https://danegigi.github.io/Tutorials/ai/creating-skills.html</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
     <loc>https://danegigi.github.io/Tutorials/ai/local-models-with-ollama.html</loc>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
