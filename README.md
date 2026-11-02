@@ -1,6 +1,6 @@
 # Dev Tutorials — an offline-capable Tutorial PWA
 
-A unified, installable **Progressive Web App** covering five tracks, built from
+A unified, installable **Progressive Web App** covering six tracks, built from
 hand-authored HTML lesson fragments and a tiny zero-dependency static-site
 generator that runs under [Bun](https://bun.com).
 
@@ -11,6 +11,7 @@ generator that runs under [Bun](https://bun.com).
 | 🌐 **Web Development** | 33 | HTML, CSS, JS, TypeScript, HTTP & APIs, forms & validation, accessibility, responsive design, browser storage, PWAs, service workers, manifests, HTMX, Datastar, auth, frontend/backend integration, web performance, state management, testing, web security, Vue 3 (fundamentals + advanced), React (fundamentals + advanced), web components, WebSockets & real-time, animation, GraphQL, **TanStack Query**, **TanStack Router**, **TanStack Table/Form/Store**, **Tailwind CSS 4 & daisyUI**, **React Aria** |
 | 🐧 **Linux** | 21 | shell, filesystem, permissions, users & groups, processes & services, package managers, env vars, networking, SSH, logs, cron & systemd timers, bash scripting, troubleshooting, text processing (grep/sed/awk), disk & storage, performance monitoring, containers & namespaces, systemd deep dive, networking deep dive (ip/nftables/ss/tcpdump), security hardening, kernel & boot process |
 | 🔁 **DevOps** | 30 | mindset, Git workflows, CI/CD, GitHub Actions, Docker, Compose, Kubernetes, reverse proxies, TLS & domains, cloud (AWS), IaC, monitoring & logging, GitOps, security, deployment strategies, incident response, advanced K8s, secrets management, observability, chaos engineering, platform engineering, cost/FinOps, database ops, networking deep dive, Terraform / Helm / Flux / Kubernetes / Prometheus+Grafana deep dives, **gRPC with Go & Bun** |
+| 🤖 **AI** | 7 | **AI & LLM fundamentals** (tokens, context windows, temperature, roles, hallucination), **prompt engineering** (system messages, few-shot, chain-of-thought, structured output), **agentic coding** (tool use, the agent loop, sandboxes, approvals, MCP), **AGENTS.md best practices** (structure, rules, scope, what to include vs exclude), **local models with Ollama** (install, pull, run, serve API, Modelfiles, model selection, agent integration), **Codex CLI** (interactive, exec, review, sessions, sandbox, MCP, config, slash commands), **Kiro CLI** (chat, agents, skills, steering, specs, workflows, MCP, hooks, permissions, headless/CI) |
 
 Every lesson goes straight into examples, commands, and expected output, with
 common-mistake callouts, exercises, a mini-project, and official "Further
@@ -118,7 +119,7 @@ serve the `docs/` folder as the web root. Serve `*.webmanifest` as
 ## Content sources
 
 The lessons were extracted, reorganized, and expanded from three existing
-tutorial sites, unified here into five coherent tracks:
+tutorial sites, unified here into six coherent tracks:
 
 - Go — <https://danegigi.github.io/go-tut/>
 - Bun — <https://danegigi.github.io/bun-tut/>

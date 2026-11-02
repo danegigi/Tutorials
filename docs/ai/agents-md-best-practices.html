@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="en" data-base="../">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0d1117">
+<title>AGENTS.md Best Practices — AI</title>
+<meta name="description" content="How to write AGENTS.md files that actually steer coding agents — structure, scope, what to include versus exclude, hierarchy, and the rules that save you from a model's confident mistakes.">
+<link rel="canonical" href="https://danegigi.github.io/Tutorials/ai/agents-md-best-practices.html">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Dev Tutorials">
+<meta property="og:title" content="AGENTS.md Best Practices — AI">
+<meta property="og:description" content="How to write AGENTS.md files that actually steer coding agents — structure, scope, what to include versus exclude, hierarchy, and the rules that save you from a model's confident mistakes.">
+<meta property="og:url" content="https://danegigi.github.io/Tutorials/ai/agents-md-best-practices.html">
+<meta property="og:image" content="https://danegigi.github.io/Tutorials/icon-512.png">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="AGENTS.md Best Practices — AI">
+<meta name="twitter:description" content="How to write AGENTS.md files that actually steer coding agents — structure, scope, what to include versus exclude, hierarchy, and the rules that save you from a model's confident mistakes.">
+<meta name="twitter:image" content="https://danegigi.github.io/Tutorials/icon-512.png">
+<link rel="manifest" href="../manifest.webmanifest">
+<link rel="icon" href="../icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="../icon-192.png">
+<link rel="stylesheet" href="../app.css">
+<script>/* set theme before paint to avoid flash */(function(){try{var t=localStorage.getItem('tut.theme');document.documentElement.setAttribute('data-theme',t||'dark');}catch(e){document.documentElement.setAttribute('data-theme','dark');}})();</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"LearningResource","name":"AGENTS.md Best Practices","description":"How to write AGENTS.md files that actually steer coding agents — structure, scope, what to include versus exclude, hierarchy, and the rules that save you from a model's confident mistakes.","url":"https://danegigi.github.io/Tutorials/ai/agents-md-best-practices.html","inLanguage":"en","isPartOf":{"@type":"Course","name":"AI — Dev Tutorials","url":"https://danegigi.github.io/Tutorials/ai/"},"learningResourceType":"Tutorial"},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Dev Tutorials","item":"https://danegigi.github.io/Tutorials/"},{"@type":"ListItem","position":2,"name":"AI","item":"https://danegigi.github.io/Tutorials/ai/"},{"@type":"ListItem","position":3,"name":"AGENTS.md Best Practices","item":"https://danegigi.github.io/Tutorials/ai/agents-md-best-practices.html"}]}]}</script>
+
+</head>
+<body class="lesson">
+<header class="nav">
+  <a class="brand" href="../index.html">📚 Dev Tutorials</a>
+  <span class="crumb">AGENTS.md Best Practices — AI</span>
+  <span class="spacer"></span>
+  <a class="navbtn" href="../search.html">🔎 Search</a>
+  <button class="navbtn" id="install-btn" type="button">⬇️ Install</button>
+  <button class="navbtn" id="theme-btn" type="button" aria-label="Toggle theme">🌙 Dark</button>
+</header>
+<main class="wrap lesson-body">
+  <h1 class="page-title">AGENTS.md Best Practices</h1>
+  <div class="lesson-tools" data-lesson-id="ai/agents-md-best-practices">
+    <button id="done-btn" type="button" aria-pressed="false">○ Mark complete</button>
+    <button id="mark-btn" type="button" aria-pressed="false">☆ Bookmark</button>
+    <a class="navbtn" href="index.html" style="margin-left:auto">All AI lessons →</a>
+  </div>
+<nav class="toc" aria-label="On this page"><strong>On this page</strong><ul>
+<li class="lvl2"><a href="#what-agentsmd-actually-is">What AGENTS.md actually is</a></li>
+<li class="lvl2"><a href="#the-structure-that-works">The structure that works</a></li>
+<li class="lvl3"><a href="#a-real-example">A real example</a></li>
+<li class="lvl2"><a href="#what-to-include-rules-with-consequences">What to include: rules with consequences</a></li>
+<li class="lvl2"><a href="#what-not-to-include">What NOT to include</a></li>
+<li class="lvl2"><a href="#scope-and-hierarchy">Scope and hierarchy</a></li>
+<li class="lvl3"><a href="#global-vs-project-level-rules">Global vs. project-level rules</a></li>
+<li class="lvl2"><a href="#writing-rules-that-actually-work">Writing rules that actually work</a></li>
+<li class="lvl2"><a href="#iterating-on-agentsmd">Iterating on AGENTS.md</a></li>
+<li class="lvl2"><a href="#agentsmd-vs-readmemd">AGENTS.md vs. README.md</a></li>
+<li class="lvl2"><a href="#common-mistakes">Common mistakes</a></li>
+<li class="lvl2"><a href="#exercises">Exercises</a></li>
+<li class="lvl2"><a href="#mini-project-write-and-test-an-agentsmd-end-to-end">Mini-project: Write and test an AGENTS.md end to end</a></li>
+</ul></nav>
+<p class="lead">An <strong>AGENTS.md</strong> file is a markdown document in your repository that coding agents read automatically at the start of every session. It's the single highest-leverage tool for getting an agent to produce code that fits your project — not just code that compiles. This lesson covers what to put in it, what to leave out, how to structure it, and the rules that save you from the model's confident mistakes.</p>
+
+<h2 id="what-agentsmd-actually-is">What AGENTS.md actually is</h2>
+<p><span class="level beginner">Beginner</span> An AGENTS.md is a <strong>persistent system message</strong> for your repo. When you start an agent session (Codex CLI, Kiro CLI, Claude Code, or any tool that supports the convention), the harness reads AGENTS.md from the repo root and injects it into the model's context before your first message. From that point on, the model "knows" your project's rules without you restating them every time.</p>
+
+<p>The name comes from the <a href="https://agents.md">agents.md convention</a>, which several tools have adopted. Different tools discover the file in slightly different ways:</p>
+
+<table>
+  <thead><tr><th>Tool</th><th>File(s) discovered</th><th>Where</th></tr></thead>
+  <tbody>
+    <tr><td>Codex CLI</td><td><code>AGENTS.md</code></td><td>Repo root (and nested directories)</td></tr>
+    <tr><td>Kiro CLI</td><td><code>AGENTS.md</code> + <code>.kiro/steering/*.md</code></td><td>Repo root + .kiro/steering/</td></tr>
+    <tr><td>Claude Code</td><td><code>CLAUDE.md</code></td><td>Repo root</td></tr>
+    <tr><td>Any agent</td><td><code>AGENTS.md</code></td><td>Any directory the agent operates in</td></tr>
+  </tbody>
+</table>
+
+<p>The principle is the same across all of them: the file is read, not executed. It's plain markdown. The model treats it as instructions — not a script, not a config file, not code.</p>
+
+<blockquote class="tip">If you work across multiple agent tools, <code>AGENTS.md</code> is the universal one — it's recognized by the most tools. Kiro also reads <code>.kiro/steering/*.md</code> for topic-specific steering files that complement AGENTS.md, and Claude Code reads <code>CLAUDE.md</code>. You can symlink or keep them in sync if you use more than one.</blockquote>
+
+<h2 id="the-structure-that-works">The structure that works</h2>
+<p><span class="level beginner">Beginner</span> A good AGENTS.md follows a predictable structure. Every section earns its place by answering a question the agent would otherwise have to guess at:</p>
+
+<pre><code># AGENTS.md
+
+## What this project is          ← context the model can't infer
+## Layout                        ← where things live (directory map)
+## Commands                      ← how to build, test, run, lint
+## Adding or editing a lesson    ← the workflow for the most common task
+### Conventions                  ← the house style (what good output looks like)
+## Determinism and CI            ← rules with consequences (gotchas, traps)
+## Verifying changes             ← how to know your change works
+## Git                           ← branching, committing, pushing rules
+## Don't                         ← explicit prohibitions
+</code></pre>
+
+<p>Not every project needs every section. A simple library might need only "What this is," "Commands," and "Don't." A monorepo might need per-directory AGENTS.md files. The point is: <strong>each section answers a question the agent would otherwise answer wrong by default</strong>.</p>
+
+<h3 id="a-real-example">A real example</h3>
+<p>Here's the AGENTS.md from this very Tutorials PWA project, abridged to show the structure:</p>
+
+<pre><code># AGENTS.md
+
+## What this project is
+A static, offline-capable tutorial PWA published at https://danegigi.github.io/Tutorials/.
+A small zero-dependency generator, run under Bun, turns hand-authored HTML
+lesson fragments into the site in docs/, which GitHub Pages serves.
+
+- Runtime: **Bun** only. No npm dependencies — don't add any without approval.
+- No framework, no bundler, no TypeScript build step. Plain ES modules.
+
+## Layout
+scripts/lessons.js       # single source of truth: sections + lessons
+scripts/build-site.js     # generator -> docs/
+scripts/check.js          # post-build checks (run in CI)
+content/&lt;section&gt;/&lt;slug&gt;.html   # lesson bodies (HTML fragments)
+docs/                    # BUILD OUTPUT. Committed. Never hand-edit.
+
+## Commands
+bun run build    # generate docs/
+bun run check    # run all post-build checks
+bun run dev      # build + serve on :8792
+
+## Determinism and CI (important)
+CI builds, runs check.js, then **fails if committed docs/ differs from a fresh build**.
+- Always rebuild and commit docs/ alongside any change.
+- Keep the build **deterministic**. Don't put timestamps, Date.now(), or the
+  current date into any output.
+- The SW cache version is a SHA-256 content hash, not a timestamp.
+- sitemap.xml deliberately has no &lt;lastmod&gt;.
+
+## Don't
+- Hand-edit anything in docs/.
+- Append new lessons to the end of a section without considering flow.
+- Introduce dependencies, a framework, or a bundler.
+- Add nondeterministic output to the build.
+</code></pre>
+
+<h2 id="what-to-include-rules-with-consequences">What to include: rules with consequences</h2>
+<p><span class="level intermediate">Intermediate</span> The highest-value content in an AGENTS.md is <strong>rules with consequences</strong> — things that, if the agent gets them wrong, cause real damage or wasted time. The model already knows general programming; it doesn't know your project's traps.</p>
+
+<p>Good things to include:</p>
+
+<ul>
+  <li><strong>The build command and what it produces.</strong> "Run <code>bun run build</code> to generate <code>docs/</code>." The model can't guess this. Without it, the agent might edit source files and not rebuild, or try <code>npm run build</code> and fail.</li>
+  <li><strong>The test command and what passing looks like.</strong> "Run <code>bun run check</code>. It must print 'All checks passed.' with zero failures." This gives the agent a clear acceptance criterion.</li>
+  <li><strong>What's generated vs. hand-authored.</strong> "<code>docs/</code> is build output — never hand-edit it. Edit <code>content/</code> and <code>scripts/</code>, then rebuild." This prevents the model from "fixing" generated files.</li>
+  <li><strong>Conventions that aren't enforceable by linters.</strong> "Lessons end with Common mistakes, Exercises, and a Mini-project section. Don't add a Further reading section — it's generated." A linter can't check structural conventions; an AGENTS.md can.</li>
+  <li><strong>Determinism requirements.</strong> "The build must be deterministic. Don't use <code>Date.now()</code>, random values, or the current date in any output." This is the kind of rule that, if violated, silently breaks CI.</li>
+  <li><strong>Git rules.</strong> "Stage explicit paths, not <code>git add -A</code>. Don't push. Commit sources and regenerated <code>docs/</code> together."</li>
+  <li><strong>Explicit prohibitions.</strong> "Don't introduce dependencies. Don't hand-edit <code>docs/</code>. Don't append lessons without considering flow." The model's default is to do the most obvious thing; your job is to override the defaults that are wrong for your project.</li>
+</ul>
+
+<blockquote class="tip">Test each rule by asking: "If this rule weren't here, what would the model do by default, and would that be wrong?" If the default is already right, you don't need the rule. If the default is wrong — the model would edit generated output, use npm, append to the wrong place — the rule earns its place.</blockquote>
+
+<h2 id="what-not-to-include">What NOT to include</h2>
+<p><span class="level intermediate">Intermediate</span> An AGENTS.md is not documentation for humans, not a project README, and not a place to dump everything you know. Including too much dilutes the signal:</p>
+
+<table>
+  <thead><tr><th>Don't include</th><th>Why</th></tr></thead>
+  <tbody>
+    <tr><td>Architecture explanations for humans</td><td>That belongs in README.md or docs. The AGENTS.md is for rules, not education.</td></tr>
+    <tr><td>Every detail of every file</td><td>The agent can read files. Point it to the right files; don't inline their contents.</td></tr>
+    <tr><td>Aspirational rules ("always write perfect code")</td><td>Vague aspirations don't change behavior. Specific rules do.</td></tr>
+    <tr><td>Secrets, credentials, API keys</td><td>AGENTS.md is committed to git. Never put secrets in it. Reference env vars by name only.</td></tr>
+    <tr><td>General programming advice</td><td>The model already knows how to write a for loop. Include project-specific rules, not programming tutorials.</td></tr>
+    <tr><td>Documentation about the product (user-facing)</td><td>That's for README.md. AGENTS.md is for the agent, not the user.</td></tr>
+  </tbody>
+</table>
+
+<blockquote class="warn"><strong>Never put secrets in AGENTS.md.</strong> It's committed to git and visible to anyone who reads the repo. If the agent needs a credential, reference it by environment variable name (<code>DATABASE_URL</code>), never the value. If you need to tell the agent that a key is "already configured in .env," say that — but never paste the key itself.</blockquote>
+
+<h2 id="scope-and-hierarchy">Scope and hierarchy</h2>
+<p><span class="level advanced">Advanced</span> AGENTS.md files compose hierarchically. The agent reads all of them, from the repo root down to the current working directory, and they stack — more specific (deeper) rules refine more general (root) rules:</p>
+
+<pre><code>repo/
+├── AGENTS.md                  ← global rules (runtime, build, git)
+├── src/
+│   ├── AGENTS.md              ← rules for src/ (conventions, patterns)
+│   └── api/
+│       └── AGENTS.md          ← rules for the API (auth patterns, rate limits)
+└── docs/
+    └── AGENTS.md              ← rules for docs/ (don't hand-edit generated files)
+</code></pre>
+
+<p>When the agent works in <code>src/api/</code>, it reads all three: the root, <code>src/</code>, and <code>src/api/</code>. This lets you keep the root AGENTS.md focused on project-wide rules and push section-specific rules down to where they apply.</p>
+
+<p>Kiro CLI also supports <strong>steering files</strong> in <code>.kiro/steering/*.md</code>, which work the same way — topic-specific markdown files that are loaded based on what the session is about. You can split rules across multiple steering files (e.g., <code>jw-projects.md</code> for project-specific conventions, <code>security.md</code> for auth rules) and they're combined at session start.</p>
+
+<h3 id="global-vs-project-level-rules">Global vs. project-level rules</h3>
+<p>Some rules apply to <em>every</em> project you work on, not just one repo. These belong in a <strong>global</strong> AGENTS.md (Kiro: <code>~/.kiro/steering/</code>; Codex: <code>~/.codex/AGENTS.md</code>), not in each repo:</p>
+
+<pre><code># ~/.kiro/steering/global.md (applies to every project)
+
+# Secrets
+- Never display, print, or echo the VALUE of any secret.
+- Refer to secrets by KEY NAME only (e.g. DATABASE_URL), never the value.
+- Never commit .env files or credentials.
+
+# Git
+- Stage explicit paths, not git add -A.
+- Don't push without being asked.
+- Never run destructive git commands (reset --hard, push --force) without permission.
+
+# Scope
+- Work only within the current working directory.
+- Don't read ~/.aws, ~/.ssh, or other credential trees.
+</code></pre>
+
+<p>Project-level AGENTS.md then adds the <em>specific</em> rules on top: the build command, the conventions, the traps. Global rules are the floor; project rules are the ceiling.</p>
+
+<h2 id="writing-rules-that-actually-work">Writing rules that actually work</h2>
+<p><span class="level advanced">Advanced</span> The difference between a rule that works and one that doesn't is <strong>specificity</strong>. Compare:</p>
+
+<pre><code># Vague (doesn't work — the model ignores it)
+"Write clean code."
+
+# Specific (works — the model can follow it)
+"Use early returns, not nested if/else. Extract functions longer than 30 lines.
+ Name test functions Test_What_It_Tests. Never use any in TypeScript."
+
+# Negative (works — explicitly overrides the default)
+"Don't use Prisma. The runtime ORM is Drizzle. The Prisma schema is
+ reference-only — do NOT use @prisma/client at runtime."
+
+# Conditional (works — tells the model when to apply the rule)
+"When adding a DB table, update the schema-parity test count assertion
+ AND the uuid-identifiers test's meta.tables.length assertion, or tests break."
+</code></pre>
+
+<p>The pattern: <strong>state the rule, state the consequence of breaking it, and be specific enough that the model can verify it followed the rule</strong>. "Don't use Prisma" is better than "prefer Drizzle" because it's unambiguous — there's no judgment call.</p>
+
+<blockquote class="tip">The strongest rules are the ones backed by a <strong>consequence the model can observe</strong>. "Don't hand-edit docs/ because CI will fail with 'docs/ is out of date'" is stronger than "don't hand-edit docs/ because it's generated." When the model knows the rule has teeth (CI, tests, a check that fails), it follows it more reliably.</blockquote>
+
+<h3>Lessons vs. rules</h2>
+<p>A <strong>lesson</strong> is a correction the model made that you want to prevent in the future. Kiro and Codex both support "learn" or "memory" systems that persist corrections across sessions. But lessons and AGENTS.md rules serve different purposes:</p>
+
+<ul>
+  <li><strong>AGENTS.md</strong> — rules that apply to <em>anyone</em> (or any agent) working on this repo. Committed to git. Shared with the team.</li>
+  <li><strong>Lessons/memory</strong> — corrections that are specific to your personal workflow. Stored locally. Not shared. Good for "I keep forgetting that this project's staging DB is truncated."</li>
+</ul>
+
+<p>If a rule should apply to everyone who touches the repo, it belongs in AGENTS.md. If it's a personal preference or a one-time correction, it belongs in the agent's memory system.</p>
+
+<h2 id="iterating-on-agentsmd">Iterating on AGENTS.md</h2>
+<p><span class="level advanced">Advanced</span> Your first AGENTS.md will be incomplete, and that's fine. The effective loop is:</p>
+
+<ol>
+  <li><strong>Start with the essentials</strong> — what the project is, the commands, and the top 3 traps.</li>
+  <li><strong>Run agent sessions</strong> and watch where the model makes project-specific mistakes.</li>
+  <li><strong>Add a rule for each recurring mistake.</strong> If the model keeps editing generated files, add "never hand-edit docs/." If it keeps using npm, add "runtime is Bun only."</li>
+  <li><strong>Remove rules that never trigger.</strong> If a rule has been there for 20 sessions and the model never violated it even without the rule, it might be noise.</li>
+  <li><strong>Keep it short.</strong> The model reads the whole file every session. A 50-line file it follows is better than a 500-line file it skims. Aim for rules you can count on one hand per section.</li>
+</ol>
+
+<blockquote class="warn">Don't over-engineer your first AGENTS.md. A 10-line file with "runtime is Bun, run <code>bun run check</code>, don't edit docs/" will prevent 80% of agent mistakes. The remaining 20% you discover by running sessions and adding rules reactively. A 200-line AGENTS.md written before any sessions is usually full of rules the model would have followed anyway.</blockquote>
+
+<h2 id="agentsmd-vs-readmemd">AGENTS.md vs. README.md</h2>
+<p>These serve different audiences and shouldn't be conflated:</p>
+
+<table>
+  <thead><tr><th></th><th>AGENTS.md</th><th>README.md</th></tr></thead>
+  <tbody>
+    <tr><td>Audience</td><td>The AI agent</td><td>The human developer</td></tr>
+    <tr><td>Content</td><td>Rules, traps, commands, conventions</td><td>What the project is, how to get started, architecture</td></tr>
+    <tr><td>Tone</td><td>Imperative ("Don't...", "Always...")</td><td>Explanatory ("This project does...")</td></tr>
+    <tr><td>Length</td><td>Short — only rules with consequences</td><td>Full — as much as humans need</td></tr>
+    <tr><td>Example</td><td>"Never hand-edit docs/. Run <code>bun run build</code> and commit the result."</td><td>"The build output in docs/ is the GitHub Pages source. To deploy, push to main."</td></tr>
+  </tbody>
+</table>
+
+<p>If you find yourself writing architecture explanations in AGENTS.md, move them to README.md. If you find yourself restating the build command in README.md, make sure AGENTS.md has it too — the agent reads AGENTS.md, not README.md, by default (though some tools read both).</p>
+
+<h2 id="common-mistakes">Common mistakes</h2>
+<ul>
+  <li><strong>Putting secrets in AGENTS.md.</strong> It's committed to git. Never paste API keys, passwords, or connection strings. Reference env vars by name.</li>
+  <li><strong>Writing documentation instead of rules.</strong> AGENTS.md is for rules the agent must follow, not architecture education. That belongs in README.md.</li>
+  <li><strong>Vague rules.</strong> "Write clean code" doesn't change behavior. "Use early returns, not nested if/else" does. Be specific.</li>
+  <li><strong>Too long.</strong> A 500-line AGENTS.md gets skimmed. Keep it short — rules with consequences only. Aim for 50–150 lines for most projects.</li>
+  <li><strong>Rules the model would follow anyway.</strong> "Write valid syntax" is noise. "Don't use Prisma at runtime, even though the schema exists" is signal — the default would be wrong.</li>
+  <li><strong>No "Don't" section.</strong> Explicit prohibitions are the most effective rules. The model's default behavior is to do the obvious thing; your job is to override the defaults that are wrong for your project.</li>
+  <li><strong>Not iterating.</strong> Your first draft will miss rules you only discover by watching the agent make mistakes. Add rules reactively.</li>
+  <li><strong>Confusing AGENTS.md with memory/lessons.</strong> AGENTS.md is for rules that apply to everyone. Personal corrections belong in the agent's memory system.</li>
+  <li><strong>Forgetting nested files.</strong> If you have a subdirectory with different conventions (e.g., a legacy module), add an AGENTS.md there. The agent reads nested files and stacks them.</li>
+</ul>
+
+<h2 id="exercises">Exercises</h2>
+<ol>
+  <li>Read the AGENTS.md for this project (it's in the repo root). Count the rules. Which ones would the model violate if they weren't there? Which are the "consequence-backed" rules?</li>
+  <li>Write an AGENTS.md for a project you work on. Start with: what the project is, the build/test commands, and 3 rules with consequences. Keep it under 50 lines.</li>
+  <li>Run an agent session with your AGENTS.md, then run the same task without it. Compare: did the agent follow the conventions? What did it get wrong that a rule could have prevented?</li>
+  <li>Add a rule to your AGENTS.md that uses a consequence the model can observe: "If you do X, the test at line Y will fail" or "CI will reject this." Test whether the model follows it more reliably than a rule without a consequence.</li>
+  <li>Create a nested AGENTS.md in a subdirectory of a project (e.g., <code>src/api/AGENTS.md</code>). Run an agent session in that directory. Verify the agent reads both the root and nested files and applies both.</li>
+</ol>
+
+<h2 id="mini-project-write-and-test-an-agentsmd-end-to-end">Mini-project: Write and test an AGENTS.md end to end</h2>
+<p>Pick a small project (or use this one). Write an AGENTS.md with: (1) what the project is and its runtime, (2) the build and test commands, (3) 5 specific rules with consequences, and (4) a "Don't" section with 3 prohibitions. Then run two agent sessions on the same task — one with the AGENTS.md present and one with it temporarily renamed. Diff the results: did the agent follow the conventions? Did it violate any of your "Don't" rules? How much time did the rules save? Finally, add one rule you discovered was missing based on what the agent did wrong.</p>
+
+<section class="further"><h2 id="further-reading">Further reading</h2>
+<p>Official documentation for the tools and APIs covered on this page:</p>
+<ul class="further-list"><li><a href="https://agents.md/" target="_blank" rel="noopener">AGENTS.md specification ↗</a></li>
+<li><a href="https://github.com/openai/codex/blob/main/docs/agents.md" target="_blank" rel="noopener">Codex: AGENTS.md guide ↗</a></li>
+<li><a href="https://kiro.dev/docs/steering/" target="_blank" rel="noopener">Kiro: Steering and AGENTS.md ↗</a></li></ul></section>
+  <nav class="pager">
+<a class="prev" href="agentic-coding.html"><small>Previous</small>🤖 Agentic Coding</a>
+<a class="next" href="local-models-with-ollama.html"><small>Next</small>🤖 Local Models with Ollama</a>
+  </nav>
+</main>
+<button type="button" class="fab top" id="fab-top" aria-label="Back to top">↑ Top</button>
+<div class="banner" id="update-banner" role="status">A new version is available.<button type="button">Reload</button></div>
+<div class="banner" id="offline-banner" role="status">You're offline — showing cached lessons.</div>
+<script src="../app.js" defer></script>
+</body>
+</html>

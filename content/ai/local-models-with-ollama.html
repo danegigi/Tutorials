@@ -1,0 +1,379 @@
+<p class="lead"><strong>Ollama</strong> lets you run large language models on your own machine — no API key, no cloud, no per-token cost. You download a model, start the server, and talk to it through the same kind of API the big providers offer, but everything runs locally. This lesson covers install, model management, the interactive REPL, the REST API, custom Modelfiles, and how to connect Ollama to coding agents like Codex CLI and Kiro CLI.</p>
+
+<h2>Install</h2>
+<p><span class="level beginner">Beginner</span> Ollama installs as a single binary with no dependencies:</p>
+
+<pre><code># macOS
+brew install ollama
+# or download the app from https://ollama.com/download
+
+# Linux
+curl -fsSL https://ollama.com/install.sh | sh
+
+# Windows
+# Download from https://ollama.com/download and run the installer
+
+# Verify
+ollama --version
+# → ollama version 0.4.x
+</code></pre>
+
+<p>On macOS and Linux, the installer sets up a background service. On macOS, the app runs as a menubar process. You can also run the server manually with <code>ollama serve</code>.</p>
+
+<pre><code># Start the server manually (if not running as a service)
+ollama serve
+# → Listening on 127.0.0.1:11434
+
+# Check it's up
+curl http://localhost:11434/api/version
+# → {"version":"0.4.x"}
+</code></pre>
+
+<blockquote class="tip">Ollama runs on port 11434 by default. Set <code>OLLAMA_HOST=0.0.0.0:11434</code> if you need other machines on your network to reach it (e.g., a dev server). On macOS, the app binds to localhost only.</blockquote>
+
+<h2>Pulling and running models</h2>
+<p><span class="level beginner">Beginner</span> Models are downloaded with <code>ollama pull</code> and run with <code>ollama run</code>. The first pull downloads the model (a few GB); subsequent runs load from disk.</p>
+
+<pre><code># Pull a model (downloads the quantized weights)
+ollama pull llama3.2
+# → pulling manifest...
+# → pulling 8c8f5e... ████████████████ 100%
+# → success
+
+# Run it interactively (opens a chat REPL)
+ollama run llama3.2
+&gt;&gt;&gt; What is a goroutine?
+A goroutine is a lightweight thread of execution in Go...
+
+&gt;&gt;&gt; /bye              # exit the REPL
+
+# Run with a one-shot prompt (no REPL)
+ollama run llama3.2 "Write a haiku about Linux"
+# → Pinguins waddle far / Kernel boots the system up / Tux smiles in the dark
+</code></pre>
+
+<h3>Choosing a model</h3>
+<p>The <a href="https://ollama.com/library">Ollama model library</a> has hundreds of models. Here are the ones worth knowing:</p>
+
+<table>
+  <thead><tr><th>Model</th><th>Size</th><th>RAM needed</th><th>Best for</th></tr></thead>
+  <tbody>
+    <tr><td><code>llama3.2</code> (3B)</td><td>2 GB</td><td>4 GB</td><td>General use, fast on any machine</td></tr>
+    <tr><td><code>llama3.3</code> (70B)</td><td>40 GB</td><td>48+ GB</td><td>Frontier quality, needs a big GPU</td></tr>
+    <tr><td><code>qwen2.5-coder</code> (7B–32B)</td><td>5–20 GB</td><td>8–24 GB</td><td>Code generation, completion</td></tr>
+    <tr><td><code>deepseek-r1</code> (7B–671B)</td><td>5–400 GB</td><td>varies</td><td>Reasoning, math (open-weight reasoning model)</td></tr>
+    <tr><td><code>phi3</code> (3.8B)</td><td>2.5 GB</td><td>4 GB</td><td>Small, fast, Microsoft's model</td></tr>
+    <tr><td><code>mistral</code> (7B)</td><td>4 GB</td><td>6 GB</td><td>General use, efficient</td></tr>
+    <tr><td><code>nomic-embed-text</code></td><td>274 MB</td><td>1 GB</td><td>Embeddings (for RAG/search)</td></tr>
+    <tr><td><code>llava</code> (7B + vision)</td><td>5 GB</td><td>8 GB</td><td>Vision — describe images, screenshots</td></tr>
+  </tbody>
+</table>
+
+<pre><code># Pull a specific size variant
+ollama pull qwen2.5-coder:7b     # 7B version
+ollama pull qwen2.5-coder:32b    # 32B version (needs more RAM)
+
+# Pull a quantized variant (smaller, slightly lower quality)
+ollama pull llama3.2:3b-q4_K_M   # 4-bit quantization
+
+# List what you have
+ollama list
+# → NAME               SIZE      MODIFIED
+#   llama3.2:latest     2.0 GB    2 hours ago
+#   qwen2.5-coder:7b    4.7 GB    yesterday
+
+# Show model details (parameters, template, license)
+ollama show llama3.2
+# → Model
+#   architecture        llama
+#   parameters          3.2B
+#   context length      32768
+#   ...
+</code></pre>
+
+<blockquote class="warn">The model size is the download size, but the <strong>RAM needed at runtime</strong> is roughly the same — the model loads entirely into memory. A 4 GB model needs ~4 GB of free RAM. If you don't have enough RAM, Ollama will either swap (very slow) or fail. Check your available memory before pulling a large model.</blockquote>
+
+<h2>Model management commands</h2>
+<p><span class="level beginner">Beginner</span> The full command set for managing models:</p>
+
+<pre><code># Pull a model from the library
+ollama pull llama3.2
+
+# Remove a model (frees disk space)
+ollama rm llama3.2
+# → deleted 'llama3.2'
+
+# Copy a model (useful before modifying with a Modelfile)
+ollama cp llama3.2 my-llama
+
+# List all downloaded models
+ollama list
+
+# Show running models (loaded in memory)
+ollama ps
+# → NAME           SIZE     PROCESSOR    UNTIL
+#   llama3.2:latest 3.6 GB   100% GPU    4 minutes from now
+
+# Stop a running model (unloads from memory)
+ollama stop llama3.2
+
+# Sign in (for pushing models to your Ollama account)
+ollama signin
+
+# Push a model to your library
+ollama push myuser/my-model
+</code></pre>
+
+<blockquote class="tip">Models stay loaded in memory for a few minutes after use (the "until" column in <code>ollama ps</code>). If you're making rapid API calls, the model is already warm and responses are fast. If it's cold, the first call loads it (a few seconds), and subsequent calls are instant.</blockquote>
+
+<h2>The REST API</h2>
+<p><span class="level intermediate">Intermediate</span> Ollama serves an OpenAI-compatible REST API at <code>http://localhost:11434</code>. This is how coding agents and your own scripts talk to it:</p>
+
+<h3>Generate (single prompt)</h3>
+<pre><code>curl http://localhost:11434/api/generate -d '{
+  "model": "llama3.2",
+  "prompt": "Why do we use context in Go?",
+  "stream": false
+}'
+# → {
+#   "model": "llama3.2",
+#   "response": "Context in Go provides cancellation and timeouts...",
+#   "done": true,
+#   "total_duration": 1234567890,
+#   "prompt_eval_count": 8,
+#   "eval_count": 42
+# }
+</code></pre>
+
+<h3>Chat (multi-turn conversation)</h3>
+<pre><code>curl http://localhost:11434/api/chat -d '{
+  "model": "llama3.2",
+  "messages": [
+    {"role": "system", "content": "You are a Go expert. Be concise."},
+    {"role": "user", "content": "What is a goroutine?"},
+    {"role": "assistant", "content": "A lightweight thread..."},
+    {"role": "user", "content": "How do I cancel one?"}
+  ],
+  "stream": false
+}'
+# → {"message": {"role": "assistant", "content": "Use context.WithCancel..."}, ...}
+</code></pre>
+
+<h3>Streaming (token by token)</h3>
+<pre><code># Stream = true (default) returns one JSON object per token
+curl http://localhost:11434/api/generate -d '{
+  "model": "llama3.2",
+  "prompt": "Count to 5"
+}'
+# → {"response":"1","done":false}
+# → {"response":"2","done":false}
+# → {"response":"3","done":false}
+# → {"response":"4","done":false}
+# → {"response":"5","done":true}
+</code></pre>
+
+<h3>Structured output (JSON)</h3>
+<pre><code>curl http://localhost:11434/api/generate -d '{
+  "model": "llama3.2",
+  "prompt": "List 3 git commands with descriptions",
+  "format": "json",
+  "stream": false
+}'
+# → {"commands": [
+#     {"command": "git init", "description": "Initialize a new repository"},
+#     {"command": "git clone", "description": "Clone a remote repository"},
+#     {"command": "git commit", "description": "Record changes to the repository"}
+#   ]}
+</code></pre>
+
+<h3>Embeddings</h3>
+<pre><code>curl http://localhost:11434/api/embeddings -d '{
+  "model": "nomic-embed-text",
+  "prompt": "How do I fix a goroutine leak?"
+}'
+# → {"embedding": [0.123, -0.456, 0.789, ...]}
+</code></pre>
+
+<h3>Calling the API from Bun</h3>
+<pre><code>// Simple chat wrapper
+async function chat(messages, model = "llama3.2") {
+  const res = await fetch("http://localhost:11434/api/chat", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ model, messages, stream: false }),
+  });
+  const data = await res.json();
+  return data.message.content;
+}
+
+const answer = await chat([
+  { role: "system", content: "You are a code reviewer." },
+  { role: "user", content: "Review: " + codeSnippet },
+]);
+console.log(answer);
+</code></pre>
+
+<h2>Custom Modelfiles</h2>
+<p><span class="level intermediate">Intermediate</span> A <strong>Modelfile</strong> is Ollama's equivalent of a Dockerfile — it defines a custom model from a base model plus system prompt, parameters, and templates. This is how you create a model with a fixed persona or behavior:</p>
+
+<pre><code># Modelfile — create a custom code-reviewer model
+FROM llama3.2
+
+# System prompt (the model's persona/rules)
+SYSTEM """
+You are a senior code reviewer. Rules:
+- Flag security issues, missing error handling, and unused variables.
+- Be concise — bullet points, not paragraphs.
+- If the code is fine, say "No issues found."
+- Use the same language as the code (Go, Python, etc.).
+"""
+
+# Parameters (temperature, context window, etc.)
+PARAMETER temperature 0.3
+PARAMETER num_ctx 8192
+PARAMETER stop "&lt;/review&gt;"
+
+# Template (controls how messages are formatted)
+TEMPLATE """
+{{ if .System }}&lt;|im_start|&gt;system
+{{ .System }}&lt;|im_end|&gt;
+{{ end }}{{ range .Messages }}&lt;|im_start|&gt;{{ .Role }}
+{{ .Content }}&lt;|im_end|&gt;
+{{ end }}&lt;|im_start|&gt;assistant
+"""
+</code></pre>
+
+<pre><code># Build the custom model
+ollama create code-reviewer -f Modelfile
+# → success
+
+# Run it
+ollama run code-reviewer "Review: func main() { fmt.Println('hello') }"
+# → • fmt.Println is fine for a simple program.
+#   • Consider using log.Printf in production for structured output.
+#   • No issues found for a program this simple.
+
+# The model is saved — list it
+ollama list
+# → NAME              SIZE     MODIFIED
+#   code-reviewer     2.0 GB   just now
+#   llama3.2:latest   2.0 GB   2 hours ago
+</code></pre>
+
+<blockquote class="tip">A custom Modelfile model is a <strong>base model + a system prompt + parameters</strong>, not a fine-tune. The weights are the same; you've just baked in the system message and settings so you don't have to pass them on every call. This is extremely useful for agents that always need the same persona — create the model once, and the agent just calls <code>code-reviewer</code> without a system message.</blockquote>
+
+<h2>Connecting Ollama to coding agents</h2>
+<p><span class="level advanced">Advanced</span> Both Codex CLI and Kiro CLI can use Ollama as a local model provider, so you get an agent without sending your code to a cloud API:</p>
+
+<h3>Codex CLI with Ollama</h3>
+<pre><code># Run Codex with a local Ollama model
+codex --oss --local-provider ollama exec "explain this codebase"
+codex --oss --local-provider ollama "fix the failing tests"
+
+# Or set it in config.toml:
+# ~/.codex/config.toml
+[oss]
+provider = "ollama"
+model = "qwen2.5-coder:7b"
+</code></pre>
+
+<h3>Kiro CLI with Ollama</h3>
+<pre><code># Kiro CLI: list available models (includes local Ollama models)
+kiro-cli chat --list-models
+
+# Start a chat with a specific model
+kiro-cli chat --model ollama/qwen2.5-coder:7b
+
+# Or set a default in settings
+kiro-cli settings chat.defaultModel "ollama/qwen2.5-coder:7b"
+</code></pre>
+
+<h3>OpenAI-compatible endpoint</h3>
+<p>Ollama also serves an OpenAI-compatible API at <code>/v1</code>, so any tool that speaks OpenAI can point at it:</p>
+
+<pre><code># OpenAI-compatible endpoint
+curl http://localhost:11434/v1/chat/completions -d '{
+  "model": "llama3.2",
+  "messages": [{"role": "user", "content": "Hello"}]
+}'
+
+# Point any OpenAI-compatible tool at Ollama:
+# OPENAI_BASE_URL=http://localhost:11434/v1
+# OPENAI_API_KEY=ollama  (any string works — Ollama doesn't check)
+</code></pre>
+
+<blockquote class="warn">Local models are smaller and less capable than frontier cloud models (GPT-4o, Claude Sonnet 4.5). A 7B model is fine for code completion, simple refactors, and explanations, but it will struggle with complex multi-file reasoning, subtle bugs, or following long complex instructions. Use a bigger model (32B+) for coding agents, or accept that you'll need to guide it more than you would with a cloud model.</blockquote>
+
+<h2>Integration with editors</h2>
+<p><span class="level advanced">Advanced</span> Ollama integrates with editors for inline code completion and chat:</p>
+
+<ul>
+  <li><strong>VS Code</strong> — install the Ollama extension or Continue.dev, set the provider to Ollama, pick a model.</li>
+  <li><strong>JetBrains</strong> — use the Continue plugin or CodeGPT, point at <code>http://localhost:11434</code>.</li>
+  <li><strong>Neovim</strong> — <code>codecompanion.nvim</code> or <code>ollama.nvim</code> support Ollama natively.</li>
+  <li><strong>Cursor / Zed</strong> — both support custom OpenAI-compatible endpoints; point them at <code>http://localhost:11434/v1</code>.</li>
+</ul>
+
+<pre><code># Continue.dev config (~/.continue/config.json)
+{
+  "models": [{
+    "title": "Ollama Llama 3.2",
+    "provider": "ollama",
+    "model": "llama3.2",
+    "apiBase": "http://localhost:11434"
+  }],
+  "tabAutocompleteModel": {
+    "title": "Qwen Coder",
+    "provider": "ollama",
+    "model": "qwen2.5-coder:7b"
+  }
+}
+</code></pre>
+
+<h2>Environment variables</h2>
+<p><span class="level advanced">Advanced</span></p>
+
+<table>
+  <thead><tr><th>Variable</th><th>Default</th><th>Purpose</th></tr></thead>
+  <tbody>
+    <tr><td><code>OLLAMA_HOST</code></td><td>127.0.0.1:11434</td><td>Bind address. Set to <code>0.0.0.0:11434</code> for network access.</td></tr>
+    <tr><td><code>OLLAMA_MODELS</code></td><td>~/.ollama/models</td><td>Where models are stored on disk.</td></tr>
+    <tr><td><code>OLLAMA_ORIGINS</code></td><td>localhost</td><td>CORS origins (set to <code>*</code> for browser access).</td></tr>
+    <tr><td><code>OLLAMA_MAX_LOADED_MODELS</code></td><td>varies</td><td>How many models can be in memory at once.</td></tr>
+    <tr><td><code>OLLAMA_KEEP_ALIVE</code></td><td>5m</td><td>How long a model stays loaded after last use.</td></tr>
+    <tr><td><code>OLLAMA_NUM_PARALLEL</code></td><td>varies</td><td>Number of parallel requests per model.</td></tr>
+  </tbody>
+</table>
+
+<pre><code># Example: run Ollama on a server, accessible from your LAN
+OLLAMA_HOST=0.0.0.0:11434 OLLAMA_ORIGINS="*" ollama serve
+
+# Example: keep models loaded longer (good for active dev)
+OLLAMA_KEEP_ALIVE=30m ollama serve
+
+# Example: store models on an external drive
+OLLAMA_MODELS=/Volumes/External/ollama-models ollama serve
+</code></pre>
+
+<h2>Common mistakes</h2>
+<ul>
+  <li><strong>Pulling a model bigger than your RAM.</strong> A 70B model needs ~40 GB of RAM. Check <code>ollama show &lt;model&gt;</code> for the size before pulling, and check your available memory.</li>
+  <li><strong>Forgetting <code>stream: false</code> in API calls.</strong> Without it, the API streams one JSON object per token. If your code expects a single response, set <code>stream: false</code>.</li>
+  <li><strong>Using a 3B model for complex coding.</strong> Small models are fast but struggle with multi-file reasoning. Use <code>qwen2.5-coder:7b</code> or bigger for coding tasks.</li>
+  <li><strong>Not checking <code>ollama ps</code> when calls are slow.</strong> If the model isn't loaded, the first call loads it (slow). If it <em>is</em> loaded and still slow, you might be out of RAM and swapping.</li>
+  <li><strong>Expecting local model quality to match cloud models.</strong> A 7B local model is not GPT-4o. It's useful for privacy, offline work, and cost, but it will need more guidance and produce more errors.</li>
+  <li><strong>Leaving the server exposed on 0.0.0.0.</strong> If you set <code>OLLAMA_HOST=0.0.0.0</code> on a shared machine, anyone on the network can call your models. Only do this on trusted networks.</li>
+  <li><strong>Forgetting to stop models.</strong> <code>ollama stop &lt;model&gt;</code> unloads it from memory. If you're done with a model, stop it to free RAM for other work.</li>
+</ul>
+
+<h2>Exercises</h2>
+<ol>
+  <li>Install Ollama, pull <code>llama3.2</code>, and run a chat session. Ask it to explain a concept from this lesson in its own words.</li>
+  <li>Pull <code>qwen2.5-coder:7b</code> and ask it to write a Bun function that reads a JSON file. Compare the output quality to what a cloud model would produce.</li>
+  <li>Create a custom Modelfile with a system prompt for a "commit message generator" (input: git diff, output: conventional commit format). Build it with <code>ollama create</code> and test it on a real diff.</li>
+  <li>Write a Bun script that calls the Ollama chat API with a system message and a user message, and prints the response. Use <code>stream: false</code>.</li>
+  <li>Configure Codex CLI or Kiro CLI to use an Ollama model. Run a simple task ("explain this file") and compare the speed and quality to a cloud model.</li>
+</ol>
+
+<h2>Mini-project: Build a local code reviewer</h2>
+<p>Create a custom Ollama model (Modelfile) that acts as a Go code reviewer with a system prompt defining review rules (flag goroutine leaks, missing error handling, unused variables). Write a Bun script that reads a <code>.go</code> file from disk, sends it to your custom model via the Ollama API with <code>format: "json"</code>, and prints a formatted table of issues with severity, line number, and suggestion. Test it against 3 Go files with known issues and verify it catches them.</p>

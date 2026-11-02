@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="en" data-base="../">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0d1117">
+<title>Agentic Coding — AI</title>
+<meta name="description" content="What an AI coding agent is — tool use, function calling, the agentic loop, context management, sandboxes, approval policies, and when agents help versus when they hurt.">
+<link rel="canonical" href="https://danegigi.github.io/Tutorials/ai/agentic-coding.html">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Dev Tutorials">
+<meta property="og:title" content="Agentic Coding — AI">
+<meta property="og:description" content="What an AI coding agent is — tool use, function calling, the agentic loop, context management, sandboxes, approval policies, and when agents help versus when they hurt.">
+<meta property="og:url" content="https://danegigi.github.io/Tutorials/ai/agentic-coding.html">
+<meta property="og:image" content="https://danegigi.github.io/Tutorials/icon-512.png">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Agentic Coding — AI">
+<meta name="twitter:description" content="What an AI coding agent is — tool use, function calling, the agentic loop, context management, sandboxes, approval policies, and when agents help versus when they hurt.">
+<meta name="twitter:image" content="https://danegigi.github.io/Tutorials/icon-512.png">
+<link rel="manifest" href="../manifest.webmanifest">
+<link rel="icon" href="../icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="../icon-192.png">
+<link rel="stylesheet" href="../app.css">
+<script>/* set theme before paint to avoid flash */(function(){try{var t=localStorage.getItem('tut.theme');document.documentElement.setAttribute('data-theme',t||'dark');}catch(e){document.documentElement.setAttribute('data-theme','dark');}})();</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"LearningResource","name":"Agentic Coding","description":"What an AI coding agent is — tool use, function calling, the agentic loop, context management, sandboxes, approval policies, and when agents help versus when they hurt.","url":"https://danegigi.github.io/Tutorials/ai/agentic-coding.html","inLanguage":"en","isPartOf":{"@type":"Course","name":"AI — Dev Tutorials","url":"https://danegigi.github.io/Tutorials/ai/"},"learningResourceType":"Tutorial"},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Dev Tutorials","item":"https://danegigi.github.io/Tutorials/"},{"@type":"ListItem","position":2,"name":"AI","item":"https://danegigi.github.io/Tutorials/ai/"},{"@type":"ListItem","position":3,"name":"Agentic Coding","item":"https://danegigi.github.io/Tutorials/ai/agentic-coding.html"}]}]}</script>
+
+</head>
+<body class="lesson">
+<header class="nav">
+  <a class="brand" href="../index.html">📚 Dev Tutorials</a>
+  <span class="crumb">Agentic Coding — AI</span>
+  <span class="spacer"></span>
+  <a class="navbtn" href="../search.html">🔎 Search</a>
+  <button class="navbtn" id="install-btn" type="button">⬇️ Install</button>
+  <button class="navbtn" id="theme-btn" type="button" aria-label="Toggle theme">🌙 Dark</button>
+</header>
+<main class="wrap lesson-body">
+  <h1 class="page-title">Agentic Coding</h1>
+  <div class="lesson-tools" data-lesson-id="ai/agentic-coding">
+    <button id="done-btn" type="button" aria-pressed="false">○ Mark complete</button>
+    <button id="mark-btn" type="button" aria-pressed="false">☆ Bookmark</button>
+    <a class="navbtn" href="index.html" style="margin-left:auto">All AI lessons →</a>
+  </div>
+<nav class="toc" aria-label="On this page"><strong>On this page</strong><ul>
+<li class="lvl2"><a href="#what-an-agent-actually-is">What an agent actually is</a></li>
+<li class="lvl2"><a href="#function-calling-how-the-model-calls-a-tool">Function calling (how the model &quot;calls&quot; a tool)</a></li>
+<li class="lvl2"><a href="#the-agentic-loop-in-practice">The agentic loop in practice</a></li>
+<li class="lvl2"><a href="#context-management-the-agents-biggest-constraint">Context management: the agent's biggest constraint</a></li>
+<li class="lvl2"><a href="#sandboxes-keeping-the-model-from-wrecking-your-machine">Sandboxes: keeping the model from wrecking your machine</a></li>
+<li class="lvl2"><a href="#approval-policies">Approval policies</a></li>
+<li class="lvl2"><a href="#when-agents-help-vs-when-they-hurt">When agents help vs. when they hurt</a></li>
+<li class="lvl2"><a href="#mcp-connecting-agents-to-external-tools">MCP: connecting agents to external tools</a></li>
+<li class="lvl2"><a href="#steering-files-persistent-instructions-for-agents">Steering files: persistent instructions for agents</a></li>
+<li class="lvl2"><a href="#common-mistakes">Common mistakes</a></li>
+<li class="lvl2"><a href="#exercises">Exercises</a></li>
+<li class="lvl2"><a href="#mini-project-build-a-test-fixing-agent-session">Mini-project: Build a test-fixing agent session</a></li>
+</ul></nav>
+<p class="lead">An <strong>AI coding agent</strong> is not a chatbot that writes code snippets. It's an LLM wired into a loop: it reads files, writes code, runs commands, sees the output, and adjusts — the same cycle a human developer goes through, but automated and fast. This lesson covers what makes an agent work, when the agentic loop helps versus when it hurts, and the safety mechanisms (sandboxes, approvals, context management) that keep a model with a shell from destroying your machine.</p>
+
+<h2 id="what-an-agent-actually-is">What an agent actually is</h2>
+<p><span class="level beginner">Beginner</span> The core of every coding agent is the same loop:</p>
+
+<pre><code>loop:
+    1. READ  — the model reads the task + current state (files, errors, output)
+    2. THINK — the model decides what to do next
+    3. ACT   — the model calls a tool (write file, run command, search)
+    4. OBSERVE — the tool's output is fed back into the model's context
+    5. goto 1  (until the task is done or the model asks for help)
+</code></pre>
+
+<p>That's it. The "agent" is the <strong>loop</strong>, not the model. The model is the brain; the loop is the body. Without the loop, the model is just a chatbot that suggests code. With the loop, it can actually <em>do</em> things — read your codebase, write files, run tests, fix errors, and iterate until it works.</p>
+
+<p>The tools an agent has access to determine what it can do:</p>
+
+<table>
+  <thead><tr><th>Tool</th><th>What it lets the agent do</th></tr></thead>
+  <tbody>
+    <tr><td>read_file / search</td><td>See your codebase — read files, grep for patterns, find definitions</td></tr>
+    <tr><td>write_file / edit</td><td>Modify your files — create, edit, delete</td></tr>
+    <tr><td>shell / execute</td><td>Run commands — build, test, install deps, git</td></tr>
+    <tr><td>web_fetch / web_search</td><td>Read external docs, look up current APIs</td></tr>
+    <tr><td>mcp servers</td><td>Connect to external tools — databases, APIs, GitHub, issue trackers</td></tr>
+  </tbody>
+</table>
+
+<h2 id="function-calling-how-the-model-calls-a-tool">Function calling (how the model "calls" a tool)</h2>
+<p><span class="level beginner">Beginner</span> The model doesn't execute commands directly. Instead, it outputs a <strong>structured tool call</strong> — a request to run a specific tool with specific arguments — and the agent harness (the software running the loop) executes it and returns the result.</p>
+
+<pre><code>// The model sees the task and available tools:
+"Fix the failing test in auth_test.go. You can use:
+  - read_file(path): read a file
+  - run_command(cmd): execute a shell command
+  - edit_file(path, old, new): replace text in a file"
+
+// The model outputs a tool call (not prose):
+{ "tool": "run_command", "args": { "cmd": "go test ./auth/ -v" } }
+
+// The harness runs it, captures the output, and feeds it back:
+"--- FAIL: TestLogin (0.00s)
+    auth_test.go:42: expected status 200, got 401"
+
+// The model now has the error in context, and decides the next step:
+{ "tool": "read_file", "args": { "path": "auth/auth.go" } }
+// ... reads the file, finds the bug, calls edit_file ...
+</code></pre>
+
+<p>This is called <strong>function calling</strong> or <strong>tool use</strong>, and it's the mechanism that turns a text predictor into an agent. The model doesn't have a shell — it asks the harness to run things, and the harness decides whether to allow it.</p>
+
+<blockquote class="tip">The harness is the safety boundary. The model can <em>request</em> any tool call, but the harness decides whether to execute it, ask for human approval, or block it. This separation is why sandboxes and approval policies work — the model is never running code directly on your machine.</blockquote>
+
+<h2 id="the-agentic-loop-in-practice">The agentic loop in practice</h2>
+<p><span class="level intermediate">Intermediate</span> Here's what a real agent session looks like when you ask it to "fix the failing tests":</p>
+
+<pre><code>$ codex exec "Fix the failing tests"
+# Turn 1:
+  Model: run_command("go test ./... 2>&1 | grep FAIL")
+  Output: "--- FAIL: TestUserValidation (user_test.go:15)"
+
+# Turn 2:
+  Model: read_file("user/user.go")
+  Output: (the file contents, ~200 lines)
+
+# Turn 3:
+  Model: read_file("user/user_test.go")
+  Output: (the test file, line 15 checks for empty email)
+
+# Turn 4:
+  Model: "The validation function doesn't reject empty emails.
+          Line 23: if email == \"\" should be if email == \"\" { return error }"
+  Model: edit_file("user/user.go",
+                   "if email != \"\" {",
+                   "if email == \"\" {\n\t\treturn errors.New(\"email required\")\n\t}\n\tif email != \"\" {")
+
+# Turn 5:
+  Model: run_command("go test ./user/ -v")
+  Output: "PASS  ok  user  0.003s"
+
+# Turn 6:
+  Model: "Fixed. The validation was missing an empty-email check. Test now passes."
+</code></pre>
+
+<p>Notice what happened: the agent <strong>didn't need you to tell it which file to look at</strong>. It ran the tests, read the output, read the relevant files, made the fix, and verified it — all in one loop. That's the difference between a chatbot (you paste the error and the code, it guesses the fix) and an agent (it finds the error, finds the code, fixes it, and checks the result itself).</p>
+
+<h2 id="context-management-the-agents-biggest-constraint">Context management: the agent's biggest constraint</h2>
+<p><span class="level intermediate">Intermediate</span> Every tool call output goes into the model's context window. Read a 500-line file? That's ~2,000 tokens in context. Run a test that prints 100 lines? Another ~500 tokens. After 20 tool calls, you might have 40,000 tokens of context — and if the window is 128K, you're a third of the way to full.</p>
+
+<p>This is the agent's fundamental tension: <strong>more tool calls = more information = more context consumed</strong>. Eventually the context fills up, and the oldest outputs fall out of the window. If the agent read a file early in the session and needs it again 30 turns later, it may have to re-read it.</p>
+
+<p>Agents manage context with several strategies:</p>
+
+<ul>
+  <li><strong>Compaction</strong> — summarize older conversation history into a short summary, freeing the window. Both Codex (<code>/compact</code>) and Kiro CLI (<code>/compact</code>) support this.</li>
+  <li><strong>Selective reads</strong> — read only the relevant part of a file (grep for a function, read a line range), not the whole thing.</li>
+  <li><strong>Sub-agents</strong> — delegate a subtask to a separate agent session with its own fresh context window, then bring back just the result. Kiro CLI's <code>/spawn</code> and Codex's subagent features do this.</li>
+  <li><strong>Session forking</strong> — branch off a new session from a checkpoint, so the fork has a clean window but the same starting state.</li>
+</ul>
+
+<blockquote class="warn">When an agent "forgets" something it knew earlier, it's usually not a bug — it's context eviction. The old output fell out of the window. If you see an agent re-reading a file it already read, or repeating a step it already did, the context was compacted or evicted. This is expected behavior, not a malfunction.</blockquote>
+
+<h2 id="sandboxes-keeping-the-model-from-wrecking-your-machine">Sandboxes: keeping the model from wrecking your machine</h2>
+<p><span class="level advanced">Advanced</span> An agent with shell access can run <em>any</em> command — including destructive ones. The model might decide to <code>rm -rf</code> a directory, <code>git reset --hard</code>, or install a package that overwrites your config. <strong>Sandboxes</strong> prevent this by restricting what the agent can do.</p>
+
+<p>Every serious coding agent implements a sandbox:</p>
+
+<table>
+  <thead><tr><th>Tool</th><th>Sandbox mechanism</th><th>Modes</th></tr></thead>
+  <tbody>
+    <tr><td>Codex CLI</td><td>OS-native sandboxing (Seatbelt on macOS, Bubblewrap on Linux)</td><td>read-only, workspace-write, danger-full-access</td></tr>
+    <tr><td>Kiro CLI</td><td>Capability-based permissions (permissions.yaml)</td><td>allow / ask / deny per capability (fs_read, fs_write, shell, mcp)</td></tr>
+    <tr><td>Manual</td><td>Run in a container or VM</td><td>Docker, Podman, or a VM</td></tr>
+  </tbody>
+</table>
+
+<pre><code># Codex CLI sandbox modes
+codex -s read-only exec "explain this codebase"       # can read, cannot write
+codex -s workspace-write exec "fix the bug"            # can write in the repo (default)
+codex -s danger-full-access exec "install dependencies" # can do anything (rare, risky)
+
+# Kiro CLI: capability rules in ~/.kiro/settings/permissions.yaml
+rules:
+  - capability: fs_write
+    effect: ask         # ask before writing files
+  - capability: shell
+    effect: ask         # ask before running commands
+  - capability: fs_read
+    effect: allow       # always allow reads
+  - capability: shell
+    effect: deny
+    match: "rm -rf *"   # never allow recursive deletes
+</code></pre>
+
+<blockquote class="warn">Sandbox modes exist for a reason. <code>danger-full-access</code> (Codex) or <code>--yolo</code> bypasses all safety. Use it only inside a throwaway container or VM, never on your development machine. A model that "just needs to install a package" can also delete your config, push to main, or expose secrets.</blockquote>
+
+<h2 id="approval-policies">Approval policies</h2>
+<p><span class="level advanced">Advanced</span> Even inside a sandbox, you often want the agent to <strong>ask before doing something</strong> — especially file writes or command execution. Approval policies control this:</p>
+
+<pre><code># Codex CLI: approval policies
+codex -a on-request exec "..."    # model decides when to ask (default)
+codex -a never exec "..."          # never asks, runs everything (for CI)
+codex --approve-for-me exec "..."  # auto-reviews requests within sandbox
+
+# Kiro CLI: per-session tool trust
+/tools trust read        # trust all reads without asking
+/tools trust shell       # trust shell commands without asking
+/tools trust-all          # trust everything for this session (with warning)
+</code></pre>
+
+<p>The right policy depends on the context:</p>
+
+<ul>
+  <li><strong>Interactive development</strong> — ask before writes and commands (<code>on-request</code> or <code>ask</code>). You review each change before it lands.</li>
+  <li><strong>CI / automated</strong> — <code>never</code> (fully autonomous, runs in a sandbox). No human to approve.</li>
+  <li><strong>Trusted tasks</strong> — trust reads and grep, ask before writes. You let it explore freely but gate changes.</li>
+</ul>
+
+<h2 id="when-agents-help-vs-when-they-hurt">When agents help vs. when they hurt</h2>
+<p><span class="level advanced">Advanced</span> Agents are powerful but not universal. Knowing when to use the loop vs. when to write a one-shot prompt is a real skill:</p>
+
+<table>
+  <thead><tr><th>Good for agents</th><th>Bad for agents (use a chatbot instead)</th></tr></thead>
+  <tbody>
+    <tr><td>Multi-file refactors (read, edit, verify across files)</td><td>Single function you can paste into chat</td></tr>
+    <tr><td>"Make the tests pass" (run, read failure, fix, repeat)</td><td>One question about a concept</td></tr>
+    <tr><td>Setting up a project from scratch (create files, install, configure)</td><td>Understanding existing code (read it yourself)</td></tr>
+    <tr><td>Migrating patterns across a codebase (find all, replace, verify)</td><td>Architecture decisions (think, don't delegate)</td></tr>
+    <tr><td>Repetitive, well-specified tasks (add error handling to every endpoint)</td><td>Vague, exploratory work ("make it better")</td></tr>
+  </tbody>
+</table>
+
+<blockquote class="tip">The rule of thumb: if the task has a <strong>clear acceptance criterion</strong> (tests pass, build succeeds, all files use the new pattern), agents excel. If the task is <strong>open-ended</strong> ("improve the architecture"), the agent will make changes that look right but aren't what you wanted. Use agents for "make it match this spec," not "figure out what the spec should be."</blockquote>
+
+<h2 id="mcp-connecting-agents-to-external-tools">MCP: connecting agents to external tools</h2>
+<p><span class="level advanced">Advanced</span> The <strong>Model Context Protocol</strong> (MCP) is a standard way to give agents access to external tools — databases, APIs, GitHub, issue trackers — without each agent implementing its own integration. An MCP server exposes tools; the agent connects to it and can call those tools in its loop.</p>
+
+<pre><code># Codex CLI: add an MCP server
+codex mcp add github -- npx -y @modelcontextprotocol/server-github
+
+# Kiro CLI: add an MCP server
+kiro-cli mcp add --name github \
+  --command "npx -y @modelcontextprotocol/server-github" \
+  --scope workspace
+
+# Now the agent can call the server's tools:
+# - search_code(query): search GitHub repos
+# - create_issue(title, body): open an issue
+# - get_file_contents(owner, repo, path): read a file from GitHub
+</code></pre>
+
+<p>MCP is the bridge between "the model can read and write files" and "the model can interact with the rest of your infrastructure." With a database MCP server, the agent can query your schema. With a GitHub MCP server, it can read issues and create PRs. The tools become part of the agent's loop.</p>
+
+<h2 id="steering-files-persistent-instructions-for-agents">Steering files: persistent instructions for agents</h2>
+<p><span class="level advanced">Advanced</span> A <strong>steering file</strong> (AGENTS.md, .kiro/steering/*.md, CLAUDE.md) is a markdown file in your repo that the agent reads automatically at the start of every session. It's how you give the agent project-specific rules without restating them every time:</p>
+
+<pre><code># AGENTS.md (in the repo root)
+# Project: Tutorials PWA
+# Runtime: Bun only. No npm dependencies.
+# 
+# To add a lesson: register in scripts/lessons.js, write content/<section>/<slug>.html,
+# then `bun run build && bun run check`. The build must be deterministic (no timestamps).
+# Never hand-edit docs/ — it's generated output.
+</code></pre>
+
+<p>Without a steering file, every agent session starts from scratch — the model knows general programming but nothing about your project's conventions. With one, the agent immediately knows your build commands, your test runner, your style rules, and your traps. The <a href="agents-md-best-practices.html">AGENTS.md Best Practices</a> lesson covers how to write them well.</p>
+
+<h2 id="common-mistakes">Common mistakes</h2>
+<ul>
+  <li><strong>Trusting the agent without verification.</strong> The agent writes syntax-valid code that looks right. Always read the diff and run the tests yourself.</li>
+  <li><strong>Disabling the sandbox.</strong> <code>danger-full-access</code> or <code>--yolo</code> is for throwaway environments, not your development machine. The model can do real damage with shell access.</li>
+  <li><strong>Vague tasks.</strong> "Make it better" gives you changes you didn't want. "Make the tests pass" or "add error handling to every endpoint that returns JSON" gives you something the agent can verify.</li>
+  <li><strong>Not managing context.</strong> Long sessions fill the window. Use <code>/compact</code> when the agent starts losing track, or start a new session for a new task.</li>
+  <li><strong>Using an agent for a single-function question.</strong> If you can paste one function into a chat window, do that. Spinning up an agent session for a one-liner is overhead for no benefit.</li>
+  <li><strong>Expecting the agent to "figure out" the spec.</strong> Agents execute specs, they don't write them. If you don't know what you want, the agent's output will reflect that ambiguity.</li>
+  <li><strong>Forgetting that tool outputs consume context.</strong> A verbose command output can eat thousands of tokens. Pipe through <code>grep</code>, <code>head</code>, or <code>--format</code> to keep it lean.</li>
+</ul>
+
+<h2 id="exercises">Exercises</h2>
+<ol>
+  <li>Install Codex CLI or Kiro CLI (see the dedicated lessons) and run it in <code>read-only</code> sandbox mode. Ask it to "explain the build process in this repo." Observe how it reads files and reasons about them.</li>
+  <li>Switch to <code>workspace-write</code> and ask the agent to "add a comment to each exported function in one file." Review every change it makes before approving. How many did it get right?</li>
+  <li>Run a long agent session (10+ turns) and then use <code>/compact</code> (or let it auto-compact). Observe: does the agent "remember" details from before compaction? What's lost?</li>
+  <li>Configure an MCP server (e.g., the filesystem or GitHub server) in your agent. Ask it to use that server's tools. Observe how MCP tools appear in the agent's loop.</li>
+  <li>Write an AGENTS.md for your project with 5 specific rules. Run two agent sessions — one with the AGENTS.md present and one without — on the same task. Compare the output quality and convention-adherence.</li>
+</ol>
+
+<h2 id="mini-project-build-a-test-fixing-agent-session">Mini-project: Build a test-fixing agent session</h2>
+<p>Pick a project with a failing test. Start an agent session (Codex CLI or Kiro CLI) with a <code>workspace-write</code> sandbox and <code>on-request</code> approvals. Ask it to "make all tests pass." Watch the loop: it runs the tests, reads the failure, reads the code, edits, re-runs. After it finishes, review every change, run the full test suite yourself, and document: how many turns did it take? What did it get right? What did it get wrong? Would you trust this PR?</p>
+
+<section class="further"><h2 id="further-reading">Further reading</h2>
+<p>Official documentation for the tools and APIs covered on this page:</p>
+<ul class="further-list"><li><a href="https://www.anthropic.com/engineering/building-effective-agents" target="_blank" rel="noopener">Anthropic: Building effective agents ↗</a></li>
+<li><a href="https://platform.openai.com/docs/guides/tools" target="_blank" rel="noopener">OpenAI: Agents overview ↗</a></li>
+<li><a href="https://modelcontextprotocol.io/" target="_blank" rel="noopener">Model Context Protocol (MCP) ↗</a></li></ul></section>
+  <nav class="pager">
+<a class="prev" href="prompt-engineering.html"><small>Previous</small>🤖 Prompt Engineering</a>
+<a class="next" href="agents-md-best-practices.html"><small>Next</small>🤖 AGENTS.md Best Practices</a>
+  </nav>
+</main>
+<button type="button" class="fab top" id="fab-top" aria-label="Back to top">↑ Top</button>
+<div class="banner" id="update-banner" role="status">A new version is available.<button type="button">Reload</button></div>
+<div class="banner" id="offline-banner" role="status">You're offline — showing cached lessons.</div>
+<script src="../app.js" defer></script>
+</body>
+</html>

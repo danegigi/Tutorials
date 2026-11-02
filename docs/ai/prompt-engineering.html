@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="en" data-base="../">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0d1117">
+<title>Prompt Engineering — AI</title>
+<meta name="description" content="System prompts, few-shot, chain-of-thought, structured output (JSON mode), and the patterns that turn a model's first draft into reliable, repeatable output.">
+<link rel="canonical" href="https://danegigi.github.io/Tutorials/ai/prompt-engineering.html">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Dev Tutorials">
+<meta property="og:title" content="Prompt Engineering — AI">
+<meta property="og:description" content="System prompts, few-shot, chain-of-thought, structured output (JSON mode), and the patterns that turn a model's first draft into reliable, repeatable output.">
+<meta property="og:url" content="https://danegigi.github.io/Tutorials/ai/prompt-engineering.html">
+<meta property="og:image" content="https://danegigi.github.io/Tutorials/icon-512.png">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Prompt Engineering — AI">
+<meta name="twitter:description" content="System prompts, few-shot, chain-of-thought, structured output (JSON mode), and the patterns that turn a model's first draft into reliable, repeatable output.">
+<meta name="twitter:image" content="https://danegigi.github.io/Tutorials/icon-512.png">
+<link rel="manifest" href="../manifest.webmanifest">
+<link rel="icon" href="../icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="../icon-192.png">
+<link rel="stylesheet" href="../app.css">
+<script>/* set theme before paint to avoid flash */(function(){try{var t=localStorage.getItem('tut.theme');document.documentElement.setAttribute('data-theme',t||'dark');}catch(e){document.documentElement.setAttribute('data-theme','dark');}})();</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"LearningResource","name":"Prompt Engineering","description":"System prompts, few-shot, chain-of-thought, structured output (JSON mode), and the patterns that turn a model's first draft into reliable, repeatable output.","url":"https://danegigi.github.io/Tutorials/ai/prompt-engineering.html","inLanguage":"en","isPartOf":{"@type":"Course","name":"AI — Dev Tutorials","url":"https://danegigi.github.io/Tutorials/ai/"},"learningResourceType":"Tutorial"},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Dev Tutorials","item":"https://danegigi.github.io/Tutorials/"},{"@type":"ListItem","position":2,"name":"AI","item":"https://danegigi.github.io/Tutorials/ai/"},{"@type":"ListItem","position":3,"name":"Prompt Engineering","item":"https://danegigi.github.io/Tutorials/ai/prompt-engineering.html"}]}]}</script>
+
+</head>
+<body class="lesson">
+<header class="nav">
+  <a class="brand" href="../index.html">📚 Dev Tutorials</a>
+  <span class="crumb">Prompt Engineering — AI</span>
+  <span class="spacer"></span>
+  <a class="navbtn" href="../search.html">🔎 Search</a>
+  <button class="navbtn" id="install-btn" type="button">⬇️ Install</button>
+  <button class="navbtn" id="theme-btn" type="button" aria-label="Toggle theme">🌙 Dark</button>
+</header>
+<main class="wrap lesson-body">
+  <h1 class="page-title">Prompt Engineering</h1>
+  <div class="lesson-tools" data-lesson-id="ai/prompt-engineering">
+    <button id="done-btn" type="button" aria-pressed="false">○ Mark complete</button>
+    <button id="mark-btn" type="button" aria-pressed="false">☆ Bookmark</button>
+    <a class="navbtn" href="index.html" style="margin-left:auto">All AI lessons →</a>
+  </div>
+<nav class="toc" aria-label="On this page"><strong>On this page</strong><ul>
+<li class="lvl2"><a href="#the-system-message-your-most-powerful-tool">The system message: your most powerful tool</a></li>
+<li class="lvl2"><a href="#few-shot-prompting">Few-shot prompting</a></li>
+<li class="lvl2"><a href="#chain-of-thought">Chain-of-thought</a></li>
+<li class="lvl2"><a href="#structured-output-json-mode">Structured output (JSON mode)</a></li>
+<li class="lvl2"><a href="#prompt-templates-and-variables">Prompt templates and variables</a></li>
+<li class="lvl2"><a href="#context-priming-and-ordering">Context priming and ordering</a></li>
+<li class="lvl2"><a href="#handling-refusals-and-over-refusals">Handling refusals and over-refusals</a></li>
+<li class="lvl2"><a href="#iterating-on-prompts">Iterating on prompts</a></li>
+<li class="lvl2"><a href="#common-mistakes">Common mistakes</a></li>
+<li class="lvl2"><a href="#exercises">Exercises</a></li>
+<li class="lvl2"><a href="#mini-project-build-a-structured-output-code-reviewer">Mini-project: Build a structured-output code reviewer</a></li>
+</ul></nav>
+<p class="lead">Prompt engineering is not "talking to the AI nicely." It's the practice of structuring your input so the model produces reliable, repeatable output. The patterns are few, they're simple, and they compound — a good system message plus structured output plus few-shot examples turns a model that sometimes writes correct code into one that almost always does.</p>
+
+<h2 id="the-system-message-your-most-powerful-tool">The system message: your most powerful tool</h2>
+<p><span class="level beginner">Beginner</span> The <strong>system message</strong> is the instruction that shapes the model's behavior for the entire conversation. Without one, the model defaults to "generic helpful assistant" — and generic is exactly what you don't want when you need consistent, specific output.</p>
+
+<p>A good system message has three parts:</p>
+
+<pre><code>SYSTEM MESSAGE (the pattern):
+
+1. ROLE       — who the model is ("You are a senior Go code reviewer")
+2. RULES      — what to do and not do ("Never use any. Flag unused variables.
+                 Always suggest a test for each fix.")
+3. FORMAT     — how to structure output ("Respond with a bullet list of issues,
+                 each followed by a suggested fix in a code block.")
+</code></pre>
+
+<pre><code>// API: a system message that works
+{
+  "model": "llama3.2",
+  "messages": [
+    {
+      "role": "system",
+      "content": "You are a senior Go code reviewer. Rules:
+        - Flag unused variables, missing error handling, and goroutine leaks
+        - Suggest a test for each fix
+        - Use Go idioms (not Python or Java patterns)
+        - If the code is fine, say 'No issues found'
+      Format: respond with a bullet list. Each issue: the problem, then the fix in a code block."
+    },
+    { "role": "user", "content": "Review this: func work() { go func() { ... }() }" }
+  ]
+}
+</code></pre>
+
+<blockquote class="tip">The system message is where AGENTS.md files get their power. An AGENTS.md is essentially a persistent system message that every agent session in the repo automatically reads. The same rules that make a good system message — specific role, explicit rules, clear format — make a good AGENTS.md. See the <a href="agents-md-best-practices.html">AGENTS.md Best Practices</a> lesson.</blockquote>
+
+<h2 id="few-shot-prompting">Few-shot prompting</h2>
+<p><span class="level beginner">Beginner</span> <strong>Few-shot</strong> means showing the model examples of the input-output pattern you want, before asking your real question. The model is a pattern matcher — give it the pattern, and it follows it.</p>
+
+<pre><code>// Zero-shot (no examples — the model guesses the format)
+USER: Extract the name and age.
+INPUT: "John Smith, age 34, lives in Portland"
+→ "The person's name is John Smith and they are 34 years old..."  (rambles)
+
+// Few-shot (examples define the exact pattern)
+USER: Extract the name and age.
+EXAMPLES:
+INPUT: "Jane Doe, age 29, lives in Seattle"
+OUTPUT: {"name": "Jane Doe", "age": 29}
+
+INPUT: "Bob Lee, age 45, lives in Austin"
+OUTPUT: {"name": "Bob Lee", "age": 45}
+
+INPUT: "John Smith, age 34, lives in Portland"
+→ {"name": "John Smith", "age": 34}  (exact format, no rambling)
+</code></pre>
+
+<p>The number of examples matters less than their <strong>consistency</strong>. Two well-chosen examples often beat five mediocre ones. The model learns the <em>pattern</em> from the examples, not the content — so make sure all examples follow exactly the same format.</p>
+
+<blockquote class="warn">If your examples are inconsistent — different casing, sometimes a trailing comma, sometimes not — the model will replicate that inconsistency. Few-shot amplifies whatever pattern you show it, good or bad. Proofread your examples like production code.</blockquote>
+
+<h2 id="chain-of-thought">Chain-of-thought</h2>
+<p><span class="level intermediate">Intermediate</span> <strong>Chain-of-thought</strong> (CoT) means asking the model to reason step by step before giving its answer. This measurably improves accuracy on multi-step problems because the model builds up context that helps each prediction.</p>
+
+<pre><code>// Without CoT (the model jumps to an answer and gets it wrong)
+USER: A store has 23 apples. A customer buys 17 and returns 3. How many left?
+→ 9  (wrong — it did 23 - 17 = 6, then added 3 back as 9, but
+      the "returns 3" means the customer gave 3 back to the store)
+
+// With CoT (the model shows its work and gets it right)
+USER: A store has 23 apples. A customer buys 17 and returns 3. How many left?
+      Think step by step.
+→ Step 1: Store starts with 23 apples.
+  Step 2: Customer buys 17. Store has 23 - 17 = 6 apples.
+  Step 3: Customer returns 3 apples. Store has 6 + 3 = 9 apples.
+  Answer: 9 apples.
+</code></pre>
+
+<p>You don't need the magic words "think step by step" — you can be more specific:</p>
+
+<pre><code>// Better CoT: specify what to reason about
+"Before answering, identify the entities, their relationships,
+ and the operations. Then compute step by step."
+
+// For code:
+"Before writing the function, list the edge cases you need to handle.
+ Then write the function. Then add a comment for each edge case."
+</code></pre>
+
+<blockquote class="tip">For <strong>reasoning models</strong> (o1, o3, DeepSeek-R1), you don't need to add chain-of-thought — they do it internally. In fact, telling a reasoning model to "think step by step" can hurt, because it interferes with the model's internal thinking process. Use CoT with standard models (GPT-4, Claude, Llama), not reasoning models.</blockquote>
+
+<h2 id="structured-output-json-mode">Structured output (JSON mode)</h2>
+<p><span class="level intermediate">Intermediate</span> When you need the model's output to be machine-readable, ask for JSON and constrain the format. Most APIs support a <strong>JSON mode</strong> or <strong>structured output</strong> that guarantees valid JSON conforming to a schema you provide.</p>
+
+<pre><code>// OpenAI: structured output with a schema
+const response = await openai.chat.completions.create({
+  model: "gpt-4o",
+  response_format: {
+    type: "json_schema",
+    json_schema: {
+      name: "code_review",
+      schema: {
+        type: "object",
+        properties: {
+          issues: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                severity: { type: "string", enum: ["error", "warning", "info"] },
+                line: { type: "number" },
+                message: { type: "string" },
+                suggestion: { type: "string" }
+              },
+              required: ["severity", "message"]
+            }
+          },
+          summary: { type: "string" }
+        },
+        required: ["issues", "summary"]
+      }
+    }
+  },
+  messages: [
+    { role: "system", content: "You are a code reviewer. Output JSON." },
+    { role: "user", content: "Review this code: ..." }
+  ]
+});
+</code></pre>
+
+<pre><code>// Ollama: format json forces valid JSON output
+curl http://localhost:11434/api/generate -d '{
+  "model": "llama3.2",
+  "prompt": "List 3 git commands with descriptions as JSON",
+  "format": "json",
+  "stream": false
+}'
+# → {"commands": [
+#     {"command": "git init", "description": "Initialize a repo"},
+#     ...
+#   ]}
+</code></pre>
+
+<p>Without structured output, the model might wrap JSON in markdown (<code>```json ... ```</code>), add a preamble ("Here's the JSON:"), or produce slightly malformed JSON. Structured output eliminates that class of error entirely.</p>
+
+<blockquote class="warn">Even with JSON mode, the <em>content</em> of the JSON can be wrong — the model might put a wrong line number or fabricate a suggestion. JSON mode guarantees <em>format</em>, not <em>accuracy</em>. Always validate the values, not just the structure.</blockquote>
+
+<h2 id="prompt-templates-and-variables">Prompt templates and variables</h2>
+<p><span class="level intermediate">Intermediate</span> A <strong>prompt template</strong> is a reusable prompt with placeholders you fill in at runtime. This is how agentic tools send the same instruction with different inputs — the template stays fixed, the variables change.</p>
+
+<pre><code>// A prompt template (pseudocode)
+const reviewTemplate = `
+You are a {language} code reviewer.
+
+Review the following code for:
+{concerns}
+
+Code:
+\`\`\`{language}
+{code}
+\`\`\`
+
+Respond with a JSON array of issues.
+`;
+
+// Usage: fill in the variables
+const prompt = reviewTemplate
+  .replace("{language}", "go")
+  .replace("{concerns}", "goroutine leaks, missing error handling, SQL injection")
+  .replace("{code}", sourceCode);
+</code></pre>
+
+<p>Most frameworks (LangChain, Vercel AI SDK, Ollama's Modelfile <code>TEMPLATE</code>) have built-in template support. The principle is the same: separate the <em>instruction</em> (stable, written once) from the <em>input</em> (varies per call).</p>
+
+<h2 id="context-priming-and-ordering">Context priming and ordering</h2>
+<p><span class="level advanced">Advanced</span> Models pay more attention to the <strong>beginning and end</strong> of the prompt than the middle (the "lost in the middle" effect). When you provide a large context (a codebase, a doc), structure it so the most important instruction is first or last, not buried in the middle of a 50K-token dump.</p>
+
+<pre><code>// Bad: instruction buried in the middle of a code dump
+"Here's the codebase:
+[file 1... file 2... file 3... 40,000 tokens of code...]
+Fix the bug in the auth handler.
+[file 4... file 5... more code...]"
+// ↑ the model barely "sees" the instruction
+
+// Good: instruction first, context after
+"Fix the bug in the auth handler. The file is auth.go.
+Here is the relevant code:
+[only auth.go, not the whole repo]
+
+Here are the related files for context:
+[router.go, middleware.go]
+
+The error message is: panic: nil pointer at line 42"
+</code></pre>
+
+<blockquote class="tip">This is why coding agents don't dump your entire repo into the prompt. They use tools to <em>search</em> the codebase and pull in only the relevant files. The agent's job is to curate context — and curation is a skill the model can't do well with a wall of text.</blockquote>
+
+<h2 id="handling-refusals-and-over-refusals">Handling refusals and over-refusals</h2>
+<p><span class="level advanced">Advanced</span> Safety-tuned models sometimes refuse legitimate requests. A prompt that looks like it could be asking for something harmful — even when it isn't — triggers a refusal. The fixes are structural:</p>
+
+<pre><code>// Model refuses: "I can't help with that"
+USER: "How do I kill a process on port 8080?"
+→ "I can't assist with that request."
+// (the word "kill" triggered a safety filter)
+
+// Fix 1: add context that clarifies the intent
+USER: "In my development workflow, I need to stop a Go server
+       running on port 8080. How do I find and stop the process
+       using the terminal?"
+→ "Use lsof -ti tcp:8080 | xargs kill to find and stop it."
+
+// Fix 2: use the system message to set the context
+SYSTEM: "You are a development assistant helping a programmer
+         with local development tasks. All questions are about
+         the user's own development environment."
+</code></pre>
+
+<p>For coding agents, this is rarely a problem — the system message and the context (you're in a codebase, asking about code) make the intent clear. But when you see an unexpected refusal, rephrase with context rather than fighting the model.</p>
+
+<h2 id="iterating-on-prompts">Iterating on prompts</h2>
+<p><span class="level advanced">Advanced</span> Prompt engineering is empirical. You don't reason your way to the right prompt — you try, observe, and adjust. A practical loop:</p>
+
+<ol>
+  <li><strong>Start with the simplest prompt</strong> that could work. Zero-shot, no examples, minimal system message.</li>
+  <li><strong>Test on 3–5 inputs</strong> that span the cases you care about (easy, hard, edge case).</li>
+  <li><strong>Observe failure modes</strong>. Does it ramble? Get the format wrong? Miss edge cases? Hallucinate?</li>
+  <li><strong>Add one fix at a time</strong>. A system message rule. A few-shot example. A format instruction. Test after each change.</li>
+  <li><strong>Stop when it's reliable enough</strong>, not when it's perfect. Diminishing returns are real — the first three improvements matter most.</li>
+</ol>
+
+<blockquote class="warn">Don't add prompt complexity preemptively. A prompt with 20 rules "just in case" is harder to maintain and often <em>less</em> effective than a focused one, because the model has to weigh all 20 rules simultaneously. Add rules when you observe a failure, not when you imagine one.</blockquote>
+
+<h2 id="common-mistakes">Common mistakes</h2>
+<ul>
+  <li><strong>No system message.</strong> Without one, you get generic output. The system message is the single biggest lever for consistency.</li>
+  <li><strong>Inconsistent few-shot examples.</strong> If your examples don't all follow the exact same format, the model replicates the inconsistency.</li>
+  <li><strong>Asking for reasoning on a reasoning model.</strong> Telling o1 or DeepSeek-R1 to "think step by step" can interfere with their internal process. Use CoT with standard models only.</li>
+  <li><strong>Dumping everything into context.</strong> More is not better. Curate the context to what's relevant — the model pays less attention to things buried in the middle of a huge prompt.</li>
+  <li><strong>Adding rules preemptively.</strong> Start simple, observe failures, add one fix at a time. A 20-rule prompt is harder to maintain and often less effective.</li>
+  <li><strong>Trusting JSON mode for accuracy.</strong> JSON mode guarantees valid structure, not correct values. Validate the content, not just the shape.</li>
+  <li><strong>Fighting refusals by rephrasing evasively.</strong> Add context that clarifies intent instead of trying to trick the safety filter.</li>
+</ul>
+
+<h2 id="exercises">Exercises</h2>
+<ol>
+  <li>Write a system message for a "commit message generator" that reads a git diff and outputs a conventional commit (<code>type(scope): description</code>). Test it on 3 real diffs from your repo.</li>
+  <li>Create a few-shot prompt that converts natural-language database queries into SQL. Use 3 examples with different query types (SELECT, JOIN, GROUP BY). Test on a query not in your examples.</li>
+  <li>Call a local model with a math word problem, first without CoT and then with "think step by step." Compare the accuracy across 5 problems.</li>
+  <li>Write a prompt template for a code reviewer that takes <code>{language}</code>, <code>{code}</code>, and <code>{concerns}</code> as variables. Run it against a real function in your codebase.</li>
+  <li>Trigger an over-refusal by asking a model "how do I kill a process?" without context, then fix it by adding development context. Observe the difference.</li>
+</ol>
+
+<h2 id="mini-project-build-a-structured-output-code-reviewer">Mini-project: Build a structured-output code reviewer</h2>
+<p>Write a Bun script that takes a source file as input, sends it to a local Ollama model with a system message defining review rules and a JSON output schema, and prints a formatted table of issues (severity, line, message, suggestion). Use the <code>format: "json"</code> option to guarantee valid JSON. Then test it against 5 different source files with known issues (an unused variable, a missing error check, a goroutine without context cancellation) and verify it catches them.</p>
+
+<section class="further"><h2 id="further-reading">Further reading</h2>
+<p>Official documentation for the tools and APIs covered on this page:</p>
+<ul class="further-list"><li><a href="https://platform.openai.com/docs/guides/prompt-engineering" target="_blank" rel="noopener">OpenAI: Prompt engineering guide ↗</a></li>
+<li><a href="https://docs.anthropic.com/en/docs/build-with-claude/prompt-engineering/overview" target="_blank" rel="noopener">Anthropic: Prompt engineering ↗</a></li>
+<li><a href="https://ai.google.dev/gemini/docs/prompting-strategies" target="_blank" rel="noopener">Google: Prompt design strategies ↗</a></li></ul></section>
+  <nav class="pager">
+<a class="prev" href="ai-fundamentals.html"><small>Previous</small>🤖 AI &amp; LLM Fundamentals</a>
+<a class="next" href="agentic-coding.html"><small>Next</small>🤖 Agentic Coding</a>
+  </nav>
+</main>
+<button type="button" class="fab top" id="fab-top" aria-label="Back to top">↑ Top</button>
+<div class="banner" id="update-banner" role="status">A new version is available.<button type="button">Reload</button></div>
+<div class="banner" id="offline-banner" role="status">You're offline — showing cached lessons.</div>
+<script src="../app.js" defer></script>
+</body>
+</html>

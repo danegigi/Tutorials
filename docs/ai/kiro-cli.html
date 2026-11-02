@@ -1,0 +1,722 @@
+<!DOCTYPE html>
+<html lang="en" data-base="../">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0d1117">
+<title>Kiro CLI — AI</title>
+<meta name="description" content="Kiro's terminal coding agent — install, chat, agents, skills, steering, specs, workflows, MCP, hooks, permissions, headless/CI mode, and slash commands.">
+<link rel="canonical" href="https://danegigi.github.io/Tutorials/ai/kiro-cli.html">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Dev Tutorials">
+<meta property="og:title" content="Kiro CLI — AI">
+<meta property="og:description" content="Kiro's terminal coding agent — install, chat, agents, skills, steering, specs, workflows, MCP, hooks, permissions, headless/CI mode, and slash commands.">
+<meta property="og:url" content="https://danegigi.github.io/Tutorials/ai/kiro-cli.html">
+<meta property="og:image" content="https://danegigi.github.io/Tutorials/icon-512.png">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Kiro CLI — AI">
+<meta name="twitter:description" content="Kiro's terminal coding agent — install, chat, agents, skills, steering, specs, workflows, MCP, hooks, permissions, headless/CI mode, and slash commands.">
+<meta name="twitter:image" content="https://danegigi.github.io/Tutorials/icon-512.png">
+<link rel="manifest" href="../manifest.webmanifest">
+<link rel="icon" href="../icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="../icon-192.png">
+<link rel="stylesheet" href="../app.css">
+<script>/* set theme before paint to avoid flash */(function(){try{var t=localStorage.getItem('tut.theme');document.documentElement.setAttribute('data-theme',t||'dark');}catch(e){document.documentElement.setAttribute('data-theme','dark');}})();</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"LearningResource","name":"Kiro CLI","description":"Kiro's terminal coding agent — install, chat, agents, skills, steering, specs, workflows, MCP, hooks, permissions, headless/CI mode, and slash commands.","url":"https://danegigi.github.io/Tutorials/ai/kiro-cli.html","inLanguage":"en","isPartOf":{"@type":"Course","name":"AI — Dev Tutorials","url":"https://danegigi.github.io/Tutorials/ai/"},"learningResourceType":"Tutorial"},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Dev Tutorials","item":"https://danegigi.github.io/Tutorials/"},{"@type":"ListItem","position":2,"name":"AI","item":"https://danegigi.github.io/Tutorials/ai/"},{"@type":"ListItem","position":3,"name":"Kiro CLI","item":"https://danegigi.github.io/Tutorials/ai/kiro-cli.html"}]}]}</script>
+
+</head>
+<body class="lesson">
+<header class="nav">
+  <a class="brand" href="../index.html">📚 Dev Tutorials</a>
+  <span class="crumb">Kiro CLI — AI</span>
+  <span class="spacer"></span>
+  <a class="navbtn" href="../search.html">🔎 Search</a>
+  <button class="navbtn" id="install-btn" type="button">⬇️ Install</button>
+  <button class="navbtn" id="theme-btn" type="button" aria-label="Toggle theme">🌙 Dark</button>
+</header>
+<main class="wrap lesson-body">
+  <h1 class="page-title">Kiro CLI</h1>
+  <div class="lesson-tools" data-lesson-id="ai/kiro-cli">
+    <button id="done-btn" type="button" aria-pressed="false">○ Mark complete</button>
+    <button id="mark-btn" type="button" aria-pressed="false">☆ Bookmark</button>
+    <a class="navbtn" href="index.html" style="margin-left:auto">All AI lessons →</a>
+  </div>
+<nav class="toc" aria-label="On this page"><strong>On this page</strong><ul>
+<li class="lvl2"><a href="#install-and-sign-in">Install and sign in</a></li>
+<li class="lvl2"><a href="#starting-a-chat">Starting a chat</a></li>
+<li class="lvl3"><a href="#harness-versions-v2-vs-v3">Harness versions (V2 vs V3)</a></li>
+<li class="lvl2"><a href="#core-chat-commands-slash-commands">Core chat commands (slash commands)</a></li>
+<li class="lvl3"><a href="#sessions-and-context">Sessions and context</a></li>
+<li class="lvl3"><a href="#models-and-context">Models and context</a></li>
+<li class="lvl3"><a href="#input-shortcuts">Input shortcuts</a></li>
+<li class="lvl2"><a href="#agents-skills-and-steering">Agents, skills, and steering</a></li>
+<li class="lvl3"><a href="#agents">Agents</a></li>
+<li class="lvl3"><a href="#skills">Skills</a></li>
+<li class="lvl3"><a href="#steering-files">Steering files</a></li>
+<li class="lvl3"><a href="#powers-v3">Powers (V3)</a></li>
+<li class="lvl2"><a href="#specs-workflows-and-goals-v3">Specs, workflows, and goals (V3)</a></li>
+<li class="lvl3"><a href="#specs">Specs</a></li>
+<li class="lvl3"><a href="#workflows">Workflows</a></li>
+<li class="lvl3"><a href="#goals">Goals</a></li>
+<li class="lvl3"><a href="#tangents-conversation-branches">Tangents (conversation branches)</a></li>
+<li class="lvl2"><a href="#sub-agents-and-spawning">Sub-agents and spawning</a></li>
+<li class="lvl2"><a href="#mcp-servers">MCP servers</a></li>
+<li class="lvl2"><a href="#hooks-v3">Hooks (V3)</a></li>
+<li class="lvl2"><a href="#permissions-and-workspace-trust">Permissions and workspace trust</a></li>
+<li class="lvl2"><a href="#headless-mode-and-ci">Headless mode and CI</a></li>
+<li class="lvl3"><a href="#exit-codes">Exit codes</a></li>
+<li class="lvl2"><a href="#settings-and-configuration">Settings and configuration</a></li>
+<li class="lvl3"><a href="#key-settings-in-kirosettingsclijson">Key settings (in ~/.kiro/settings/cli.json)</a></li>
+<li class="lvl3"><a href="#environment-variables">Environment variables</a></li>
+<li class="lvl2"><a href="#keyboard-shortcuts">Keyboard shortcuts</a></li>
+<li class="lvl2"><a href="#code-intelligence-and-maintenance">Code intelligence and maintenance</a></li>
+<li class="lvl2"><a href="#cloud-sessions-v3-preview">Cloud sessions (V3, preview)</a></li>
+<li class="lvl2"><a href="#acp-agent-client-protocol">ACP (Agent Client Protocol)</a></li>
+<li class="lvl2"><a href="#common-mistakes">Common mistakes</a></li>
+<li class="lvl2"><a href="#exercises">Exercises</a></li>
+<li class="lvl2"><a href="#mini-project-build-a-kiro-cli-ci-review-pipeline">Mini-project: Build a Kiro CLI CI review pipeline</a></li>
+</ul></nav>
+<p class="lead"><strong>Kiro CLI</strong> is Kiro's terminal-based coding agent. It reads your codebase, writes code, runs commands, and connects to external services — all through natural conversation. This lesson covers install, interactive chat, agents and skills, steering files, specs and workflows, MCP servers, hooks, permissions, the headless/CI mode, and the slash commands you'll use every day.</p>
+
+<h2 id="install-and-sign-in">Install and sign in</h2>
+<p><span class="level beginner">Beginner</span></p>
+
+<pre><code># macOS or Linux
+curl -fsSL https://cli.kiro.dev/install | bash
+
+# Windows 11 (PowerShell in Windows Terminal)
+irm 'https://cli.kiro.dev/install.ps1' | iex
+
+# Verify
+kiro-cli --version
+
+# Sign in (browser-based)
+kiro-cli login
+
+# Sign in via device code (no browser on this machine)
+kiro-cli login --use-device-flow
+
+# Check your identity
+kiro-cli whoami
+# → Signed in as user@example.com
+
+# Sign out
+kiro-cli logout
+</code></pre>
+
+<blockquote class="tip">Kiro CLI uses advanced agent functionality from the Q Developer CLI (agent mode, MCP, steering, custom agents) and adds social login and Kiro's "Auto" model, which balances performance, efficiency, and output quality. The <code>Auto</code> model is the default — it picks the best model for the task automatically.</blockquote>
+
+<h2 id="starting-a-chat">Starting a chat</h2>
+<p><span class="level beginner">Beginner</span></p>
+
+<pre><code># Start an interactive session in the current directory
+kiro-cli chat
+
+# Start with an initial prompt
+kiro-cli chat "Explain this repository"
+
+# Start with a specific agent profile
+kiro-cli chat --agent project-helper
+
+# Start with a specific model
+kiro-cli chat --model "claude-sonnet-4-5"
+kiro-cli chat --model "ollama/qwen2.5-coder:7b"
+
+# Set reasoning effort
+kiro-cli chat --effort high
+
+# List available models
+kiro-cli chat --list-models
+kiro-cli chat --list-models --format json
+
+# Resume the previous session in this directory
+kiro-cli chat --resume
+kiro-cli chat -r
+
+# Resume a specific session by ID
+kiro-cli chat --resume-id SESSION_ID
+
+# Pick from saved sessions
+kiro-cli chat --resume-picker
+
+# List saved sessions
+kiro-cli chat --list-sessions
+
+# Delete a session
+kiro-cli chat --delete-session SESSION_ID
+</code></pre>
+
+<h3 id="harness-versions-v2-vs-v3">Harness versions (V2 vs V3)</h3>
+<p>Kiro CLI has two agent harnesses. Their saved session formats are incompatible — resume a session with the harness that created it:</p>
+
+<pre><code># Select the harness for this invocation
+kiro-cli chat --v2     # V2 harness
+kiro-cli chat --v3     # V3 harness (newer, has specs, workflows, tangents)
+
+# Force the terminal UI
+kiro-cli --tui
+
+# Use the deprecated Classic UI (V2 only)
+kiro-cli --classic
+</code></pre>
+
+<h2 id="core-chat-commands-slash-commands">Core chat commands (slash commands)</h2>
+<p><span class="level beginner">Beginner</span> Inside the interactive chat, type <code>/</code> to see available commands. The most essential ones:</p>
+
+<h3 id="sessions-and-context">Sessions and context</h3>
+<table>
+  <thead><tr><th>Command</th><th>Purpose</th></tr></thead>
+  <tbody>
+    <tr><td><code>/help</code></td><td>Show interactive command help</td></tr>
+    <tr><td><code>/chat new [prompt]</code></td><td>Start a new local conversation</td></tr>
+    <tr><td><code>/chat resume</code></td><td>Resume a saved local conversation</td></tr>
+    <tr><td><code>/chat save &lt;path&gt;</code></td><td>Save a resumable session archive</td></tr>
+    <tr><td><code>/chat load &lt;path&gt;</code></td><td>Load a session archive</td></tr>
+    <tr><td><code>/clear</code></td><td>Clear conversation state (doesn't start a new session)</td></tr>
+    <tr><td><code>/compact</code></td><td>Summarize older history to free context space</td></tr>
+    <tr><td><code>/rewind [turn]</code></td><td>Fork from an earlier turn (preserves original)</td></tr>
+    <tr><td><code>/transcript</code></td><td>Open the conversation transcript</td></tr>
+    <tr><td><code>/quit</code></td><td>Exit (aliases: <code>/exit</code>, <code>/q</code>)</td></tr>
+  </tbody>
+</table>
+
+<h3 id="models-and-context">Models and context</h3>
+<table>
+  <thead><tr><th>Command</th><th>Purpose</th></tr></thead>
+  <tbody>
+    <tr><td><code>/model [id]</code></td><td>Open the model picker or choose by ID</td></tr>
+    <tr><td><code>/effort &lt;level&gt;</code></td><td>Change reasoning effort (low/medium/high/xhigh/max)</td></tr>
+    <tr><td><code>/context show</code></td><td>Show session context rules</td></tr>
+    <tr><td><code>/context add &lt;path&gt;</code></td><td>Add temporary session context</td></tr>
+    <tr><td><code>/context remove &lt;path&gt;</code></td><td>Remove a context rule</td></tr>
+    <tr><td><code>/context clear</code></td><td>Clear temporary context rules</td></tr>
+    <tr><td><code>/editor</code></td><td>Edit the prompt in your <code>$EDITOR</code></td></tr>
+    <tr><td><code>/copy</code></td><td>Copy last response to clipboard</td></tr>
+    <tr><td><code>/paste</code></td><td>Attach a clipboard image</td></tr>
+  </tbody>
+</table>
+
+<h3 id="input-shortcuts">Input shortcuts</h3>
+<pre><code>@&lt;path&gt;          # Reference a file or directory
+@&lt;prompt-name&gt;   # Insert a saved prompt
+!&lt;command&gt;       # Run a local shell command yourself
+</code></pre>
+
+<h2 id="agents-skills-and-steering">Agents, skills, and steering</h2>
+<p><span class="level intermediate">Intermediate</span> Kiro CLI's power comes from its extensibility — custom agents, installed skills, and steering files that customize behavior per project.</p>
+
+<h3 id="agents">Agents</h3>
+<p>An <strong>agent</strong> is a named profile with a model, tools, and instructions. You can switch agents mid-session:</p>
+
+<pre><code># List available agents
+kiro-cli agent list
+
+# Create a custom agent profile
+kiro-cli agent create code-reviewer
+
+# Edit an agent profile (opens in $EDITOR)
+kiro-cli agent edit code-reviewer
+
+# Set the default agent for new sessions
+kiro-cli agent set-default code-reviewer
+
+# Validate an agent configuration file
+kiro-cli agent validate path/to/agent.json
+
+# Switch agents during chat
+/agent list
+/agent swap code-reviewer
+</code></pre>
+
+<p>Agent profiles live in <code>.kiro/agents/</code> (workspace) or <code>~/.kiro/agents/</code> (user). A workspace profile takes precedence over a same-name user profile:</p>
+
+<pre><code>// .kiro/agents/project-helper.json
+{
+  "name": "project-helper",
+  "model": "claude-sonnet-4-5",
+  "resources": [
+    "file://.kiro/steering/**/*.md",
+    "skill://.kiro/skills/*/SKILL.md"
+  ]
+}
+</code></pre>
+
+<h3 id="skills">Skills</h3>
+<p>A <strong>Skill</strong> is an installed capability — a markdown file with instructions the agent can invoke on demand:</p>
+
+<pre><code># Invoke an installed skill (in chat)
+/code-review       # runs the code-review skill
+/deploy-check      # runs the deploy-check skill
+
+# Skills are dynamic — they appear as slash commands when installed
+# Install skills through the Kiro UI or by placing them in .kiro/skills/
+</code></pre>
+
+<p>Skills live in <code>.kiro/skills/&lt;name&gt;/SKILL.md</code> (workspace) or <code>~/.kiro/skills/&lt;name&gt;/SKILL.md</code> (user). Each skill's YAML frontmatter declares its name and description.</p>
+
+<h3 id="steering-files">Steering files</h3>
+<p><strong>Steering files</strong> are markdown instructions loaded at session start — like AGENTS.md but more flexible, since you can split them by topic:</p>
+
+<pre><code># Workspace steering files (loaded for every session in this repo)
+.kiro/steering/
+├── project-conventions.md    ← coding style, patterns
+├── security.md               ← auth rules, secret handling
+└── deployment.md              ← how to deploy, what not to touch
+
+# User-level steering (applies to all your projects)
+~/.kiro/steering/
+└── global.md                  ← secrets, git rules, scope rules
+
+# View what's loaded
+/context show
+</code></pre>
+
+<p>Instructions from both scopes are combined. Workspace instructions take precedence when they conflict. See the <a href="agents-md-best-practices.html">AGENTS.md Best Practices</a> lesson for how to write effective steering rules.</p>
+
+<h3 id="powers-v3">Powers (V3)</h3>
+<pre><code># List installed Powers
+/powers
+
+# Install a Power from the catalog
+/powers install code-intelligence
+# or via CLI:
+kiro-cli powers install code-intelligence
+
+# Uninstall
+/powers uninstall code-intelligence
+</code></pre>
+
+<h2 id="specs-workflows-and-goals-v3">Specs, workflows, and goals (V3)</h2>
+<p><span class="level advanced">Advanced</span> V3 adds structured workflows for complex tasks.</p>
+
+<h3 id="specs">Specs</h3>
+<p>A <strong>spec</strong> is a structured design document that drives implementation. Specs live in <code>.kiro/specs/</code>:</p>
+
+<pre><code># Create a spec
+/spec new add-auth
+
+# View a spec document (requirements, design, or tasks)
+/spec view add-auth requirements
+/spec view add-auth design
+/spec view add-auth tasks
+
+# Execute spec tasks (the agent works through the task list)
+/spec run add-auth
+
+# Resume spec work
+/spec add-auth
+</code></pre>
+
+<h3 id="workflows">Workflows</h3>
+<p><strong>Workflows</strong> are reusable, multi-step recipes:</p>
+
+<pre><code># Enable workflows first (Settings → Features → Workflows, then restart)
+/settings features
+
+# Start a workflow recipe
+/workflow run review-pr inputs '{"pr_number": 42}'
+
+# Create a reusable workflow from a description
+/workflow new "Review a PR: read the diff, check for security issues, post comments"
+
+# List workflow runs
+/workflow list
+
+# Check status of a run
+/workflow status WORKFLOW_ID
+
+# Pause/resume a run
+/workflow pause WORKFLOW_ID
+/workflow resume WORKFLOW_ID
+
+# Cancel a run (file changes already made remain on disk)
+/workflow cancel WORKFLOW_ID
+
+# Retry failed work (preserves completed sibling work)
+/workflow retry WORKFLOW_ID [nodeId]
+</code></pre>
+
+<h3 id="goals">Goals</h3>
+<p>A <strong>goal</strong> is a bounded iteration loop — the agent pursues an objective up to N times:</p>
+
+<pre><code># Pursue an objective (default max 5 iterations)
+/goal "Make all tests pass"
+
+# Set a custom max
+/goal --max 10 "Migrate all endpoints from Express to Hono"
+
+# Stop the goal loop (completed changes remain)
+/goal clear
+</code></pre>
+
+<h3 id="tangents-conversation-branches">Tangents (conversation branches)</h3>
+<pre><code># Switch to or create a named branch
+/tangent experiment-a
+/tangent refactor-auth
+
+# List branches
+/tangent ls
+
+# Return to root conversation
+/tangent root
+</code></pre>
+
+<h2 id="sub-agents-and-spawning">Sub-agents and spawning</h2>
+<p><span class="level advanced">Advanced</span> You can start a separate session for parallel work without leaving the current chat:</p>
+
+<pre><code># Start a separate session for parallel work
+/spawn --name "test-fix" "Fix the failing tests while I work on the API"
+
+# The spawned session runs independently
+# Monitor subagents:
+Ctrl+G    # Open the crew monitor
+q         # Close the monitor
+Ctrl+D    # Move between subagents (while monitor is open)
+</code></pre>
+
+<h2 id="mcp-servers">MCP servers</h2>
+<p><span class="level advanced">Advanced</span> Connect external tools via the Model Context Protocol:</p>
+
+<pre><code># Add a local MCP server (stdio)
+kiro-cli mcp add \
+  --name github \
+  --command "npx -y @modelcontextprotocol/server-github" \
+  --scope workspace
+
+# Add with environment variables
+kiro-cli mcp add --name db --command "npx my-db-server" \
+  --env API_KEY=secret --timeout 30000 --scope global
+
+# List configured servers
+kiro-cli mcp list
+kiro-cli mcp list workspace
+
+# Remove a server
+kiro-cli mcp remove --name github --scope workspace
+
+# Import from a JSON file
+kiro-cli mcp import --file mcp-servers.json workspace
+
+# Check a server's status
+kiro-cli mcp status --name github
+
+# Inside chat:
+/mcp                    # Inspect MCP servers
+/mcp auth &lt;server&gt;      # Start OAuth authentication
+/mcp logout &lt;server&gt;    # Clear OAuth login
+/mcp add                # Manage registry servers (org-required)
+</code></pre>
+
+<p>MCP configuration lives in <code>.kiro/settings/mcp.json</code> (workspace) or <code>~/.kiro/settings/mcp.json</code> (user):</p>
+
+<pre><code>// .kiro/settings/mcp.json
+{
+  "mcpServers": {
+    "github": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-github"],
+      "env": { "GITHUB_TOKEN": "${GITHUB_TOKEN}" }
+    },
+    "my-api": {
+      "url": "https://api.example.com/mcp",
+      "headers": { "Authorization": "Bearer ${API_TOKEN}" }
+    },
+    "disabled-server": {
+      "command": "...",
+      "disabled": true
+    }
+  }
+}
+</code></pre>
+
+<blockquote class="warn">Configure MCP credentials separately from Kiro authentication. Project <code>.env</code> files no longer load automatically into chats, tools, or MCP servers — export required environment variables before launch.</blockquote>
+
+<h2 id="hooks-v3">Hooks (V3)</h2>
+<p><span class="level advanced">Advanced</span> Hooks are lifecycle events that trigger commands or instructions. They're stored as JSON files in <code>.kiro/hooks/</code> or <code>~/.kiro/hooks/</code>:</p>
+
+<pre><code>// .kiro/hooks/repository-status.json
+{
+  "version": "v1",
+  "hooks": [
+    {
+      "name": "repository-status",
+      "trigger": "UserPromptSubmit",
+      "action": {
+        "type": "command",
+        "command": "git status --short"
+      },
+      "timeout": 60,
+      "enabled": true
+    }
+  ]
+}
+</code></pre>
+
+<p>Available triggers:</p>
+
+<table>
+  <thead><tr><th>Trigger</th><th>When it fires</th></tr></thead>
+  <tbody>
+    <tr><td><code>SessionStart</code></td><td>When a new V3 session starts</td></tr>
+    <tr><td><code>SessionEnd</code></td><td>When the session shuts down (V3)</td></tr>
+    <tr><td><code>UserPromptSubmit</code></td><td>When you submit a prompt</td></tr>
+    <tr><td><code>PreToolUse</code></td><td>Before a tool executes (exit code 2 blocks it)</td></tr>
+    <tr><td><code>PostToolUse</code></td><td>After a tool executes</td></tr>
+    <tr><td><code>Stop</code></td><td>After the agent finishes a response</td></tr>
+  </tbody>
+</table>
+
+<pre><code># Inspect configured hooks
+/hooks
+</code></pre>
+
+<h2 id="permissions-and-workspace-trust">Permissions and workspace trust</h2>
+<p><span class="level advanced">Advanced</span> V3 uses capability-based permissions. Rules live in <code>permissions.yaml</code> — user rules at <code>~/.kiro/settings/permissions.yaml</code>, workspace rules at <code>~/.kiro/workspace-roots/&lt;hash&gt;/permissions.yaml</code>:</p>
+
+<pre><code># User-level permissions (~/.kiro/settings/permissions.yaml)
+rules:
+  # Always allow file reads
+  - capability: fs_read
+    effect: allow
+
+  # Ask before writing files
+  - capability: fs_write
+    effect: ask
+
+  # Ask before running shell commands
+  - capability: shell
+    effect: ask
+
+  # Never allow recursive deletes
+  - capability: shell
+    effect: deny
+    match: "rm -rf *"
+
+  # Ask before web access
+  - capability: web_fetch
+    effect: ask
+</code></pre>
+
+<p>Rule effects: <code>allow</code>, <code>ask</code>, <code>deny</code>. The most restrictive matching effect wins: deny &gt; ask &gt; allow. Patterns support <code>*</code> within one path component and <code>**</code> across directories.</p>
+
+<pre><code># Inside chat:
+/tools              # Inspect runtime tool controls
+/tools schema       # Show the tool schema
+/tools reset        # Reset to defaults
+/tools trust-all    # V3: grant session-wide override (shows warning)
+/tools trust read   # V2: trust a tool category
+/tools untrust read # V2: untrust a tool category
+</code></pre>
+
+<blockquote class="tip">V3 prompts for workspace trust on first open. Untrusted workspaces have restricted shell execution and writes. This is a safety feature — if you're in an unfamiliar repo, don't trust it until you've reviewed it.</blockquote>
+
+<h2 id="headless-mode-and-ci">Headless mode and CI</h2>
+<p><span class="level advanced">Advanced</span> For scripts and CI, run Kiro CLI without the interactive UI:</p>
+
+<pre><code># Headless: non-interactive, V2
+kiro-cli chat --v2 --no-interactive \
+  --trust-tools=read,grep \
+  --output-format stream-json \
+  "Summarize this repository"
+
+# Headless: non-interactive, V3
+kiro-cli chat --v3 --no-interactive \
+  --output-format stream-json \
+  "Fix the failing tests"
+
+# Pipe a task via stdin
+cat task.txt | kiro-cli chat --v3 --no-interactive
+
+# Trust all tools for the session (hard denies remain)
+kiro-cli chat --no-interactive --trust-all-tools "Run the linter"
+
+# Wait for MCP startup before sending the prompt
+kiro-cli chat --no-interactive --require-mcp-startup "Query the database"
+
+# API key required for headless mode
+export KIRO_API_KEY="your-api-key"
+</code></pre>
+
+<h3 id="exit-codes">Exit codes</h3>
+<table>
+  <thead><tr><th>Code</th><th>Meaning</th></tr></thead>
+  <tbody>
+    <tr><td>0</td><td>Successful completion</td></tr>
+    <tr><td>1</td><td>General failure</td></tr>
+    <tr><td>3</td><td>MCP startup failure with <code>--require-mcp-startup</code></td></tr>
+  </tbody>
+</table>
+
+<h2 id="settings-and-configuration">Settings and configuration</h2>
+<pre><code># List configured settings (add --all for defaults)
+kiro-cli settings list
+kiro-cli settings list --all
+
+# Read a setting
+kiro-cli settings chat.defaultModel
+
+# Write a setting
+kiro-cli settings chat.defaultModel "claude-sonnet-4-5"
+kiro-cli settings chat.defaultAgent "code-reviewer"
+kiro-cli settings chat.showThinking true
+
+# Delete a setting
+kiro-cli settings --delete chat.defaultAgent
+kiro-cli settings -d chat.defaultAgent
+
+# Open the global settings file
+kiro-cli settings open
+
+# Interactive settings (in chat)
+/settings                    # open settings menu
+/settings theme              # change theme
+/settings terminal           # terminal options
+/settings display            # display options
+/settings features           # enable features (e.g., Workflows)
+</code></pre>
+
+<h3 id="key-settings-in-kirosettingsclijson">Key settings (in ~/.kiro/settings/cli.json)</h3>
+<table>
+  <thead><tr><th>Setting</th><th>Purpose</th></tr></thead>
+  <tbody>
+    <tr><td><code>chat.defaultAgent</code></td><td>Default agent for new sessions</td></tr>
+    <tr><td><code>chat.defaultModel</code></td><td>Default model for new sessions</td></tr>
+    <tr><td><code>chat.historyMode</code></td><td><code>session</code> (default) or <code>global</code> (shared history)</td></tr>
+    <tr><td><code>chat.ui</code></td><td><code>tui</code> (default) or <code>classic</code></td></tr>
+    <tr><td><code>chat.showThinking</code></td><td>Show thinking details (default: true)</td></tr>
+    <tr><td><code>chat.disableAutoCompaction</code></td><td>Control automatic context compaction</td></tr>
+    <tr><td><code>chat.keybindings.quit</code></td><td>Customize the quit keybinding</td></tr>
+  </tbody>
+</table>
+
+<h3 id="environment-variables">Environment variables</h3>
+<table>
+  <thead><tr><th>Variable</th><th>Purpose</th></tr></thead>
+  <tbody>
+    <tr><td><code>KIRO_HOME</code></td><td>Override the global Kiro data directory</td></tr>
+    <tr><td><code>KIRO_CHAT_UI</code></td><td>Override the saved UI choice</td></tr>
+    <tr><td><code>EDITOR</code></td><td>External prompt/config editor</td></tr>
+    <tr><td><code>PAGER</code></td><td>Transcript pager (default: less)</td></tr>
+    <tr><td><code>KIRO_LOG_LEVEL</code></td><td>Logging: error, warn, info, debug, trace</td></tr>
+    <tr><td><code>KIRO_ASCII_MODE</code></td><td>Set to 1 for ASCII terminal output</td></tr>
+    <tr><td><code>KIRO_API_KEY</code></td><td>API key for headless/CI mode</td></tr>
+    <tr><td><code>NO_COLOR</code></td><td>Disable color output</td></tr>
+  </tbody>
+</table>
+
+<h2 id="keyboard-shortcuts">Keyboard shortcuts</h2>
+<p><span class="level intermediate">Intermediate</span></p>
+
+<table>
+  <thead><tr><th>Key</th><th>Action</th></tr></thead>
+  <tbody>
+    <tr><td><code>Shift+Enter</code>, <code>Ctrl+J</code>, <code>Alt/Option+Enter</code></td><td>Insert a newline</td></tr>
+    <tr><td><code>Up</code> / <code>Down</code></td><td>Navigate prompt history</td></tr>
+    <tr><td><code>Ctrl+R</code></td><td>Search prompt history backward</td></tr>
+    <tr><td><code>Ctrl+W</code>, <code>Alt+Backspace</code></td><td>Delete previous word</td></tr>
+    <tr><td><code>Ctrl+L</code></td><td>Clear the terminal (doesn't clear context)</td></tr>
+    <tr><td><code>Ctrl+O</code></td><td>Expand tool output and thinking details</td></tr>
+    <tr><td><code>Ctrl+T</code></td><td>Open transcript view</td></tr>
+    <tr><td><code>Ctrl+G</code></td><td>Open crew monitor (subagents/spawned sessions)</td></tr>
+    <tr><td><code>Ctrl+X</code></td><td>Open activity tray / checkpoint review</td></tr>
+    <tr><td><code>Shift+Tab</code></td><td>Toggle Plan mode (read-only)</td></tr>
+    <tr><td><code>Ctrl+S</code></td><td>Switch between steering and queued input</td></tr>
+    <tr><td><code>Esc</code></td><td>Close menu / cancel streamed response</td></tr>
+    <tr><td><code>Ctrl+C</code> / <code>Ctrl+D</code></td><td>Exit (with queued steering: cancels work, sends message)</td></tr>
+    <tr><td><code>Ctrl+Z</code> twice</td><td>Suspend session</td></tr>
+  </tbody>
+</table>
+
+<h2 id="code-intelligence-and-maintenance">Code intelligence and maintenance</h2>
+<pre><code># Code Intelligence (language server) status
+/code status
+
+# Show workspace overview
+/code overview
+
+# Inspect language-server logs
+/code logs
+
+# Initialize language-server config
+/code init
+
+# Knowledge index (V3)
+/knowledge show
+/knowledge add --name docs --path ./docs
+/knowledge search "How does auth work?"
+
+# Voice input (if supported)
+/voice
+
+# Update Kiro CLI
+kiro-cli update
+
+# Run diagnostics
+kiro-cli doctor --all
+kiro-cli doctor --format json
+
+# Show changelog
+kiro-cli version --changelog
+
+# Uninstall
+kiro-cli uninstall
+</code></pre>
+
+<h2 id="cloud-sessions-v3-preview">Cloud sessions (V3, preview)</h2>
+<pre><code># Start a V3 cloud session with a repo
+kiro-cli --cloud --repo owner/repo
+
+# Choose or change the repo in a cloud session
+/repo owner/repo
+
+# Detach from a cloud session (it continues running)
+/disconnect
+</code></pre>
+
+<h2 id="acp-agent-client-protocol">ACP (Agent Client Protocol)</h2>
+<pre><code># Run the ACP server for editor integration (stdio JSON-RPC 2.0)
+kiro-cli acp --agent project-helper
+</code></pre>
+
+<h2 id="common-mistakes">Common mistakes</h2>
+<ul>
+  <li><strong>Mixing V2 and V3 session formats.</strong> V2 and V3 have incompatible saved session formats. Resume a session with the harness that created it.</li>
+  <li><strong>Forgetting <code>--no-interactive</code> in CI.</strong> Without it, the CLI tries to open the TUI and hangs waiting for input. Always set it for scripts.</li>
+  <li><strong>Not setting <code>KIRO_API_KEY</code> for headless mode.</strong> Headless runs require an API key, available with Pro/Pro+/Pro Max/Power access.</li>
+  <li><strong>Forgetting to enable Workflows.</strong> Workflows require enabling under <code>/settings features</code> and a restart before <code>/workflow</code> commands appear.</li>
+  <li><strong>Trusting an unfamiliar workspace.</strong> V3 prompts for trust on first open. Don't trust a repo you haven't reviewed — untrusted workspaces restrict shell and writes.</li>
+  <li><strong>Expecting <code>.env</code> to auto-load.</strong> Project <code>.env</code> files no longer load automatically. Export environment variables before launch, or configure them in MCP server settings.</li>
+  <li><strong>Not using steering files.</strong> Without <code>.kiro/steering/*.md</code> or <code>AGENTS.md</code>, every session starts from scratch. A few well-written steering files massively improve consistency.</li>
+  <li><strong>Letting context grow without compaction.</strong> Long sessions fill the window. Use <code>/compact</code> when the agent starts losing track.</li>
+  <li><strong>Using <code>--trust-all-tools</code> carelessly.</strong> It grants a session-wide override. Hard denies in permissions.yaml remain in force, but everything else runs without asking.</li>
+</ul>
+
+<h2 id="exercises">Exercises</h2>
+<ol>
+  <li>Install Kiro CLI, sign in, and start a chat. Ask it to "explain the project structure" and observe how it reads files and reasons about them.</li>
+  <li>Create a custom agent profile (e.g., a "test-runner" agent) in <code>.kiro/agents/</code> with a specific model and resources. Switch to it mid-session with <code>/agent swap</code>.</li>
+  <li>Write a steering file in <code>.kiro/steering/project-conventions.md</code> with 5 project-specific rules. Start a new session and verify with <code>/context show</code> that it's loaded.</li>
+  <li>Configure an MCP server (e.g., the GitHub or filesystem server) and ask Kiro CLI to use it. List the available tools with <code>/mcp</code>.</li>
+  <li>Run a headless session: <code>kiro-cli chat --v3 --no-interactive --output-format stream-json "Summarize this repo"</code>. Parse the JSON output in a script.</li>
+  <li>Create a hook that runs <code>git status --short</code> on <code>UserPromptSubmit</code>. Start a session and verify the hook fires when you submit a prompt.</li>
+</ol>
+
+<h2 id="mini-project-build-a-kiro-cli-ci-review-pipeline">Mini-project: Build a Kiro CLI CI review pipeline</h2>
+<p>Write a GitHub Actions workflow that runs <code>kiro-cli chat --v3 --no-interactive --output-format stream-json --require-mcp-startup "Review the PR diff and list security issues as JSON"</code> on every pull request. Store <code>KIRO_API_KEY</code> as a CI secret. Parse the JSONL output to extract the issues and post them as a PR comment using the GitHub API. Add a steering file (<code>.kiro/steering/review-rules.md</code>) that defines the review rules (flag SQL injection, missing auth checks, hardcoded secrets). Test the pipeline on a PR with a deliberate security issue and verify it's caught.</p>
+
+<section class="further"><h2 id="further-reading">Further reading</h2>
+<p>Official documentation for the tools and APIs covered on this page:</p>
+<ul class="further-list"><li><a href="https://kiro.dev/docs/cli/" target="_blank" rel="noopener">Kiro CLI docs ↗</a></li>
+<li><a href="https://kiro.dev/docs/cli/setup/" target="_blank" rel="noopener">Kiro CLI setup guide ↗</a></li>
+<li><a href="https://kiro.dev/docs/reference/cli-commands/" target="_blank" rel="noopener">Kiro CLI commands reference ↗</a></li></ul></section>
+  <nav class="pager">
+<a class="prev" href="codex-cli.html"><small>Previous</small>🤖 Codex CLI</a>
+<a class="next" href="../index.html"><small>Done</small>📚 Dashboard</a>
+  </nav>
+</main>
+<button type="button" class="fab top" id="fab-top" aria-label="Back to top">↑ Top</button>
+<div class="banner" id="update-banner" role="status">A new version is available.<button type="button">Reload</button></div>
+<div class="banner" id="offline-banner" role="status">You're offline — showing cached lessons.</div>
+<script src="../app.js" defer></script>
+</body>
+</html>

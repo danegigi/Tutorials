@@ -29,7 +29,7 @@ docs/                    # BUILD OUTPUT. Committed. Never hand-edit.
 .github/workflows/ci.yml # build + check + "docs/ in sync" gate
 ```
 
-Section ids: `golang`, `bun`, `web`, `linux`, `devops`.
+Section ids: `golang`, `bun`, `web`, `linux`, `devops`, `ai`.
 
 ## Commands
 

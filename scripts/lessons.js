@@ -1335,6 +1335,87 @@ export const SECTIONS = [
       },
     ],
   },
+  // ─────────────────────────────────────────────────────────────── AI ──
+  {
+    id: "ai",
+    title: "AI",
+    icon: "🤖",
+    tagline: "From LLM fundamentals and prompt engineering to agentic coding, AGENTS.md, and hands-on tooling with Ollama, Codex CLI, and Kiro CLI.",
+    accent: "#8b5cf6",
+    lessons: [
+      {
+        slug: "ai-fundamentals",
+        title: "AI & LLM Fundamentals",
+        blurb: "What large language models actually are — tokens, context windows, temperature, sampling, system/user/assistant roles, and the mental model that makes everything else click.",
+        further: [
+          ref("OpenAI: Introduction to LLMs", "https://platform.openai.com/docs/guides/llm-vs-ai"),
+          ref("Anthropic: Intro to large language models", "https://docs.anthropic.com/en/docs/resources/concepts-llm"),
+          ref("Google: Introduction to generative AI", "https://cloud.google.com/learn/what-is-generative-ai"),
+        ],
+      },
+      {
+        slug: "prompt-engineering",
+        title: "Prompt Engineering",
+        blurb: "System prompts, few-shot, chain-of-thought, structured output (JSON mode), and the patterns that turn a model's first draft into reliable, repeatable output.",
+        further: [
+          ref("OpenAI: Prompt engineering guide", "https://platform.openai.com/docs/guides/prompt-engineering"),
+          ref("Anthropic: Prompt engineering", "https://docs.anthropic.com/en/docs/build-with-claude/prompt-engineering/overview"),
+          ref("Google: Prompt design strategies", "https://ai.google.dev/gemini/docs/prompting-strategies"),
+        ],
+      },
+      {
+        slug: "agentic-coding",
+        title: "Agentic Coding",
+        blurb: "What an AI coding agent is — tool use, function calling, the agentic loop, context management, sandboxes, approval policies, and when agents help versus when they hurt.",
+        further: [
+          ref("Anthropic: Building effective agents", "https://www.anthropic.com/engineering/building-effective-agents"),
+          ref("OpenAI: Agents overview", "https://platform.openai.com/docs/guides/tools"),
+          ref("Model Context Protocol (MCP)", "https://modelcontextprotocol.io/"),
+        ],
+      },
+      {
+        slug: "agents-md-best-practices",
+        title: "AGENTS.md Best Practices",
+        blurb: "How to write AGENTS.md files that actually steer coding agents — structure, scope, what to include versus exclude, hierarchy, and the rules that save you from a model's confident mistakes.",
+        further: [
+          ref("AGENTS.md specification", "https://agents.md/"),
+          ref("Codex: AGENTS.md guide", "https://github.com/openai/codex/blob/main/docs/agents.md"),
+          ref("Kiro: Steering and AGENTS.md", "https://kiro.dev/docs/steering/"),
+        ],
+      },
+      {
+        slug: "local-models-with-ollama",
+        title: "Local Models with Ollama",
+        blurb: "Run LLMs on your own machine — install Ollama, pull models, chat, serve the API, create custom Modelfiles, pick the right model, and integrate with editors and agents.",
+        further: [
+          ref("Ollama docs", "https://github.com/ollama/ollama#readme"),
+          ref("Ollama CLI reference", "https://docs.ollama.com/cli"),
+          ref("Ollama API reference", "https://github.com/ollama/ollama/blob/main/docs/api.md"),
+          ref("Ollama model library", "https://ollama.com/library"),
+        ],
+      },
+      {
+        slug: "codex-cli",
+        title: "Codex CLI",
+        blurb: "OpenAI's terminal coding agent — install, interactive and non-interactive modes, exec, review, sessions, sandbox modes, MCP servers, config, and slash commands.",
+        further: [
+          ref("Codex CLI (GitHub)", "https://github.com/openai/codex"),
+          ref("Codex CLI docs", "https://help.openai.com/en/articles/11381614-codex-cli-and-sign-in-with-chatgpt"),
+          ref("Codex configuration guide", "https://github.com/openai/codex/blob/main/docs/config.md"),
+        ],
+      },
+      {
+        slug: "kiro-cli",
+        title: "Kiro CLI",
+        blurb: "Kiro's terminal coding agent — install, chat, agents, skills, steering, specs, workflows, MCP, hooks, permissions, headless/CI mode, and slash commands.",
+        further: [
+          ref("Kiro CLI docs", "https://kiro.dev/docs/cli/"),
+          ref("Kiro CLI setup guide", "https://kiro.dev/docs/cli/setup/"),
+          ref("Kiro CLI commands reference", "https://kiro.dev/docs/reference/cli-commands/"),
+        ],
+      },
+    ],
+  },
 ];
 
 // ── Derived helpers (used by the generator, search, and service worker) ──

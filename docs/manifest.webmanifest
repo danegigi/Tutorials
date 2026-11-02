@@ -59,6 +59,10 @@
     {
       "name": "DevOps",
       "url": "./devops/index.html"
+    },
+    {
+      "name": "AI",
+      "url": "./ai/index.html"
     }
   ]
 }

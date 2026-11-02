@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html lang="en" data-base="../">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0d1117">
+<title>Codex CLI — AI</title>
+<meta name="description" content="OpenAI's terminal coding agent — install, interactive and non-interactive modes, exec, review, sessions, sandbox modes, MCP servers, config, and slash commands.">
+<link rel="canonical" href="https://danegigi.github.io/Tutorials/ai/codex-cli.html">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Dev Tutorials">
+<meta property="og:title" content="Codex CLI — AI">
+<meta property="og:description" content="OpenAI's terminal coding agent — install, interactive and non-interactive modes, exec, review, sessions, sandbox modes, MCP servers, config, and slash commands.">
+<meta property="og:url" content="https://danegigi.github.io/Tutorials/ai/codex-cli.html">
+<meta property="og:image" content="https://danegigi.github.io/Tutorials/icon-512.png">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Codex CLI — AI">
+<meta name="twitter:description" content="OpenAI's terminal coding agent — install, interactive and non-interactive modes, exec, review, sessions, sandbox modes, MCP servers, config, and slash commands.">
+<meta name="twitter:image" content="https://danegigi.github.io/Tutorials/icon-512.png">
+<link rel="manifest" href="../manifest.webmanifest">
+<link rel="icon" href="../icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="../icon-192.png">
+<link rel="stylesheet" href="../app.css">
+<script>/* set theme before paint to avoid flash */(function(){try{var t=localStorage.getItem('tut.theme');document.documentElement.setAttribute('data-theme',t||'dark');}catch(e){document.documentElement.setAttribute('data-theme','dark');}})();</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"LearningResource","name":"Codex CLI","description":"OpenAI's terminal coding agent — install, interactive and non-interactive modes, exec, review, sessions, sandbox modes, MCP servers, config, and slash commands.","url":"https://danegigi.github.io/Tutorials/ai/codex-cli.html","inLanguage":"en","isPartOf":{"@type":"Course","name":"AI — Dev Tutorials","url":"https://danegigi.github.io/Tutorials/ai/"},"learningResourceType":"Tutorial"},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Dev Tutorials","item":"https://danegigi.github.io/Tutorials/"},{"@type":"ListItem","position":2,"name":"AI","item":"https://danegigi.github.io/Tutorials/ai/"},{"@type":"ListItem","position":3,"name":"Codex CLI","item":"https://danegigi.github.io/Tutorials/ai/codex-cli.html"}]}]}</script>
+
+</head>
+<body class="lesson">
+<header class="nav">
+  <a class="brand" href="../index.html">📚 Dev Tutorials</a>
+  <span class="crumb">Codex CLI — AI</span>
+  <span class="spacer"></span>
+  <a class="navbtn" href="../search.html">🔎 Search</a>
+  <button class="navbtn" id="install-btn" type="button">⬇️ Install</button>
+  <button class="navbtn" id="theme-btn" type="button" aria-label="Toggle theme">🌙 Dark</button>
+</header>
+<main class="wrap lesson-body">
+  <h1 class="page-title">Codex CLI</h1>
+  <div class="lesson-tools" data-lesson-id="ai/codex-cli">
+    <button id="done-btn" type="button" aria-pressed="false">○ Mark complete</button>
+    <button id="mark-btn" type="button" aria-pressed="false">☆ Bookmark</button>
+    <a class="navbtn" href="index.html" style="margin-left:auto">All AI lessons →</a>
+  </div>
+<nav class="toc" aria-label="On this page"><strong>On this page</strong><ul>
+<li class="lvl2"><a href="#install-and-sign-in">Install and sign in</a></li>
+<li class="lvl2"><a href="#interactive-mode-the-tui">Interactive mode (the TUI)</a></li>
+<li class="lvl3"><a href="#keyboard-shortcuts-in-the-tui">Keyboard shortcuts in the TUI</a></li>
+<li class="lvl2"><a href="#non-interactive-mode-exec">Non-interactive mode (exec)</a></li>
+<li class="lvl3"><a href="#sandbox-modes-for-exec">Sandbox modes for exec</a></li>
+<li class="lvl3"><a href="#resuming-and-forking-sessions">Resuming and forking sessions</a></li>
+<li class="lvl2"><a href="#code-review">Code review</a></li>
+<li class="lvl2"><a href="#session-management">Session management</a></li>
+<li class="lvl2"><a href="#slash-commands-in-the-tui">Slash commands (in the TUI)</a></li>
+<li class="lvl2"><a href="#sandbox-modes-deep-dive">Sandbox modes (deep dive)</a></li>
+<li class="lvl2"><a href="#mcp-servers">MCP servers</a></li>
+<li class="lvl2"><a href="#configuration-configtoml">Configuration (config.toml)</a></li>
+<li class="lvl3"><a href="#key-config-options">Key config options</a></li>
+<li class="lvl2"><a href="#cloud-mode">Cloud mode</a></li>
+<li class="lvl2"><a href="#agentsmd-integration">AGENTS.md integration</a></li>
+<li class="lvl2"><a href="#diagnostics-and-troubleshooting">Diagnostics and troubleshooting</a></li>
+<li class="lvl3"><a href="#common-troubleshooting">Common troubleshooting</a></li>
+<li class="lvl2"><a href="#common-mistakes">Common mistakes</a></li>
+<li class="lvl2"><a href="#exercises">Exercises</a></li>
+<li class="lvl2"><a href="#mini-project-set-up-a-codex-ci-pipeline">Mini-project: Set up a Codex CI pipeline</a></li>
+</ul></nav>
+<p class="lead"><strong>Codex CLI</strong> is OpenAI's terminal-based coding agent. You describe a task in plain language, and it reads your codebase, proposes changes, runs commands, and iterates — with as much or as little involvement from you as you choose. This lesson covers install, the interactive TUI, non-interactive <code>exec</code> mode, code review, session management, the sandbox system, MCP servers, configuration, and the slash commands you'll use every day.</p>
+
+<h2 id="install-and-sign-in">Install and sign in</h2>
+<p><span class="level beginner">Beginner</span></p>
+
+<pre><code># Install via npm (the scoped package — NOT bare "codex")
+npm install -g @openai/codex
+
+# Or via Homebrew
+brew install codex
+
+# Verify
+codex --version
+# → codex 0.166.0
+
+# Sign in (browser OAuth with ChatGPT account, or API key)
+codex login
+# → Opens browser for sign-in...
+# → Or: codex login --with-api-key (reads OPENAI_API_KEY)
+
+# Check you're signed in
+codex login status
+# → Signed in as user@example.com
+</code></pre>
+
+<blockquote class="warn">The npm package is <code>@openai/codex</code> (scoped). The bare <code>codex</code> package is an unrelated 2012 project — installing it silently succeeds and does nothing useful. Always use <code>npm install -g @openai/codex</code>.</blockquote>
+
+<h2 id="interactive-mode-the-tui">Interactive mode (the TUI)</h2>
+<p><span class="level beginner">Beginner</span> Run <code>codex</code> with no arguments to start an interactive terminal session in the current directory. You type a task in plain language; the agent reads files, proposes edits, and runs commands, asking for approval before changes land.</p>
+
+<pre><code># Start an interactive session in the current repo
+codex
+# → Interactive TUI opens
+# &gt; Fix the failing tests in the auth package
+
+# The agent will:
+# 1. Run the tests (with your approval)
+# 2. Read the failing test + the source file
+# 3. Propose an edit (review and approve or reject)
+# 4. Re-run the tests to verify
+# 5. Report the result
+
+# Start with an initial prompt
+codex "Explain the build process in this repo"
+
+# Start in a specific directory
+codex -C /path/to/project
+
+# Attach an image (screenshot of an error, UI mockup)
+codex -i screenshot.png "Fix the layout shown in this screenshot"
+
+# Use a specific model
+codex -m o3 "Refactor this for readability"
+codex -m gpt-4.1 "Write tests for the auth module"
+</code></pre>
+
+<h3 id="keyboard-shortcuts-in-the-tui">Keyboard shortcuts in the TUI</h3>
+<table>
+  <thead><tr><th>Key</th><th>Action</th></tr></thead>
+  <tbody>
+    <tr><td><code>Ctrl+C</code></td><td>Cancel the current execution</td></tr>
+    <tr><td><code>Ctrl+D</code></td><td>Close the CLI (when input is empty)</td></tr>
+    <tr><td><code>Ctrl+G</code></td><td>Open external editor for long prompts</td></tr>
+    <tr><td><code>Ctrl+L</code></td><td>Clear the screen (doesn't start a new chat)</td></tr>
+    <tr><td><code>Ctrl+O</code></td><td>Copy last response to clipboard</td></tr>
+    <tr><td><code>Ctrl+R</code></td><td>Reverse search through prompt history</td></tr>
+    <tr><td><code>Alt+,</code> / <code>Alt+.</code></td><td>Lower / raise reasoning depth</td></tr>
+    <tr><td><code>Tab</code></td><td>Queue follow-up text or slash commands while agent works</td></tr>
+    <tr><td><code>Esc+Esc</code></td><td>Edit your previous user message</td></tr>
+    <tr><td><code>@</code></td><td>Fuzzy file search to attach files</td></tr>
+    <tr><td><code>!</code></td><td>Run a shell command directly (at start of input)</td></tr>
+  </tbody>
+</table>
+
+<h2 id="non-interactive-mode-exec">Non-interactive mode (exec)</h2>
+<p><span class="level intermediate">Intermediate</span> <code>codex exec</code> runs a task without interactive prompts and streams output to stdout. This is the mode you use in scripts, CI pipelines, and automation:</p>
+
+<pre><code># Run a task non-interactively
+codex exec "Fix the failing tests"
+codex exec "Add error handling to every API endpoint"
+
+# Output as JSONL (one JSON event per line — for scripts)
+codex exec --json "Summarize the architecture"
+# → {"type":"message","content":"The project is a..."}
+# → {"type":"tool_use","tool":"read_file",...}
+# → {"type":"message","content":"In summary..."}
+
+# Save the agent's last message to a file
+codex exec -o /tmp/result.txt "List all TODO comments"
+
+# Run in a specific directory
+codex exec -C /path/to/project "Run the linter and fix issues"
+
+# Run outside a git repo (normally Codex requires one)
+codex exec --skip-git-repo-check "Explain this file"
+
+# Run with a specific model and reasoning effort
+codex exec -m o3 -c model_reasoning_effort='"xhigh"' "Find the race condition"
+</code></pre>
+
+<h3 id="sandbox-modes-for-exec">Sandbox modes for exec</h3>
+<pre><code># read-only: the agent can read but not write (safe, good for analysis)
+codex exec -s read-only "Explain this codebase"
+
+# workspace-write: can write in the repo (default for most tasks)
+codex exec -s workspace-write "Fix the bug in auth.go"
+
+# danger-full-access: no restrictions (rare, only in hardened environments)
+codex exec -s danger-full-access "Install dependencies and run setup"
+
+# Approval policy (must appear BEFORE exec):
+codex -a never exec -s workspace-write "Fix the tests"     # never ask (CI)
+codex -a on-request exec "Refactor the models"              # ask when it wants to (default)
+</code></pre>
+
+<blockquote class="warn">For CI and automation, always set the approval policy explicitly: <code>codex -a never exec -s workspace-write "..."</code>. Without <code>-a never</code>, the agent will wait for approval that never comes and hang. The <code>-a</code> flag is global and must appear before the <code>exec</code> subcommand.</blockquote>
+
+<h3 id="resuming-and-forking-sessions">Resuming and forking sessions</h3>
+<pre><code># Resume the last session (interactively)
+codex resume
+
+# Resume non-interactively
+codex exec resume --last "Continue with the tests"
+
+# Fork a previous session into a new thread
+codex exec fork SESSION_ID "Try a different approach"
+
+# Fork interactively
+codex fork
+</code></pre>
+
+<h2 id="code-review">Code review</h2>
+<p><span class="level intermediate">Intermediate</span> <code>codex review</code> analyzes code changes non-interactively and prints results to stdout. It doesn't modify files — it's a reviewer, not an editor:</p>
+
+<pre><code># Review uncommitted changes (staged, unstaged, untracked)
+codex review --uncommitted
+
+# Review changes against a base branch
+codex review --base main
+
+# Review a specific commit
+codex review --commit abc1234
+
+# Review with custom instructions (focus on security)
+codex review "Focus on SQL injection and authentication issues"
+
+# Review with custom instructions via stdin
+echo "Check for goroutine leaks" | codex review -
+
+# Output as JSON (for CI integration)
+codex exec review --uncommitted --json
+</code></pre>
+
+<h2 id="session-management">Session management</h2>
+<p><span class="level intermediate">Intermediate</span> Non-ephemeral sessions are saved locally. You can resume, fork, archive, or delete them:</p>
+
+<pre><code># Resume an interactive session (session picker)
+codex resume
+
+# Archive a session (removes from picker, keeps transcript)
+codex archive SESSION
+
+# Restore an archived session
+codex unarchive SESSION
+
+# Permanently delete a session
+codex delete SESSION
+
+# List sessions (in the TUI, use the session picker)
+# In the TUI: /resume
+</code></pre>
+
+<h2 id="slash-commands-in-the-tui">Slash commands (in the TUI)</h2>
+<p><span class="level intermediate">Intermediate</span> Inside the interactive TUI, type <code>/</code> to open the command list. The most useful ones:</p>
+
+<table>
+  <thead><tr><th>Command</th><th>Purpose</th></tr></thead>
+  <tbody>
+    <tr><td><code>/new [name]</code></td><td>Start a new chat</td></tr>
+    <tr><td><code>/resume [ID]</code></td><td>Resume a saved session</td></tr>
+    <tr><td><code>/model [id]</code></td><td>Choose or change the model (and reasoning effort)</td></tr>
+    <tr><td><code>/compact</code></td><td>Summarize conversation to free context space</td></tr>
+    <tr><td><code>/diff</code></td><td>Show the Git diff (including untracked files)</td></tr>
+    <tr><td><code>/clear</code></td><td>Clear terminal and start a fresh chat</td></tr>
+    <tr><td><code>/init</code></td><td>Generate an AGENTS.md scaffold for project context</td></tr>
+    <tr><td><code>/mcp</code></td><td>List MCP tools (verbose shows details)</td></tr>
+    <tr><td><code>/memories</code></td><td>Configure memory use and generation</td></tr>
+    <tr><td><code>/plan [prompt]</code></td><td>Switch to plan mode (read-only, no writes)</td></tr>
+    <tr><td><code>/skills</code></td><td>Browse and use skills</td></tr>
+    <tr><td><code>/config</code></td><td>Open settings search and change options</td></tr>
+    <tr><td><code>/theme</code></td><td>Choose syntax highlighting theme</td></tr>
+    <tr><td><code>/export [path]</code></td><td>Export the conversation as Markdown</td></tr>
+    <tr><td><code>/usage [daily|weekly]</code></td><td>View account token usage</td></tr>
+    <tr><td><code>/quit</code></td><td>Exit (alias: <code>/exit</code>)</td></tr>
+  </tbody>
+</table>
+
+<pre><code># In the TUI:
+/model gpt-4.1 --reasoning=high    # switch model + reasoning
+/init                                # generate AGENTS.md scaffold
+/compact                             # free context when the session gets long
+/diff                                # see what the agent has changed
+</code></pre>
+
+<h2 id="sandbox-modes-deep-dive">Sandbox modes (deep dive)</h2>
+<p><span class="level advanced">Advanced</span> The sandbox limits what model-generated shell commands can do. Codex uses OS-native sandboxing — Seatbelt on macOS, Bubblewrap on Linux:</p>
+
+<table>
+  <thead><tr><th>Mode</th><th>File writes</th><th>Network</th><th>Use case</th></tr></thead>
+  <tbody>
+    <tr><td><code>read-only</code></td><td>Nowhere</td><td>Blocked by default</td><td>Questions, explanations, code analysis</td></tr>
+    <tr><td><code>workspace-write</code></td><td>Workspace + permitted roots + temp</td><td>Blocked by default (can enable)</td><td>Default for most tasks</td></tr>
+    <tr><td><code>danger-full-access</code></td><td>OS permissions (anywhere)</td><td>Yes</td><td>Only when truly needed (e.g., installing deps)</td></tr>
+  </tbody>
+</table>
+
+<pre><code># Grant additional writable directories
+codex --add-dir ../backend exec "Fix the shared types"
+
+# Run any command inside the sandbox (without the agent)
+codex sandbox -- npm test
+codex sandbox -- go build ./...
+
+# Approval policies (global flag, before subcommand)
+codex -a on-request exec "..."   # model decides when to ask (default)
+codex -a never exec "..."         # never asks (for CI)
+codex --approve-for-me exec "..." # auto-reviews within sandbox
+</code></pre>
+
+<blockquote class="warn"><code>--yolo</code> (alias for <code>--dangerously-bypass-approvals-and-sandbox</code>) disables all safety. Use it only inside an externally hardened container or VM. On your development machine, it lets the model run any command, including destructive ones, without asking.</blockquote>
+
+<h2 id="mcp-servers">MCP servers</h2>
+<p><span class="level advanced">Advanced</span> Codex can connect to MCP (Model Context Protocol) servers for extra tools — databases, APIs, GitHub, and more:</p>
+
+<pre><code># Add an MCP server (stdio)
+codex mcp add github -- npx -y @modelcontextprotocol/server-github
+
+# Add an HTTP MCP server
+codex mcp add my-api --transport http --url https://api.example.com/mcp
+
+# List configured MCP servers
+codex mcp list
+
+# Show a server's configuration
+codex mcp get github
+
+# Remove a server
+codex mcp remove github
+
+# OAuth login for an MCP server
+codex mcp login github
+
+# Inside the TUI: list MCP tools
+/mcp           # list tools
+/mcp verbose   # show details
+</code></pre>
+
+<h2 id="configuration-configtoml">Configuration (config.toml)</h2>
+<p><span class="level advanced">Advanced</span> Base configuration lives at <code>~/.codex/config.toml</code>. Named profiles use separate files like <code>~/.codex/quick.config.toml</code>, loaded with <code>--profile</code>:</p>
+
+<pre><code># ~/.codex/config.toml — base configuration
+
+model = "gpt-4.1"
+model_reasoning_effort = "high"
+web_search = "cached"       # "cached" (default), "live", "disabled"
+
+# Named profile (loaded with codex -p thorough)
+# Lives in ~/.codex/thorough.config.toml (separate file since v0.134)
+</code></pre>
+
+<pre><code># Use a named profile
+codex -p thorough "Complex refactoring task"
+
+# Override config on the fly (TOML syntax)
+codex -c model_reasoning_effort='"xhigh"' "Hard reasoning problem"
+codex -c model='"o3"' "Find the subtle bug"
+
+# Enable/disable a feature flag for one run
+codex --enable shell_snapshot exec "..."
+codex --disable shell_snapshot exec "..."
+
+# Run with a local Ollama model
+codex --oss --local-provider ollama "Explain this code"
+</code></pre>
+
+<h3 id="key-config-options">Key config options</h3>
+<table>
+  <thead><tr><th>Option</th><th>Values</th><th>Notes</th></tr></thead>
+  <tbody>
+    <tr><td><code>model</code></td><td>Model id string</td><td>Default model for all sessions</td></tr>
+    <tr><td><code>model_reasoning_effort</code></td><td><code>"xhigh"</code>, <code>"high"</code>, <code>"medium"</code>, <code>"low"</code></td><td>Reasoning depth for complex tasks</td></tr>
+    <tr><td><code>web_search</code></td><td><code>"cached"</code>, <code>"live"</code>, <code>"disabled"</code></td><td>Cached is default (cheaper); live for current info</td></tr>
+  </tbody>
+</table>
+
+<h2 id="cloud-mode">Cloud mode</h2>
+<p><span class="level advanced">Advanced</span> Codex Cloud runs tasks in a remote sandbox environment. This is useful for long-running tasks or when you don't want to tie up your local machine:</p>
+
+<pre><code># Submit a cloud task (requires --env)
+codex cloud exec --env ENV_ID "Run the full test suite and fix failures"
+
+# List cloud tasks
+codex cloud list
+codex cloud list --json --limit 5
+
+# Check status
+codex cloud status TASK_ID
+
+# Show the diff of a cloud task
+codex cloud diff TASK_ID
+
+# Apply a cloud task's diff locally
+codex cloud apply TASK_ID
+</code></pre>
+
+<h2 id="agentsmd-integration">AGENTS.md integration</h2>
+<p><span class="level advanced">Advanced</span> Codex reads <code>AGENTS.md</code> from the repo root at the start of every session, injecting your project rules into the model's context. Generate a scaffold with:</p>
+
+<pre><code># Generate an AGENTS.md scaffold for your project
+codex /init
+# or
+codex init
+
+# This creates a template AGENTS.md you can edit.
+# See the AGENTS.md Best Practices lesson for how to write it well.
+</code></pre>
+
+<p>See the <a href="agents-md-best-practices.html">AGENTS.md Best Practices</a> lesson for how to write effective project rules.</p>
+
+<h2 id="diagnostics-and-troubleshooting">Diagnostics and troubleshooting</h2>
+<pre><code># Check installation, config, sign-in, runtime, and git health
+codex doctor
+codex doctor --summary
+
+# Print the model catalog as JSON
+codex debug models
+codex debug models --bundled    # only bundled, without refreshing
+
+# Print the model-visible prompt (system instructions + context) as JSON
+codex debug prompt-input
+
+# Check for updates and install
+codex update
+
+# Generate shell completions
+codex completion zsh   # or: bash, fish, elvish, powershell
+</code></pre>
+
+<h3 id="common-troubleshooting">Common troubleshooting</h3>
+<table>
+  <thead><tr><th>Problem</th><th>Fix</th></tr></thead>
+  <tbody>
+    <tr><td>Authentication fails</td><td><code>codex logout</code>, then <code>codex login</code></td></tr>
+    <tr><td><code>codex exec</code> hangs</td><td>Approval policy needs confirmation in unattended mode. Use <code>-a never -s workspace-write</code></td></tr>
+    <tr><td>Command blocked in sandbox</td><td>Use <code>--add-dir</code> for extra write paths, or <code>danger-full-access</code> deliberately</td></tr>
+    <tr><td>MCP server won't connect</td><td>Check <code>codex mcp get &lt;name&gt;</code>, then remove and re-add</td></tr>
+    <tr><td>Session won't resume</td><td>Session was started with <code>--ephemeral</code>. Restart without it</td></tr>
+    <tr><td>Codex won't start after update</td><td>Run <code>codex --strict-config</code> and <code>codex doctor --summary</code></td></tr>
+  </tbody>
+</table>
+
+<h2 id="common-mistakes">Common mistakes</h2>
+<ul>
+  <li><strong>Installing the wrong npm package.</strong> Use <code>@openai/codex</code>, not bare <code>codex</code>. The wrong package installs silently and does nothing.</li>
+  <li><strong>Forgetting <code>-a never</code> in CI.</strong> Without it, <code>codex exec</code> waits for approval that never comes and hangs. The approval flag must appear before <code>exec</code>.</li>
+  <li><strong>Using <code>--yolo</code> on your dev machine.</strong> It disables the sandbox entirely. Only use it in a throwaway container.</li>
+  <li><strong>Not setting a model.</strong> The default model may not be the best for your task. Use <code>/model</code> in the TUI or <code>-m</code> on the CLI.</li>
+  <li><strong>Letting context grow without compaction.</strong> Long sessions fill the window. Use <code>/compact</code> when the agent starts losing track.</li>
+  <li><strong>Expecting <code>codex exec</code> to behave like the TUI.</strong> Exec is non-interactive — it doesn't prompt for approval (unless you set <code>on-request</code>), and it streams to stdout. For pair-programming, use the TUI.</li>
+  <li><strong>Running <code>codex exec</code> outside a git repo without <code>--skip-git-repo-check</code>.</strong> Codex requires a git repo by default. Add the flag if you're outside one.</li>
+</ul>
+
+<h2 id="exercises">Exercises</h2>
+<ol>
+  <li>Install Codex CLI, sign in, and start an interactive session. Ask it to "explain the project structure." Observe how it reads files and reasons about them.</li>
+  <li>Run <code>codex review --uncommitted</code> after making a small change to a file. Read the review output — does it catch real issues?</li>
+  <li>Set up a CI-style non-interactive run: <code>codex -a never exec -s workspace-write "Add a README section about testing"</code>. Observe the JSON output with <code>--json</code>.</li>
+  <li>Configure an MCP server (e.g., the filesystem server) and ask Codex to use it. List the available tools with <code>/mcp</code> in the TUI.</li>
+  <li>Generate an AGENTS.md scaffold with <code>/init</code>, customize it with 5 project-specific rules, and run a session with and without it. Compare the output.</li>
+</ol>
+
+<h2 id="mini-project-set-up-a-codex-ci-pipeline">Mini-project: Set up a Codex CI pipeline</h2>
+<p>Write a GitHub Actions workflow that runs <code>codex exec --json -a never -s workspace-write "Review the PR diff and output issues as JSON"</code> on every pull request. Pipe the JSON output to a script that parses the issues and posts them as a PR comment. Use <code>codex review --uncommitted --json</code> as an alternative. Test the pipeline on a PR with a deliberate bug (unused variable, missing error check) and verify the review catches it.</p>
+
+<section class="further"><h2 id="further-reading">Further reading</h2>
+<p>Official documentation for the tools and APIs covered on this page:</p>
+<ul class="further-list"><li><a href="https://github.com/openai/codex" target="_blank" rel="noopener">Codex CLI (GitHub) ↗</a></li>
+<li><a href="https://help.openai.com/en/articles/11381614-codex-cli-and-sign-in-with-chatgpt" target="_blank" rel="noopener">Codex CLI docs ↗</a></li>
+<li><a href="https://github.com/openai/codex/blob/main/docs/config.md" target="_blank" rel="noopener">Codex configuration guide ↗</a></li></ul></section>
+  <nav class="pager">
+<a class="prev" href="local-models-with-ollama.html"><small>Previous</small>🤖 Local Models with Ollama</a>
+<a class="next" href="kiro-cli.html"><small>Next</small>🤖 Kiro CLI</a>
+  </nav>
+</main>
+<button type="button" class="fab top" id="fab-top" aria-label="Back to top">↑ Top</button>
+<div class="banner" id="update-banner" role="status">A new version is available.<button type="button">Reload</button></div>
+<div class="banner" id="offline-banner" role="status">You're offline — showing cached lessons.</div>
+<script src="../app.js" defer></script>
+</body>
+</html>
