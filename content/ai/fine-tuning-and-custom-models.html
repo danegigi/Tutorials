@@ -1,0 +1,319 @@
+<p class="lead">Fine-tuning takes a pre-trained model and adjusts its weights on your specific data so it gets better at <em>your</em> task. It's powerful but often misused — most "my model needs fine-tuning" problems are actually prompt engineering or RAG problems. This lesson covers when to fine-tune, how to prepare data, LoRA/QLoRA (the technique that made fine-tuning affordable), quantization, Modelfile customization for Ollama, and the evaluation that tells you whether it actually helped.</p>
+
+<h2>The decision: fine-tune, prompt, or RAG?</h2>
+<p><span class="level beginner">Beginner</span> Before fine-tuning, ask what problem you're actually solving:</p>
+
+<table>
+  <thead><tr><th>Symptom</th><th>Root cause</th><th>Solution</th></tr></thead>
+  <tbody>
+    <tr><td>"The model doesn't know about X"</td><td>Missing knowledge</td><td><strong>RAG</strong> — retrieve and inject context</td></tr>
+    <tr><td>"The output format is wrong"</td><td>Unclear instructions</td><td><strong>Prompt engineering</strong> — system prompt, examples</td></tr>
+    <tr><td>"The tone/style is wrong"</td><td>Generic model personality</td><td><strong>Few-shot prompting</strong> or <strong>fine-tune</strong></td></tr>
+    <tr><td>"It makes specific mistakes repeatedly"</td><td>Lacks task-specific patterns</td><td><strong>Fine-tune</strong> on corrected examples</td></tr>
+    <tr><td>"It's too slow / too expensive"</td><td>Wrong model size</td><td><strong>Quantize</strong> or use a smaller model</td></tr>
+    <tr><td>"I need it to work offline"</td><td>Can't call an API</td><td><strong>Ollama</strong> + local model</td></tr>
+  </tbody>
+</table>
+
+<blockquote class="warn">Fine-tuning is not a knowledge injection tool. It adjusts behavior (style, format, task patterns), not memorized facts. If you fine-tune to "teach" a model about your docs, it will hallucinate confidently — use RAG instead. Fine-tune when the model knows the facts but applies them wrong.</blockquote>
+
+<h2>What fine-tuning actually does</h2>
+<p><span class="level beginner">Beginner</span> A pre-trained model has billions of weights learned from scraping the internet. Fine-tuning adjusts a small subset of those weights using gradient descent on your labeled data. The model is rewarded for producing your desired outputs and gently nudged away from its defaults.</p>
+
+<p>There are two main approaches:</p>
+
+<table>
+  <thead><tr><th>Approach</th><th>What changes</th><th>Cost</th><th>Hardware</th></tr></thead>
+  <tbody>
+    <tr><td><strong>Full fine-tuning</strong></td><td>All model weights</td><td>Very high (GPU memory for all params + gradients + optimizer state)</td><td>Multiple high-end GPUs</td></tr>
+    <tr><td><strong>LoRA (Low-Rank Adaptation)</strong></td><td>A small adapter (rank-decomposed matrix) on top of frozen weights</td><td>Low (only the adapter is trained, ~1% of params)</td><td>Single consumer GPU</td></tr>
+    <tr><td><strong>QLoRA</strong></td><td>LoRA on a 4-bit quantized base model</td><td>Very low (base model in 4-bit, adapter in 16-bit)</td><td>Single GPU, even laptops</td></tr>
+  </tbody>
+</table>
+
+<p>LoRA and QLoRA are the practical choice. A QLoRA fine-tune of a 7B model can run on a single 8GB GPU and produce results comparable to full fine-tuning for most tasks.</p>
+
+<h2>Preparing your dataset</h2>
+<p><span class="level beginner">Beginner</span> The quality of your dataset matters more than the fine-tuning technique. A few hundred high-quality examples beat thousands of mediocre ones. The format depends on the task:</p>
+
+<h3>Chat / instruction following (the most common)</h3>
+<pre><code>// dataset.jsonl — one example per line
+{"messages": [
+  {"role": "system", "content": "You are a code review assistant."},
+  {"role": "user", "content": "Review this function for bugs:\n\nfunc divide(a, b float64) float64 { return a / b }"},
+  {"role": "assistant", "content": "Bug: division by zero. Add a check:\n\nfunc divide(a, b float64) (float64, error) {\n  if b == 0 { return 0, errors.New(\"division by zero\") }\n  return a / b, nil\n}"}
+]}
+{"messages": [
+  {"role": "system", "content": "You are a code review assistant."},
+  {"role": "user", "content": "Review:\n\nfunc get(key string) string { return m[key] }"},
+  {"role": "assistant", "content": "Bug: map access on nil map will panic. Initialize the map first or return ok:\n\nfunc get(m map[string]string, key string) (string, bool) { v, ok := m[key]; return v, ok }"}
+]}
+</code></pre>
+
+<h3>Text completion (simpler, for base models)</h3>
+<pre><code>{"prompt": "Translate Go to Rust:\n\nfunc main() { fmt.Println(\"hello\") }\n\nRust:", "completion": "fn main() { println!(\"hello\"); }"}
+</code></pre>
+
+<h3>Dataset quality checklist</h3>
+<p><span class="level intermediate">Intermediate</span></p>
+<ul>
+  <li><strong>Consistency:</strong> Every example should follow the same format and style. Mixed formats confuse the model.</li>
+  <li><strong>Diversity:</strong> Cover the range of inputs the model will see in production, not just easy cases.</li>
+  <li><strong>Correctness:</strong> Every target output must be correct. Incorrect examples teach the model to be wrong.</li>
+  <li><strong>Size:</strong> 200-1000 high-quality examples is typical for LoRA. More helps marginally; quality matters more than quantity.</li>
+  <li><strong>Split:</strong> Hold out 10-20% as an eval set. Never fine-tune on your eval data.</li>
+</ul>
+
+<pre><code># Split your dataset
+import json
+data = [json.loads(line) for line in open("dataset.jsonl")]
+import random
+random.shuffle(data)
+split = int(len(data) * 0.85)
+train = data[:split]
+eval = data[split:]
+with open("train.jsonl", "w") as f:
+    for d in train: f.write(json.dumps(d) + "\n")
+with open("eval.jsonl", "w") as f:
+    for d in eval: f.write(json.dumps(d) + "\n")
+print(f"Train: {len(train)}, Eval: {len(eval)}")
+</code></pre>
+
+<h2>LoRA and QLoRA in practice</h2>
+<p><span class="level intermediate">Intermediate</span> The most accessible path is <strong>Unsloth</strong>, a library that optimizes LoRA training to run 2-5x faster with less memory:</p>
+
+<pre><code># install Unsloth (CUDA GPU required)
+pip install "unsloth[cu121]"
+
+# train.py — fine-tune Llama 3.1 8B with QLoRA
+from unsloth import FastLanguageModel
+import torch
+
+# 1. Load the base model in 4-bit (QLoRA)
+model, tokenizer = FastLanguageModel.from_pretrained(
+    model_name = "unsloth/Meta-Llama-3.1-8B-Instruct",
+    max_seq_length = 2048,
+    dtype = None,            # auto-detect
+    load_in_4bit = True,     # QLoRA: 4-bit base model
+)
+
+# 2. Add LoRA adapters (only these are trained)
+model = FastLanguageModel.get_peft_model(
+    model,
+    r = 16,                  # LoRA rank (8-64; higher = more capacity, more memory)
+    target_modules = ["q_proj", "k_proj", "v_proj", "o_proj",
+                      "gate_proj", "up_proj", "down_proj"],
+    lora_alpha = 16,         # scaling factor (usually = r)
+    lora_dropout = 0,        # 0 is optimized
+    bias = "none",           # don't train bias
+    use_gradient_checkpointing = "unsloth",  # saves memory
+)
+
+# 3. Format your dataset
+from datasets import load_dataset
+dataset = load_dataset("json", data_files="train.jsonl", split="train")
+
+def formatting_func(examples):
+    convos = examples["messages"]
+    texts = [tokenizer.apply_chat_template(c, tokenize=False, add_generation_prompt=False) for c in convos]
+    return {"text": texts}
+
+dataset = dataset.map(formatting_func, batched=True)
+
+# 4. Train
+from trl import SFTTrainer, SFTConfig
+trainer = SFTTrainer(
+    model = model,
+    tokenizer = tokenizer,
+    train_dataset = dataset,
+    dataset_text_field = "text",
+    max_seq_length = 2048,
+    args = SFTConfig(
+        per_device_train_batch_size = 2,
+        gradient_accumulation_steps = 4,
+        warmup_steps = 10,
+        max_steps = 100,         # or num_train_epochs = 3
+        learning_rate = 2e-4,
+        fp16 = not torch.cuda.is_bf16_supported(),
+        bf16 = torch.cuda.is_bf16_supported(),
+        logging_steps = 10,
+        output_dir = "outputs",
+        save_steps = 50,
+    ),
+)
+trainer.train()
+
+# 5. Save the LoRA adapter
+model.save_pretrained("my-lora-adapter")  # saves only the adapter (~50MB, not 16GB)
+</code></pre>
+
+<h3>Key hyperparameters</h3>
+<table>
+  <thead><tr><th>Param</th><th>What it controls</th><th>Typical value</th></tr></thead>
+  <tbody>
+    <tr><td><code>r</code> (rank)</td><td>Adapter capacity — higher = more expressive, more memory</td><td>8-64 (16 is a safe default)</td></tr>
+    <tr><td><code>lora_alpha</code></td><td>Scaling factor for the adapter</td><td>Usually = r (or 2×r)</td></tr>
+    <tr><td><code>learning_rate</code></td><td>How fast weights change</td><td>1e-4 to 5e-4 (higher than full fine-tuning)</td></tr>
+    <tr><td><code>max_steps</code></td><td>Training iterations</td><td>50-500 (watch the loss curve)</td></tr>
+    <tr><td><code>per_device_train_batch_size</code></td><td>Examples per GPU step</td><td>1-4 (limited by memory)</td></tr>
+    <tr><td><code>gradient_accumulation_steps</code></td><td>Simulate larger batches</td><td>4-8</td></tr>
+  </tbody>
+</table>
+
+<blockquote class="tip">The learning rate for LoRA is <strong>higher</strong> than for full fine-tuning (2e-4 vs 2e-5). The adapter is small and needs a stronger signal to learn. This is not a mistake — the small adapter size prevents catastrophic forgetting even at higher rates.</blockquote>
+
+<h2>Exporting and running your fine-tuned model</h2>
+<p><span class="level intermediate">Intermediate</span> The LoRA adapter is tiny (~50MB), but you need to merge it with the base model to run it:</p>
+
+<pre><code># Option 1: Merge and export to GGUF (for Ollama/llama.cpp)
+# This produces a single file Ollama can load
+from unsloth import FastLanguageModel
+
+model, tokenizer = FastLanguageModel.from_pretrained("my-lora-adapter")
+FastLanguageModel.for_inference(model)  # optimize for speed
+
+# Save as GGUF (the format Ollama uses)
+model.save_pretrained_merged(
+    "my-model",
+    tokenizer,
+    save_method = "merged_16bit",  # merge LoRA into base, 16-bit
+)
+# Then convert to GGUF:
+# python convert.py my-model --outtype f16 --outfile my-model.gguf
+# Or use Unsloth's built-in conversion:
+model.save_pretrained_gguf("my-model", tokenizer, quantization_method="q4_k_m")
+# Produces my-model-Q4_K_M.gguf
+</code></pre>
+
+<h3>Loading your model in Ollama</h3>
+<pre><code># Create a Modelfile for your fine-tuned model
+cat &gt; my-model.modelfile &lt;&lt; 'EOF'
+FROM ./my-model-Q4_K_M.gguf
+
+TEMPLATE """{{ .System }}
+
+USER: {{ .Prompt }}
+ASSISTANT:"""
+
+PARAMETER temperature 0.3
+PARAMETER stop "USER:"
+PARAMETER stop "ASSISTANT:"
+EOF
+
+# Create and run
+ollama create my-finetuned-model -f my-model.modelfile
+ollama run my-finetuned-model
+&gt;&gt; Review this function for bugs: func divide(a, b float64) float64 { return a / b }
+Bug: division by zero. Add a check for b == 0...
+</code></pre>
+
+<h2>Modelfile customization (no fine-tuning needed)</h2>
+<p><span class="level beginner">Beginner</span> Before reaching for fine-tuning, Ollama's Modelfile system lets you customize behavior through system prompts and parameters — often enough for style/format changes:</p>
+
+<pre><code># Create a code reviewer persona without fine-tuning
+cat &gt; code-reviewer.modelfile &lt;&lt; 'EOF'
+FROM llama3.1:8b
+
+SYSTEM """You are a senior code reviewer. For every code snippet:
+1. Identify bugs (null dereference, resource leaks, race conditions)
+2. Suggest fixes with code
+3. Rate severity: critical, moderate, minor
+4. Be concise — no praise, no preamble"""
+
+PARAMETER temperature 0.1
+PARAMETER num_ctx 8192
+EOF
+
+ollama create code-reviewer -f code-reviewer.modelfile
+ollama run code-reviewer "Review: func main() { m := map[string]int{}; println(m[\"x\"]) }"
+# Bug: nil map access (safe in Go for reads, but pattern is risky).
+# Severity: moderate. Initialize the map: m := make(map[string]int{})
+</code></pre>
+
+<p>This covers many "I need fine-tuning" use cases at zero cost. Try it first.</p>
+
+<h2>Evaluation: did it actually help?</h2>
+<p><span class="level advanced">Advanced</span> A fine-tuned model that scores better on the training loss can still be worse in production. You need to evaluate on held-out data that represents real usage:</p>
+
+<h3>Manual eval set</h3>
+<pre><code># eval.py — compare base vs fine-tuned on your eval set
+import json
+
+eval_examples = [json.loads(l) for l in open("eval.jsonl")]
+
+def evaluate(model_name, examples):
+    correct = 0
+    for ex in examples:
+        # Generate the model's response
+        response = run_ollama(model_name, ex["messages"])
+        # Check against expected answer
+        expected = ex["messages"][-1]["content"]
+        if check_answer(response, expected):
+            correct += 1
+    return correct / len(examples)
+
+base_score = evaluate("llama3.1:8b", eval_examples)
+tuned_score = evaluate("my-finetuned-model", eval_examples)
+
+print(f"Base model:      {base_score:.1%}")
+print(f"Fine-tuned:      {tuned_score:.1%}")
+print(f"Improvement:      {(tuned_score - base_score) * 100:+.1f}pp")
+</code></pre>
+
+<h3>LLM-as-judge</h3>
+<p>When correct answers aren't binary, use a stronger model to judge:</p>
+
+<pre><code># Use GPT-4o or Claude to score both responses blindly
+async function judge(base_response, tuned_response, question) {
+  const r = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: { "Authorization": `Bearer ${Bun.env.OPENAI_API_KEY}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: "gpt-4o",
+      messages: [{
+        role: "system",
+        content: `You are a judge. Score each response 1-5 on accuracy and helpfulness.
+Question: ${question}
+Response A: ${base_response}
+Response B: ${tuned_response}
+Reply JSON: {"a": score, "b": score, "reason": "..."}`
+      }],
+      response_format: { type: "json_object" },
+    }),
+  });
+  return JSON.parse((await r.json()).choices[0].message.content);
+}
+</code></pre>
+
+<blockquote class="warn">Always compare against the base model on the same eval set. "85% accuracy" means nothing without a baseline. If the base model gets 80%, your fine-tune added 5 points — was the training cost worth it? If the base already gets 84%, you spent hours to gain 1 point that prompt tuning might have gotten for free.</blockquote>
+
+<h2>Common mistakes</h2>
+<ul>
+  <li><strong>Fine-tuning for knowledge.</strong> Fine-tuning changes behavior, not knowledge. Use RAG for facts; fine-tune for style, format, and task patterns.</li>
+  <li><strong>Too few examples.</strong> Under 100 examples, the model may not generalize. 200-500 is the practical minimum for LoRA.</li>
+  <li><strong>Inconsistent formatting.</strong> If training examples mix formats, the model learns inconsistency. Standardize before training.</li>
+  <li><strong>Overfitting.</strong> If training loss hits zero quickly, the model memorized the training set and won't generalize. Use fewer steps, lower learning rate, or more data.</li>
+  <li><strong>Not evaluating.</strong> "It feels better" is not evaluation. Build an eval set, compare base vs tuned, and look at the delta.</li>
+  <li><strong>Forgetting the base model's strengths.</strong> A fine-tuned model can lose general capabilities. Test it on out-of-domain questions after fine-tuning.</li>
+  <li><strong>Saving only the adapter.</strong> The LoRA adapter alone can't run — you need to merge it with the base model or use a runtime that supports adapters (llama.cpp does).</li>
+</ul>
+
+<h2>Exercises</h2>
+<ol>
+  <li>Create a Modelfile with a custom system prompt and parameter tweaks. Test it on 10 prompts and compare quality to the base model. This covers many "fine-tuning" needs for free.</li>
+  <li>Build a 100-example dataset for a task you care about (code review summaries, commit messages, API response formatting). Ensure consistent formatting and a 90/10 train/eval split.</li>
+  <li>Fine-tune a small model (Llama 3.2 1B or 3B) with QLoRA using Unsloth. Save the merged model as GGUF and load it in Ollama.</li>
+  <li>Build an eval set of 20 questions. Compare the base model vs your fine-tuned model. Calculate accuracy on both and report the delta.</li>
+  <li>Test your fine-tuned model on 5 out-of-domain questions. Did it lose any general capabilities? If so, try reducing training steps and re-evaluate.</li>
+</ol>
+
+<h2>Mini-project: Fine-tuned commit message generator</h2>
+<p>Fine-tune a small model to generate conventional-commit messages from diffs. Requirements:</p>
+<ul>
+  <li>Collect 200+ git diffs with their actual commit messages from a real project (<code>git log --format=... --stat</code>).</li>
+  <li>Format as a chat dataset: system prompt + diff as user message + conventional-commit-formatted message as assistant response.</li>
+  <li>Fine-tune Llama 3.2 3B with QLoRA (rank 16, 50-100 steps).</li>
+  <li>Export as GGUF and load in Ollama.</li>
+  <li>Build an eval set of 20 diffs with human-rated commit messages. Compare base vs fine-tuned using an LLM-as-judge.</li>
+  <li>Wire it into a git hook (<code>prepare-commit-msg</code>) that suggests a commit message for staged changes.</li>
+</ul>

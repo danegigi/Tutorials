@@ -1,0 +1,387 @@
+<p class="lead">Anthropic ships <strong>two</strong> CLI tools: <strong>Claude Code</strong>, an agentic coding agent that reads your codebase, edits files, and runs commands (comparable to Codex CLI and Kiro CLI), and <strong>ant</strong>, a lower-level CLI that puts the entire Claude API in your terminal for scripting. This lesson covers both — install, interactive mode, headless/CI, hooks, MCP, CLAUDE.md, and the <code>ant</code> API commands — basic through advanced.</p>
+
+<h2>Two tools, two purposes</h2>
+<p><span class="level beginner">Beginner</span></p>
+
+<table>
+  <thead><tr><th>Tool</th><th>What it is</th><th>Use when</th></tr></thead>
+  <tbody>
+    <tr><td><strong>Claude Code</strong> (<code>claude</code>)</td><td>Agentic coding agent — reads files, edits, runs commands, integrates with Git/MCP/hooks</td><td>Writing code, refactoring, debugging, PR review</td></tr>
+    <tr><td><strong>ant</strong> (<code>ant</code>)</td><td>API-level CLI — every Claude API endpoint as a subcommand</td><td>Scripting, batch processing, CI/CD, raw API calls</td></tr>
+  </tbody>
+</table>
+
+<p>Most developers use Claude Code day-to-day and reach for <code>ant</code> when they need to script the API (batch embeddings, classify documents, generate content at scale).</p>
+
+<h2>Installing Claude Code</h2>
+<p><span class="level beginner">Beginner</span></p>
+
+<pre><code># macOS / Linux / WSL (native installer — recommended)
+curl -fsSL https://claude.ai/install.sh | bash
+
+# Homebrew (stable channel)
+brew install --cask claude-code
+
+# Homebrew (latest channel — gets new versions immediately)
+brew install --cask claude-code@latest
+
+# Verify installation
+claude --version
+# claude-code 1.x.x
+</code></pre>
+
+<p>On first run, Claude Code prompts you to log in with your Claude subscription or Anthropic Console account. You can also set an API key:</p>
+
+<pre><code># Option 1: interactive login (prompts on first use)
+cd my-project
+claude
+
+# Option 2: API key from environment
+export ANTHROPIC_API_KEY=sk-ant-...
+claude --version   # uses the key, skips login prompt
+
+# Option 3: key from a secret manager (piped on stdin, never in env)
+op read op://vault/anthropic/api-key | claude --api-key-stdin
+</code></pre>
+
+<h2>Claude Code: interactive mode</h2>
+<p><span class="level beginner">Beginner</span> Start Claude Code inside a project directory:</p>
+
+<pre><code>$ cd my-project
+$ claude
+
+╭──────────────────────────────────────────────╮
+│  Claude Code                    [model: opus]  │
+╜──────────────────────────────────────────────╯
+
+&gt; Add input validation to the user registration endpoint
+
+# Claude reads the relevant files, proposes edits, asks for approval
+# on each file change, and runs tests after editing.
+</code></pre>
+
+<p>You type in natural language. Claude Code reads your codebase, proposes changes, and asks for approval before writing. Key interactive commands:</p>
+
+<table>
+  <thead><tr><th>Command</th><th>What it does</th></tr></thead>
+  <tbody>
+    <tr><td><code>/help</code></td><td>Show all available commands and shortcuts</td></tr>
+    <tr><td><code>/model</code></td><td>Switch model (Opus, Sonnet, Haiku)</td></tr>
+    <tr><td><code>/cost</code></td><td>Show token usage and cost for this session</td></tr>
+    <tr><td><code>/clear</code></td><td>Clear conversation context (start fresh)</td></tr>
+    <tr><td><code>/compact</code></td><td>Compress context to fit more (preserves key info)</td></tr>
+    <tr><td><code>/review</code></td><td>Review uncommitted changes or a PR</td></tr>
+    <tr><td><code>/init</code></td><td>Generate a CLAUDE.md file for the project</td></tr>
+    <tr><td><code>/mcp</code></td><td>Manage MCP servers</td></tr>
+    <tr><td><code>/hooks</code></td><td>View and configure hooks</td></tr>
+    <tr><td><code>Esc</code></td><td>Interrupt the current generation</td></tr>
+    <tr><td><code>Ctrl+C</code></td><td>Cancel / exit</td></tr>
+  </tbody>
+</table>
+
+<h2>Claude Code: headless and CI mode</h2>
+<p><span class="level intermediate">Intermediate</span> For automation, CI/CD pipelines, and scripts, Claude Code runs non-interactively:</p>
+
+<pre><code># Headless: one-shot, no interactive session
+claude -p "Review the diff in src/ for security issues" --output-format json
+
+# Headless with a specific model
+claude -p "Write tests for src/handler.go" --model claude-sonnet-4-5
+
+# Pipe input on stdin
+echo "Fix the typo in this file" | claude -p
+
+# Run in a CI pipeline (GitHub Actions)
+- name: AI Code Review
+  run: |
+    claude -p "Review the PR changes for bugs and security issues. \
+    Output a markdown review with severity ratings." \
+    --output-format text \
+    --max-turns 10
+</code></pre>
+
+<p>Key headless flags:</p>
+
+<table>
+  <thead><tr><th>Flag</th><th>What it does</th></tr></thead>
+  <tbody>
+    <tr><td><code>-p</code> / <code>--print</code></td><td>Headless mode: run once, print output, exit</td></tr>
+    <tr><td><code>--output-format json</code></td><td>Output as JSON (parseable in scripts)</td></tr>
+    <tr><td><code>--output-format text</code></td><td>Plain text output</td></tr>
+    <tr><td><code>--max-turns N</code></td><td>Limit agent turns (safety in CI)</td></tr>
+    <tr><td><code>--model NAME</code></td><td>Specify the model</td></tr>
+    <tr><td><code>--allowedTools "Edit,Bash"</code></td><td>Restrict which tools the agent can use</td></tr>
+    <tr><td><code>--permission-mode plan</code></td><td>Plan-only mode (no edits, just analysis)</td></tr>
+  </tbody>
+</table>
+
+<pre><code># CI: plan-only review (read-only, no file edits)
+claude -p "Analyze the auth middleware for vulnerabilities" \
+  --permission-mode plan \
+  --output-format json \
+  --max-turns 5
+
+# CI: full autonomous fix (dangerous — restrict tools carefully)
+claude -p "Fix the failing test in src/handler_test.go" \
+  --allowedTools "Edit,Read,Bash" \
+  --max-turns 15 \
+  --output-format text
+</code></pre>
+
+<blockquote class="warn">In CI, always set <code>--max-turns</code> to limit runaway agent loops, and restrict <code>--allowedTools</code> to only what the task needs. An unrestricted agent in CI can make unlimited API calls and edit unexpected files.</blockquote>
+
+<h2>CLAUDE.md: persistent instructions</h2>
+<p><span class="level beginner">Beginner</span> Claude Code reads <code>CLAUDE.md</code> files (same role as <code>AGENTS.md</code> in other tools) for project-specific instructions. It looks for them in the project root and parent directories:</p>
+
+<pre><code># CLAUDE.md — project instructions for Claude Code
+
+## Project overview
+This is a Go API server using Gin. The database is PostgreSQL with sqlc for queries.
+
+## Commands
+- Build: `go build ./cmd/server`
+- Test: `go test ./...`
+- Lint: `golangci-lint run`
+
+## Conventions
+- Use sqlc for all database queries — never raw SQL in handlers
+- All handlers take `*gin.Context` and return JSON
+- Error responses: {"error": "message", "code": "ERROR_CODE"}
+- Log with slog, not fmt.Printf
+
+## Don't
+- Don't add new dependencies without checking with me first
+- Don't modify migrations that have been deployed
+</code></pre>
+
+<p>Generate a starting point with <code>/init</code>, then refine it. The file is loaded into context on every session start.</p>
+
+<h3>CLAUDE.md hierarchy</h3>
+<p>Claude Code reads CLAUDE.md files from multiple levels, with closer files taking precedence:</p>
+
+<pre><code>~/.claude/CLAUDE.md          # global: your personal preferences (all projects)
+project-root/CLAUDE.md        # project: conventions, commands, architecture
+project-root/src/CLAUDE.md     # subdirectory: module-specific rules
+</code></pre>
+
+<h2>Hooks: automated actions</h2>
+<p><span class="level advanced">Advanced</span> Hooks let you run custom scripts automatically at specific points in Claude Code's workflow — without modifying Claude's behavior manually each time:</p>
+
+<pre><code># .claude/settings.json — hook configuration
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [{
+          "type": "command",
+          "command": ".claude/hooks/pre-edit-check.sh"
+        }]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [{
+          "type": "command",
+          "command": ".claude/hooks/format-after-edit.sh"
+        }]
+      }
+    ]
+  }
+}
+</code></pre>
+
+<p>Common hook patterns:</p>
+
+<table>
+  <thead><tr><th>Hook event</th><th>When it fires</th><th>Use case</th></tr></thead>
+  <tbody>
+    <tr><td><code>PreToolUse</code></td><td>Before a tool runs (Edit, Bash, etc.)</td><td>Validate inputs, block dangerous commands, lint before writing</td></tr>
+    <tr><td><code>PostToolUse</code></td><td>After a tool runs</td><td>Auto-format, run tests, update docs</td></tr>
+    <tr><td><code>Notification</code></td><td>When Claude sends a notification</td><td>Desktop alerts, Slack pings</td></tr>
+    <tr><td><code>Stop</code></td><td>When Claude finishes a response</td><td>Run validation, update task tracking</td></tr>
+  </tbody>
+</table>
+
+<pre><code>#!/bin/bash
+# .claude/hooks/format-after-edit.sh — auto-format Go files after edits
+FILE="$1"  # the file that was edited
+if [[ "$FILE" == *.go ]]; then
+  gofmt -w "$FILE"
+  golangci-lint run --fix "$FILE" 2&gt;/dev/null || true
+fi
+</code></pre>
+
+<h2>MCP integration</h2>
+<p><span class="level intermediate">Intermediate</span> Claude Code connects to MCP servers for external tools:</p>
+
+<pre><code># Add an MCP server (project-level: .mcp.json)
+claude mcp add my-db -- npx -y @modelcontextprotocol/server-postgres "postgresql://localhost/mydb"
+
+# List configured MCP servers
+claude mcp list
+
+# Remove a server
+claude mcp remove my-db
+
+# View server details
+claude mcp get my-db
+</code></pre>
+
+<p>Once connected, Claude Code discovers the server's tools and can call them during a session — no code changes needed. See the MCP Servers Deep Dive lesson for building your own.</p>
+
+<h2>The ant CLI: scripting the Claude API</h2>
+<p><span class="level intermediate">Intermediate</span> <code>ant</code> is the official CLI for the Claude Platform API. It exposes every API endpoint as a subcommand, making it ideal for scripts, batch jobs, and CI/CD:</p>
+
+<pre><code># Install ant
+brew install anthropics/tap/ant
+# or with Go:
+go install 'github.com/anthropics/anthropic-cli/v2/cmd/ant@latest'
+
+# Authenticate
+ant auth login          # interactive login
+# or: export ANTHROPIC_API_KEY=sk-ant-...
+
+# List available models
+ant models list
+# claude-opus-5-5
+# claude-sonnet-4-5
+# claude-haiku-4-5
+
+# Send a message
+ant messages create \
+  --max-tokens 1024 \
+  --model claude-sonnet-4-5 \
+  --message '{role: user, content: "Write a Go HTTP handler for health checks"}'
+
+# Using YAML for complex messages (more readable than JSON)
+ant messages create \
+  --max-tokens 2048 \
+  --model claude-sonnet-4-5 \
+  --message-file message.yaml
+</code></pre>
+
+<h3>Batch processing with ant</h3>
+<pre><code># Classify a batch of documents
+for file in docs/*.md; do
+  ant messages create \
+    --max-tokens 100 \
+    --model claude-haiku-4-5 \
+    --message "{
+      role: user,
+      content: 'Classify this document as tutorial, reference, or guide. Reply with one word.\n\n' + '$(cat "$file")'
+    }" \
+    --output text
+done
+
+# Generate embeddings for a corpus
+ant embeddings create \
+  --model claude-embed-v1 \
+  --input "Your text here" \
+  --output json | jq '.data[0].embedding'
+</code></pre>
+
+<h3>Managing agents and sessions</h3>
+<pre><code># Create an agent (persistent configuration with tools and instructions)
+ant agents create \
+  --name "code-reviewer" \
+  --model claude-sonnet-4-5 \
+  --instructions "You are a code reviewer. Analyze diffs for bugs and security issues." \
+  --tools "Read,Bash"
+
+# List agents
+ant agents list
+
+# Run an agent on a task
+ant agents run code-reviewer \
+  --input "Review src/handler.go for security issues" \
+  --output json
+
+# Session management (continue conversations across runs)
+ant sessions create --model claude-sonnet-4-5
+ant sessions list
+ant sessions send &lt;session-id&gt; --message "What did we discuss?"
+</code></pre>
+
+<h3>ant in CI/CD</h3>
+<pre><code># .github/workflows/review.yml — PR review with ant
+name: AI Review
+on: [pull_request]
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install ant
+        run: curl -fsSL https://claude.ai/install-ant.sh | bash
+      - name: Review PR
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          DIFF=$(git diff origin/main...HEAD)
+          ant messages create \
+            --max-tokens 2000 \
+            --model claude-sonnet-4-5 \
+            --message "{role: user, content: 'Review this diff for bugs and security issues. Output markdown.\n\n${DIFF}'}" \
+            --output text &gt; review.md
+      - name: Post review
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const review = fs.readFileSync('review.md', 'utf8');
+            github.rest.issues.createComment({
+              ...context.repo,
+              issue_number: context.issue.number,
+              body: review
+            });
+</code></pre>
+
+<h2>Claude Code vs Codex CLI vs Kiro CLI</h2>
+<p><span class="level intermediate">Intermediate</span></p>
+
+<table>
+  <thead><tr><th>Feature</th><th>Claude Code</th><th>Codex CLI</th><th>Kiro CLI</th></tr></thead>
+  <tbody>
+    <tr><td>Provider</td><td>Anthropic</td><td>OpenAI</td><td>AWS (Kiro)</td></tr>
+    <tr><td>Models</td><td>Claude (Opus/Sonnet/Haiku)</td><td>GPT / o-series</td><td>Configurable (multi-provider)</td></tr>
+    <tr><td>Instruction file</td><td>CLAUDE.md</td><td>AGENTS.md</td><td>AGENTS.md / steering</td></tr>
+    <tr><td>MCP support</td><td>Yes (built-in)</td><td>Yes (config.toml)</td><td>Yes (kiro mcp)</td></tr>
+    <tr><td>Hooks</td><td>Yes (.claude/settings.json)</td><td>No</td><td>Yes (.kiro/hooks)</td></tr>
+    <tr><td>API scripting CLI</td><td>ant</td><td>—</td><td>—</td></tr>
+    <tr><td>IDE integration</td><td>VS Code, JetBrains</td><td>—</td><td>VS Code (Kiro IDE)</td></tr>
+    <tr><td>Headless/CI</td><td>Yes (-p flag)</td><td>Yes (exec)</td><td>Yes (--mode headless)</td></tr>
+  </tbody>
+</table>
+
+<blockquote class="tip">Claude Code's <strong>hooks</strong> feature is the main differentiator — it lets you automate actions (format, lint, test) after every file edit without manual intervention. If you're choosing between the three for a team, hooks + the <code>ant</code> API CLI make Claude Code strong for CI/CD automation.</blockquote>
+
+<h2>Common mistakes</h2>
+<ul>
+  <li><strong>Not using CLAUDE.md.</strong> Without project instructions, Claude Code guesses your conventions. <code>/init</code> generates a starting point — refine it and commit it.</li>
+  <li><strong>Unrestricted CI runs.</strong> In CI, always set <code>--max-turns</code> and <code>--allowedTools</code>. An unrestricted agent can run indefinitely and edit unexpected files.</li>
+  <li><strong>Using Claude Code when ant is better.</strong> Claude Code is for agentic coding. For batch API calls (embeddings, classification, content generation at scale), <code>ant</code> is lighter and more scriptable.</li>
+  <li><strong>Not setting hooks for formatting.</strong> Claude Code can produce unformatted code. A <code>PostToolUse</code> hook that runs your formatter after every edit saves manual cleanup.</li>
+  <li><strong>Forgetting the API key in CI.</strong> Use a CI secret, not a hardcoded key. <code>op read ... | ant --api-key-stdin</code> keeps it out of environment and process lists.</li>
+  <li><strong>Not using <code>/compact</code> in long sessions.</strong> Context fills up. <code>/compact</code> preserves key information while freeing space, letting a session continue longer.</li>
+</ul>
+
+<h2>Exercises</h2>
+<ol>
+  <li>Install Claude Code, run <code>/init</code> in a project, and refine the generated CLAUDE.md with your project's commands and conventions.</li>
+  <li>Use Claude Code in headless mode to review uncommitted changes: <code>claude -p "Review my uncommitted changes for bugs" --output-format text</code>.</li>
+  <li>Add a <code>PostToolUse</code> hook that runs <code>gofmt</code> (or prettier) after every file edit. Test it by asking Claude Code to edit a file and checking that it's formatted.</li>
+  <li>Install <code>ant</code>, create an agent for code review, and use it to review a diff in a script. Output the review as JSON.</li>
+  <li>Build a GitHub Actions workflow that runs <code>claude -p</code> on every PR to generate a markdown review comment. Set <code>--max-turns 10</code> and <code>--allowedTools "Read,Bash"</code>.</li>
+</ol>
+
+<h2>Mini-project: Automated PR review with hooks and CI</h2>
+<p>Build a complete PR review pipeline using Claude Code and ant. Requirements:</p>
+<ul>
+  <li>A <code>CLAUDE.md</code> that tells Claude Code how to review code in your project (focus areas, severity levels, output format).</li>
+  <li>A <code>PostToolUse</code> hook that runs your linter and test suite after every file edit during a review session.</li>
+  <li>A GitHub Actions workflow that uses <code>claude -p</code> to review every PR diff, outputs JSON with severity-rated findings, and posts a formatted comment on the PR.</li>
+  <li>Use <code>ant</code> to classify the review findings (bug, style, security, performance) and group the comment by category.</li>
+  <li>Add a <code>--max-turns</code> limit and <code>--allowedTools</code> restriction so the CI review can't run away or edit files.</li>
+</ul>

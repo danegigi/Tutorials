@@ -1364,6 +1364,16 @@ export const SECTIONS = [
         ],
       },
       {
+        slug: "rag-and-vector-search",
+        title: "RAG & Vector Search",
+        blurb: "Give an LLM access to your own data — embeddings, chunking strategies, vector databases (pgvector, Qdrant, Chroma), similarity search, reranking, and the full retrieval-augmented generation pipeline.",
+        further: [
+          ref("OpenAI: Embeddings guide", "https://platform.openai.com/docs/guides/embeddings"),
+          ref("Pinecone: RAG guide", "https://www.pinecone.io/learn/retrieval-augmented-generation/"),
+          ref("pgvector docs", "https://github.com/pgvector/pgvector"),
+        ],
+      },
+      {
         slug: "agentic-coding",
         title: "Agentic Coding",
         blurb: "What an AI coding agent is — tool use, function calling, the agentic loop, context management, sandboxes, approval policies, and when agents help versus when they hurt.",
@@ -1371,6 +1381,16 @@ export const SECTIONS = [
           ref("Anthropic: Building effective agents", "https://www.anthropic.com/engineering/building-effective-agents"),
           ref("OpenAI: Agents overview", "https://platform.openai.com/docs/guides/tools"),
           ref("Model Context Protocol (MCP)", "https://modelcontextprotocol.io/"),
+        ],
+      },
+      {
+        slug: "mcp-servers-deep-dive",
+        title: "MCP Servers Deep Dive",
+        blurb: "Build your own MCP servers from scratch — the three primitives (tools, resources, prompts), stdio vs SSE transport, testing, and real integrations that give agents access to your data and APIs.",
+        further: [
+          ref("MCP specification", "https://modelcontextprotocol.io/specification"),
+          ref("MCP TypeScript SDK", "https://github.com/modelcontextprotocol/typescript-sdk"),
+          ref("MCP Python SDK", "https://github.com/modelcontextprotocol/python-sdk"),
         ],
       },
       {
@@ -1395,6 +1415,16 @@ export const SECTIONS = [
         ],
       },
       {
+        slug: "fine-tuning-and-custom-models",
+        title: "Fine-tuning & Custom Models",
+        blurb: "When and how to go beyond prompting and RAG — dataset prep, LoRA/QLoRA basics, quantization, Modelfile customization, evaluation, and the decision tree for choosing the right approach.",
+        further: [
+          ref("Hugging Face: Fine-tuning concepts", "https://huggingface.co/docs/transformers/en/training"),
+          ref("Unsloth: Fine-tuning guide", "https://github.com/unslothai/unsloth"),
+          ref("Ollama: Modelfiles", "https://docs.ollama.com/modelfiles"),
+        ],
+      },
+      {
         slug: "codex-cli",
         title: "Codex CLI",
         blurb: "OpenAI's terminal coding agent — install, interactive and non-interactive modes, exec, review, sessions, sandbox modes, MCP servers, config, and slash commands.",
@@ -1412,6 +1442,27 @@ export const SECTIONS = [
           ref("Kiro CLI docs", "https://kiro.dev/docs/cli/"),
           ref("Kiro CLI setup guide", "https://kiro.dev/docs/cli/setup/"),
           ref("Kiro CLI commands reference", "https://kiro.dev/docs/reference/cli-commands/"),
+        ],
+      },
+      {
+        slug: "claude-cli",
+        title: "Claude CLI",
+        blurb: "Anthropic's coding agent and API tools — Claude Code (agentic coding in the terminal) and the ant CLI (scripting every API endpoint), install, interactive mode, hooks, MCP, CLAUDE.md, and headless/CI mode.",
+        further: [
+          ref("Claude Code docs", "https://code.claude.com/docs"),
+          ref("Claude Code overview", "https://docs.anthropic.com/en/docs/agents-and-tools/claude-code/overview"),
+          ref("ant CLI (GitHub)", "https://github.com/anthropics/anthropic-cli"),
+        ],
+      },
+      {
+        slug: "ai-with-go-and-bun",
+        title: "AI with Go and Bun",
+        blurb: "Build AI-powered services and apps in Go and Bun — direct API calls, streaming, function calling, the Eino and Vercel AI SDK ecosystems, vector stores, and the production patterns that make a polyglot AI stack hold up.",
+        further: [
+          ref("Eino framework (Go)", "https://github.com/cloudwego/eino"),
+          ref("Vercel AI SDK", "https://sdk.vercel.ai/docs"),
+          ref("Anthropic Go SDK", "https://github.com/anthropics/anthropic-sdk-go"),
+          ref("OpenAI Go SDK", "https://github.com/openai/openai-go"),
         ],
       },
     ],

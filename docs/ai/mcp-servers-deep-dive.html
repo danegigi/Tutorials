@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="en" data-base="../">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0d1117">
+<title>MCP Servers Deep Dive — AI</title>
+<meta name="description" content="Build your own MCP servers from scratch — the three primitives (tools, resources, prompts), stdio vs SSE transport, testing, and real integrations that give agents access to your data and APIs.">
+<link rel="canonical" href="https://danegigi.github.io/Tutorials/ai/mcp-servers-deep-dive.html">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Dev Tutorials">
+<meta property="og:title" content="MCP Servers Deep Dive — AI">
+<meta property="og:description" content="Build your own MCP servers from scratch — the three primitives (tools, resources, prompts), stdio vs SSE transport, testing, and real integrations that give agents access to your data and APIs.">
+<meta property="og:url" content="https://danegigi.github.io/Tutorials/ai/mcp-servers-deep-dive.html">
+<meta property="og:image" content="https://danegigi.github.io/Tutorials/icon-512.png">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="MCP Servers Deep Dive — AI">
+<meta name="twitter:description" content="Build your own MCP servers from scratch — the three primitives (tools, resources, prompts), stdio vs SSE transport, testing, and real integrations that give agents access to your data and APIs.">
+<meta name="twitter:image" content="https://danegigi.github.io/Tutorials/icon-512.png">
+<link rel="manifest" href="../manifest.webmanifest">
+<link rel="icon" href="../icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="../icon-192.png">
+<link rel="stylesheet" href="../app.css">
+<script>/* set theme before paint to avoid flash */(function(){try{var t=localStorage.getItem('tut.theme');document.documentElement.setAttribute('data-theme',t||'dark');}catch(e){document.documentElement.setAttribute('data-theme','dark');}})();</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"LearningResource","name":"MCP Servers Deep Dive","description":"Build your own MCP servers from scratch — the three primitives (tools, resources, prompts), stdio vs SSE transport, testing, and real integrations that give agents access to your data and APIs.","url":"https://danegigi.github.io/Tutorials/ai/mcp-servers-deep-dive.html","inLanguage":"en","isPartOf":{"@type":"Course","name":"AI — Dev Tutorials","url":"https://danegigi.github.io/Tutorials/ai/"},"learningResourceType":"Tutorial"},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Dev Tutorials","item":"https://danegigi.github.io/Tutorials/"},{"@type":"ListItem","position":2,"name":"AI","item":"https://danegigi.github.io/Tutorials/ai/"},{"@type":"ListItem","position":3,"name":"MCP Servers Deep Dive","item":"https://danegigi.github.io/Tutorials/ai/mcp-servers-deep-dive.html"}]}]}</script>
+
+</head>
+<body class="lesson">
+<header class="nav">
+  <a class="brand" href="../index.html">📚 Dev Tutorials</a>
+  <span class="crumb">MCP Servers Deep Dive — AI</span>
+  <span class="spacer"></span>
+  <a class="navbtn" href="../search.html">🔎 Search</a>
+  <button class="navbtn" id="install-btn" type="button">⬇️ Install</button>
+  <button class="navbtn" id="theme-btn" type="button" aria-label="Toggle theme">🌙 Dark</button>
+</header>
+<main class="wrap lesson-body">
+  <h1 class="page-title">MCP Servers Deep Dive</h1>
+  <div class="lesson-tools" data-lesson-id="ai/mcp-servers-deep-dive">
+    <button id="done-btn" type="button" aria-pressed="false">○ Mark complete</button>
+    <button id="mark-btn" type="button" aria-pressed="false">☆ Bookmark</button>
+    <a class="navbtn" href="index.html" style="margin-left:auto">All AI lessons →</a>
+  </div>
+<nav class="toc" aria-label="On this page"><strong>On this page</strong><ul>
+<li class="lvl2"><a href="#what-mcp-solves">What MCP solves</a></li>
+<li class="lvl2"><a href="#the-three-primitives">The three primitives</a></li>
+<li class="lvl2"><a href="#building-an-mcp-server-with-the-typescript-sdk">Building an MCP server with the TypeScript SDK</a></li>
+<li class="lvl2"><a href="#transports-stdio-vs-sse">Transports: stdio vs SSE</a></li>
+<li class="lvl2"><a href="#building-an-mcp-server-with-the-python-sdk">Building an MCP server with the Python SDK</a></li>
+<li class="lvl2"><a href="#connecting-an-agent-to-your-server">Connecting an agent to your server</a></li>
+<li class="lvl2"><a href="#advanced-tool-annotations-and-validation">Advanced: tool annotations and validation</a></li>
+<li class="lvl2"><a href="#testing-mcp-servers">Testing MCP servers</a></li>
+<li class="lvl2"><a href="#production-patterns">Production patterns</a></li>
+<li class="lvl3"><a href="#error-handling">Error handling</a></li>
+<li class="lvl3"><a href="#security-least-privilege">Security: least privilege</a></li>
+<li class="lvl3"><a href="#caching-resources">Caching resources</a></li>
+<li class="lvl2"><a href="#common-mistakes">Common mistakes</a></li>
+<li class="lvl2"><a href="#exercises">Exercises</a></li>
+<li class="lvl2"><a href="#mini-project-ai-powered-issue-tracker-mcp-server">Mini-project: AI-powered issue tracker MCP server</a></li>
+</ul></nav>
+<p class="lead">The Model Context Protocol (MCP) is the standard that lets AI agents talk to external tools, data sources, and services. Instead of hard-coding API integrations into each agent, you build an <strong>MCP server</strong> that exposes your capabilities through a uniform interface — and any MCP-aware agent (Claude Code, Codex CLI, Kiro CLI, or your own) can use it without knowing your implementation. This lesson builds MCP servers from scratch, covers the three primitives (tools, resources, prompts), the two transports (stdio and SSE), testing, and real-world integrations.</p>
+
+<h2 id="what-mcp-solves">What MCP solves</h2>
+<p><span class="level beginner">Beginner</span> Before MCP, every AI agent that needed to read a database, search a wiki, or call an API had that integration baked into its own code. Change the agent, rewrite the integration. MCP decouples them:</p>
+
+<pre><code>┌─────────┐    MCP (JSON-RPC)    ┌─────────────┐
+│  Agent   │ ◄──────────────────► │  MCP Server  │ ──► PostgreSQL
+│ (client) │                      │  (your code)  │ ──► Jira API
+└─────────┘                      └─────────────┘ ──► File system
+</code></pre>
+
+<p>The agent is the <strong>client</strong>. Your MCP server is the <strong>server</strong>. They communicate over JSON-RPC 2.0. The agent discovers what your server offers, calls the tools it needs, reads resources, and uses prompts — all through the standard protocol.</p>
+
+<h2 id="the-three-primitives">The three primitives</h2>
+<p><span class="level beginner">Beginner</span> An MCP server exposes three types of capabilities:</p>
+
+<table>
+  <thead><tr><th>Primitive</th><th>What it is</th><th>Analogy</th><th>Example</th></tr></thead>
+  <tbody>
+    <tr><td><strong>Tools</strong></td><td>Functions the agent can call (with arguments)</td><td>API endpoints</td><td><code>query_database(sql)</code>, <code>search_tickets(query)</code></td></tr>
+    <tr><td><strong>Resources</strong></td><td>Data the agent can read (no arguments, keyed by URI)</td><td>GET endpoints / files</td><td><code>file://config.json</code>, <code>db://schema</code></td></tr>
+    <tr><td><strong>Prompts</strong></td><td>Pre-built prompt templates the agent can use</td><td>Snippets / shortcuts</td><td><code>code_review(code)</code>, <code>debug_error(trace)</code></td></tr>
+  </tbody>
+</table>
+
+<p>Tools are the workhorse — most MCP servers are mostly tools. Resources are for exposing static or semi-static data. Prompts are for reusable instruction templates.</p>
+
+<h2 id="building-an-mcp-server-with-the-typescript-sdk">Building an MCP server with the TypeScript SDK</h2>
+<p><span class="level beginner">Beginner</span> The official <code>@modelcontextprotocol/sdk</code> works under Node and Bun. Here's a complete server that exposes a file-search tool:</p>
+
+<pre><code>// search-server.ts — an MCP server for searching project files
+// Run: bun run search-server.ts
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { z } from "zod";
+import { Glob } from "bun";
+
+const server = new McpServer({
+  name: "file-search",
+  version: "1.0.0",
+});
+
+// Register a TOOL: the agent can call this with arguments
+server.tool(
+  "search_files",
+  "Search for files matching a glob pattern in the project root",
+  {
+    pattern: z.string().describe("Glob pattern, e.g. '**/*.ts'"),
+    cwd: z.string().describe("Project root directory"),
+  },
+  async ({ pattern, cwd }) =&gt; {
+    const globber = new Glob(pattern);
+    const matches = [];
+    for await (const path of globber.scan({ cwd, absolute: false })) {
+      matches.push(path);
+    }
+    return {
+      content: [
+        {
+          type: "text",
+          text: matches.length === 0
+            ? `No files matching '${pattern}' in ${cwd}`
+            : `Found ${matches.length} files:\n${matches.slice(0, 50).join("\n")}`,
+        },
+      ],
+    };
+  }
+);
+
+// Register a RESOURCE: the agent can read this without arguments
+server.resource(
+  "project-structure",
+  "file://project-structure",
+  async () =&gt; ({
+    contents: [
+      {
+        uri: "file://project-structure",
+        mimeType: "text/plain",
+        text: await getProjectTree(),
+      },
+    ],
+  })
+);
+
+async function getProjectTree() {
+  // Return a text representation of the project structure
+  const globber = new Glob("**/*");
+  const files = [];
+  for await (const f of globber.scan({ cwd: process.cwd(), absolute: false })) {
+    files.push(f);
+  }
+  return files.sort().join("\n");
+}
+
+// Register a PROMPT: a reusable template the agent can invoke
+server.prompt(
+  "code_review",
+  "Generate a code review prompt for a given file",
+  { file: z.string().describe("Path to the file to review") },
+  async ({ file }) =&gt; ({
+    messages: [
+      {
+        role: "user",
+        content: {
+          type: "text",
+          text: `Review the following file for bugs, security issues, and improvements:\n\nFile: ${file}\n\n${await Bun.file(file).text()}`,
+        },
+      },
+    ],
+  })
+);
+
+// Start the server over stdio transport
+const transport = new StdioServerTransport();
+await server.connect(transport);
+console.error("file-search MCP server running on stdio");  // stderr only; stdout is the protocol
+</code></pre>
+
+<blockquote class="warn">MCP servers communicate over <strong>stdout</strong> for the JSON-RPC protocol. Any <code>console.log()</code> you write goes to stdout and <em>corrupts the protocol stream</em>. Use <code>console.error()</code> for logging — it goes to stderr, which the client ignores.</blockquote>
+
+<h2 id="transports-stdio-vs-sse">Transports: stdio vs SSE</h2>
+<p><span class="level intermediate">Intermediate</span> MCP supports two transports:</p>
+
+<table>
+  <thead><tr><th>Transport</th><th>How it works</th><th>Best for</th></tr></thead>
+  <tbody>
+    <tr><td><strong>stdio</strong></td><td>Agent spawns your server as a subprocess, talks over stdin/stdout</td><td>Local tools, CLI agents, editor integrations</td></tr>
+    <tr><td><strong>SSE (Server-Sent Events)</strong></td><td>Your server runs as an HTTP server; the agent connects over the network</td><td>Remote/shared servers, web-based agents, team-wide tools</td></tr>
+  </tbody>
+</table>
+
+<p>The stdio transport is simpler — the agent manages the process lifecycle. SSE is for when the server needs to be shared or run remotely:</p>
+
+<pre><code>// SSE transport — runs as an HTTP server
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
+import express from "express";
+
+const app = express();
+const server = new McpServer({ name: "remote-tools", version: "1.0.0" });
+
+// ... register tools/resources/prompts ...
+
+let transport: SSEServerTransport;
+
+app.get("/sse", (req, res) =&gt; {
+  transport = new SSEServerTransport("/messages", res);
+  server.connect(transport);
+});
+
+app.post("/messages", (req, res) =&gt; {
+  transport.handlePostMessage(req, res);
+});
+
+app.listen(3001, () =&gt; console.log("MCP SSE server on http://localhost:3001/sse"));
+</code></pre>
+
+<h2 id="building-an-mcp-server-with-the-python-sdk">Building an MCP server with the Python SDK</h2>
+<p><span class="level intermediate">Intermediate</span> If your tools are Python-heavy (data analysis, ML, database queries), the Python SDK is natural:</p>
+
+<pre><code># db_server.py — an MCP server that queries PostgreSQL
+# Run: python db_server.py
+from mcp.server.fastmcp import FastMCP
+import asyncpg
+
+mcp = FastMCP("postgres-query")
+
+@mcp.tool()
+async def run_sql(query: str, database: str = "app") -&gt; str:
+    """Execute a read-only SQL query and return results as text."""
+    # Safety: only allow SELECT
+    if not query.strip().upper().startswith("SELECT"):
+        return "Error: only SELECT queries are allowed"
+
+    conn = await asyncpg.connect(f"postgresql://localhost/{database}")
+    rows = await conn.fetch(query)
+    await conn.close()
+
+    if not rows:
+        return "No rows returned."
+
+    # Format as a text table
+    cols = list(rows[0].keys())
+    header = " | ".join(cols)
+    sep = "-+-".join("-" * len(c) for c in cols)
+    body = "\n".join(" | ".join(str(r[c]) for c in cols) for r in rows)
+    return f"{header}\n{sep}\n{body}"
+
+@mcp.resource("db://schema/{table}")
+async def get_schema(table: str) -&gt; str:
+    """Return the column definitions for a table."""
+    conn = await asyncpg.connect("postgresql://localhost/app")
+    rows = await conn.fetch("""
+        SELECT column_name, data_type, is_nullable
+        FROM information_schema.columns
+        WHERE table_name = $1
+    """, table)
+    await conn.close()
+    lines = [f"Table: {table}", "-" * 40]
+    for r in rows:
+        null = "NULL" if r["is_nullable"] == "YES" else "NOT NULL"
+        lines.append(f"  {r['column_name']:20} {r['data_type']:20} {null}")
+    return "\n".join(lines)
+
+if __name__ == "__main__":
+    mcp.run()  # stdio transport by default
+</code></pre>
+
+<h2 id="connecting-an-agent-to-your-server">Connecting an agent to your server</h2>
+<p><span class="level beginner">Beginner</span> The agent side is a one-line config. In Claude Code, Codex CLI, and Kiro CLI, MCP servers are registered in a config file:</p>
+
+<pre><code>// Claude Code: ~/.claude/mcp_servers.json (or project .mcp.json)
+{
+  "mcpServers": {
+    "file-search": {
+      "command": "bun",
+      "args": ["run", "/path/to/search-server.ts"]
+    },
+    "postgres-query": {
+      "command": "python",
+      "args": ["/path/to/db_server.py"]
+    }
+  }
+}
+
+// Kiro CLI: kiro mcp add file-search -- bun run /path/to/search-server.ts
+// Codex CLI: add to config.toml under [mcp_servers]
+</code></pre>
+
+<p>Once registered, the agent discovers your tools on startup and can call them. You don't need to change the agent's code at all — the MCP protocol handles discovery, calling, and response parsing.</p>
+
+<h2 id="advanced-tool-annotations-and-validation">Advanced: tool annotations and validation</h2>
+<p><span class="level advanced">Advanced</span> The quality of your tool descriptions directly affects whether the agent calls them correctly. A vague description leads to the wrong tool being called:</p>
+
+<pre><code>// BAD: the agent doesn't know when to use this
+server.tool("get_data", "Gets data", {}, async () =&gt; { ... });
+
+// GOOD: specific, describes what it returns and when to use it
+server.tool(
+  "get_user_orders",
+  "Retrieve all orders for a user from the database. "
+  + "Returns order_id, status, total, and created_at. "
+  + "Use this when the user asks about their purchase history.",
+  {
+    user_id: z.number().int().positive().describe("The user's ID"),
+    limit: z.number().int().min(1).max(100).default(10).describe("Max results"),
+  },
+  async ({ user_id, limit }) =&gt; {
+    const orders = await db.query(
+      "SELECT order_id, status, total, created_at FROM orders WHERE user_id = $1 LIMIT $2",
+      [user_id, limit]
+    );
+    return { content: [{ type: "text", text: JSON.stringify(orders, null, 2) }] };
+  }
+);
+</code></pre>
+
+<blockquote class="tip">Write tool descriptions for the model, not for humans. The model reads your description to decide whether to call the tool. Include: what the tool does, what it returns (field names), and when to use it vs other tools. This is the single biggest factor in MCP server quality.</blockquote>
+
+<h2 id="testing-mcp-servers">Testing MCP servers</h2>
+<p><span class="level intermediate">Intermediate</span> The MCP Inspector is a built-in debugging tool:</p>
+
+<pre><code># Run the inspector against your server
+npx @modelcontextprotocol/inspector bun run search-server.ts
+
+# Opens a web UI (http://localhost:5173) where you can:
+#   - See all registered tools/resources/prompts
+#   - Call tools with test arguments
+#   - Inspect the JSON-RPC messages
+#   - Debug why a tool isn't being called by the agent
+</code></pre>
+
+<p>For automated tests, use the SDK's test client:</p>
+
+<pre><code>// search-server.test.ts
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+import { test, expect } from "bun:test";
+
+test("search_files finds TypeScript files", async () =&gt; {
+  const transport = new StdioClientTransport({
+    command: "bun",
+    args: ["run", "search-server.ts"],
+  });
+  const client = new Client({ name: "test", version: "1.0.0" }, {});
+  await client.connect(transport);
+
+  // List tools
+  const { tools } = await client.listTools();
+  expect(tools.map(t =&gt; t.name)).toContain("search_files");
+
+  // Call the tool
+  const result = await client.callTool({
+    name: "search_files",
+    arguments: { pattern: "**/*.ts", cwd: "/tmp/test-project" },
+  });
+  expect(result.content[0].text).toContain(".ts");
+
+  await transport.close();
+});
+</code></pre>
+
+<h2 id="production-patterns">Production patterns</h2>
+<p><span class="level advanced">Advanced</span></p>
+
+<h3 id="error-handling">Error handling</h3>
+<p>Tools should return errors as content, not throw — the agent can read an error message and decide what to do:</p>
+
+<pre><code>server.tool("query_db", "Run a SQL query", { sql: z.string() }, async ({ sql }) =&gt; {
+  try {
+    const result = await db.query(sql);
+    return { content: [{ type: "text", text: JSON.stringify(result) }] };
+  } catch (err) {
+    // Return the error as content so the agent can reason about it
+    return {
+      content: [{ type: "text", text: `SQL error: ${err.message}` }],
+      isError: true,
+    };
+  }
+});
+</code></pre>
+
+<h3 id="security-least-privilege">Security: least privilege</h3>
+<p>Your MCP server runs with the same permissions as the agent. If the agent is running on a developer's machine, your server can access their filesystem, env vars, and network. Design for this:</p>
+
+<pre><code>// Scope file access to a project root, not the whole filesystem
+const PROJECT_ROOT = process.env.PROJECT_ROOT || process.cwd();
+
+server.tool("read_file", "Read a file from the project", { path: z.string() }, async ({ path }) =&gt; {
+  const resolved = await Bun.file(resolve(PROJECT_ROOT, path));
+
+  // Prevent directory traversal
+  if (!resolved.name.startsWith(PROJECT_ROOT)) {
+    return { content: [{ type: "text", text: "Access denied: path outside project root" }], isError: true };
+  }
+
+  if (!await exists(resolved)) {
+    return { content: [{ type: "text", text: `File not found: ${path}` }], isError: true };
+  }
+
+  return { content: [{ type: "text", text: await Bun.file(resolved).text() }] };
+});
+</code></pre>
+
+<h3 id="caching-resources">Caching resources</h3>
+<p>Resources that return large or computed data should cache:</p>
+
+<pre><code>let schemaCache: string | null = null;
+let schemaCacheTime = 0;
+const CACHE_TTL = 60_000;  // 1 minute
+
+server.resource("db-schema", "db://schema", async () =&gt; {
+  if (schemaCache &amp;&amp; Date.now() - schemaCacheTime &lt; CACHE_TTL) {
+    return { contents: [{ uri: "db://schema", text: schemaCache }] };
+  }
+  schemaCache = await computeSchema();
+  schemaCacheTime = Date.now();
+  return { contents: [{ uri: "db://schema", text: schemaCache }] };
+});
+</code></pre>
+
+<h2 id="common-mistakes">Common mistakes</h2>
+<ul>
+  <li><strong>Logging to stdout.</strong> <code>console.log()</code> corrupts the JSON-RPC stream. Always use <code>console.error()</code>.</li>
+  <li><strong>Vague tool descriptions.</strong> "Gets data" tells the agent nothing. Describe what the tool returns and when to use it — the description is the model's only guide.</li>
+  <li><strong>No input validation.</strong> Without Zod schemas, the model can pass wrong types. Always validate with a schema and describe each parameter.</li>
+  <li><strong>Throwing instead of returning errors.</strong> A thrown exception crashes the server. Return <code>isError: true</code> with a message so the agent can handle it.</li>
+  <li><strong>Unrestricted file access.</strong> An MCP server with filesystem access should scope to a project root and block directory traversal.</li>
+  <li><strong>Not testing with the Inspector.</strong> Before connecting to an agent, run the Inspector to verify tools are registered and callable. It catches 90% of issues.</li>
+  <li><strong>Forgetting that resources are read-only.</strong> Resources expose data; they can't take arguments. If you need parameters, use a tool.</li>
+</ul>
+
+<h2 id="exercises">Exercises</h2>
+<ol>
+  <li>Build an MCP server with one tool: <code>grep_project(pattern)</code> that searches files in a directory using ripgrep. Register it with an agent and test it.</li>
+  <li>Add a resource that exposes the project's <code>package.json</code> (or <code>go.mod</code>) as a readable resource.</li>
+  <li>Add a prompt template <code>explain_error(traceback)</code> that generates a debugging prompt. Test it with the Inspector.</li>
+  <li>Build a Python MCP server that queries a SQLite database with a read-only tool. Add the <code>db://schema/{table}</code> resource pattern.</li>
+  <li>Write an automated test using the MCP test client that calls your <code>grep_project</code> tool and asserts the result contains expected filenames.</li>
+</ol>
+
+<h2 id="mini-project-ai-powered-issue-tracker-mcp-server">Mini-project: AI-powered issue tracker MCP server</h2>
+<p>Build an MCP server that wraps a simple SQLite-backed issue tracker. Requirements:</p>
+<ul>
+  <li>Tools: <code>create_issue(title, description, assignee)</code>, <code>list_issues(status?)</code>, <code>update_issue(id, status)</code>, <code>add_comment(id, comment)</code>.</li>
+  <li>Resource: <code>issues://stats</code> returning a summary (open/closed counts, by assignee).</li>
+  <li>Prompt: <code>standup_report()</code> that generates a prompt asking the model to summarize recent activity.</li>
+  <li>All tools validate inputs with Zod and return errors as content with <code>isError: true</code>.</li>
+  <li>Test it end-to-end with the MCP Inspector, then connect it to Claude Code or Kiro CLI and ask it to "create an issue and list open ones."</li>
+</ul>
+
+<section class="further"><h2 id="further-reading">Further reading</h2>
+<p>Official documentation for the tools and APIs covered on this page:</p>
+<ul class="further-list"><li><a href="https://modelcontextprotocol.io/specification" target="_blank" rel="noopener">MCP specification ↗</a></li>
+<li><a href="https://github.com/modelcontextprotocol/typescript-sdk" target="_blank" rel="noopener">MCP TypeScript SDK ↗</a></li>
+<li><a href="https://github.com/modelcontextprotocol/python-sdk" target="_blank" rel="noopener">MCP Python SDK ↗</a></li></ul></section>
+  <nav class="pager">
+<a class="prev" href="agentic-coding.html"><small>Previous</small>🤖 Agentic Coding</a>
+<a class="next" href="agents-md-best-practices.html"><small>Next</small>🤖 AGENTS.md Best Practices</a>
+  </nav>
+</main>
+<button type="button" class="fab top" id="fab-top" aria-label="Back to top">↑ Top</button>
+<div class="banner" id="update-banner" role="status">A new version is available.<button type="button">Reload</button></div>
+<div class="banner" id="offline-banner" role="status">You're offline — showing cached lessons.</div>
+<script src="../app.js" defer></script>
+</body>
+</html>

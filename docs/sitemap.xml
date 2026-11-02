@@ -686,7 +686,17 @@
     <priority>0.7</priority>
   </url>
   <url>
+    <loc>https://danegigi.github.io/Tutorials/ai/rag-and-vector-search.html</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
     <loc>https://danegigi.github.io/Tutorials/ai/agentic-coding.html</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://danegigi.github.io/Tutorials/ai/mcp-servers-deep-dive.html</loc>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
@@ -701,12 +711,27 @@
     <priority>0.7</priority>
   </url>
   <url>
+    <loc>https://danegigi.github.io/Tutorials/ai/fine-tuning-and-custom-models.html</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
     <loc>https://danegigi.github.io/Tutorials/ai/codex-cli.html</loc>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
     <loc>https://danegigi.github.io/Tutorials/ai/kiro-cli.html</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://danegigi.github.io/Tutorials/ai/claude-cli.html</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://danegigi.github.io/Tutorials/ai/ai-with-go-and-bun.html</loc>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>

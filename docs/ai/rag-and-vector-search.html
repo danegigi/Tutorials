@@ -1,0 +1,646 @@
+<!DOCTYPE html>
+<html lang="en" data-base="../">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0d1117">
+<title>RAG &amp; Vector Search — AI</title>
+<meta name="description" content="Give an LLM access to your own data — embeddings, chunking strategies, vector databases (pgvector, Qdrant, Chroma), similarity search, reranking, and the full retrieval-augmented generation pipeline.">
+<link rel="canonical" href="https://danegigi.github.io/Tutorials/ai/rag-and-vector-search.html">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Dev Tutorials">
+<meta property="og:title" content="RAG &amp; Vector Search — AI">
+<meta property="og:description" content="Give an LLM access to your own data — embeddings, chunking strategies, vector databases (pgvector, Qdrant, Chroma), similarity search, reranking, and the full retrieval-augmented generation pipeline.">
+<meta property="og:url" content="https://danegigi.github.io/Tutorials/ai/rag-and-vector-search.html">
+<meta property="og:image" content="https://danegigi.github.io/Tutorials/icon-512.png">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="RAG &amp; Vector Search — AI">
+<meta name="twitter:description" content="Give an LLM access to your own data — embeddings, chunking strategies, vector databases (pgvector, Qdrant, Chroma), similarity search, reranking, and the full retrieval-augmented generation pipeline.">
+<meta name="twitter:image" content="https://danegigi.github.io/Tutorials/icon-512.png">
+<link rel="manifest" href="../manifest.webmanifest">
+<link rel="icon" href="../icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="../icon-192.png">
+<link rel="stylesheet" href="../app.css">
+<script>/* set theme before paint to avoid flash */(function(){try{var t=localStorage.getItem('tut.theme');document.documentElement.setAttribute('data-theme',t||'dark');}catch(e){document.documentElement.setAttribute('data-theme','dark');}})();</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"LearningResource","name":"RAG & Vector Search","description":"Give an LLM access to your own data — embeddings, chunking strategies, vector databases (pgvector, Qdrant, Chroma), similarity search, reranking, and the full retrieval-augmented generation pipeline.","url":"https://danegigi.github.io/Tutorials/ai/rag-and-vector-search.html","inLanguage":"en","isPartOf":{"@type":"Course","name":"AI — Dev Tutorials","url":"https://danegigi.github.io/Tutorials/ai/"},"learningResourceType":"Tutorial"},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Dev Tutorials","item":"https://danegigi.github.io/Tutorials/"},{"@type":"ListItem","position":2,"name":"AI","item":"https://danegigi.github.io/Tutorials/ai/"},{"@type":"ListItem","position":3,"name":"RAG & Vector Search","item":"https://danegigi.github.io/Tutorials/ai/rag-and-vector-search.html"}]}]}</script>
+
+</head>
+<body class="lesson">
+<header class="nav">
+  <a class="brand" href="../index.html">📚 Dev Tutorials</a>
+  <span class="crumb">RAG &amp; Vector Search — AI</span>
+  <span class="spacer"></span>
+  <a class="navbtn" href="../search.html">🔎 Search</a>
+  <button class="navbtn" id="install-btn" type="button">⬇️ Install</button>
+  <button class="navbtn" id="theme-btn" type="button" aria-label="Toggle theme">🌙 Dark</button>
+</header>
+<main class="wrap lesson-body">
+  <h1 class="page-title">RAG &amp; Vector Search</h1>
+  <div class="lesson-tools" data-lesson-id="ai/rag-and-vector-search">
+    <button id="done-btn" type="button" aria-pressed="false">○ Mark complete</button>
+    <button id="mark-btn" type="button" aria-pressed="false">☆ Bookmark</button>
+    <a class="navbtn" href="index.html" style="margin-left:auto">All AI lessons →</a>
+  </div>
+<nav class="toc" aria-label="On this page"><strong>On this page</strong><ul>
+<li class="lvl2"><a href="#why-rag-exists">Why RAG exists</a></li>
+<li class="lvl2"><a href="#embeddings-turning-text-into-vectors">Embeddings: turning text into vectors</a></li>
+<li class="lvl3"><a href="#choosing-an-embedding-model">Choosing an embedding model</a></li>
+<li class="lvl2"><a href="#chunking-splitting-documents-into-search-units">Chunking: splitting documents into search units</a></li>
+<li class="lvl3"><a href="#chunk-size-the-central-tradeoff">Chunk size: the central tradeoff</a></li>
+<li class="lvl3"><a href="#metadata-the-part-most-people-skip">Metadata: the part most people skip</a></li>
+<li class="lvl2"><a href="#vector-databases-storing-and-searching-embeddings">Vector databases: storing and searching embeddings</a></li>
+<li class="lvl3"><a href="#option-1-pgvector-postgres-extension">Option 1: pgvector (Postgres extension)</a></li>
+<li class="lvl3"><a href="#option-2-qdrant-dedicated-vector-db">Option 2: Qdrant (dedicated vector DB)</a></li>
+<li class="lvl3"><a href="#option-3-in-process-for-prototypes">Option 3: In-process (for prototypes)</a></li>
+<li class="lvl2"><a href="#the-full-rag-pipeline-in-code">The full RAG pipeline in code</a></li>
+<li class="lvl2"><a href="#reranking-the-step-that-doubles-accuracy">Reranking: the step that doubles accuracy</a></li>
+<li class="lvl2"><a href="#advanced-patterns">Advanced patterns</a></li>
+<li class="lvl3"><a href="#hybrid-search-vector-keyword">Hybrid search: vector + keyword</a></li>
+<li class="lvl3"><a href="#query-expansion">Query expansion</a></li>
+<li class="lvl3"><a href="#parent-document-retrieval">Parent-document retrieval</a></li>
+<li class="lvl3"><a href="#evaluation-measuring-rag-quality">Evaluation: measuring RAG quality</a></li>
+<li class="lvl2"><a href="#cost-management">Cost management</a></li>
+<li class="lvl2"><a href="#common-mistakes">Common mistakes</a></li>
+<li class="lvl2"><a href="#exercises">Exercises</a></li>
+<li class="lvl2"><a href="#mini-project-documentation-rag-bot">Mini-project: Documentation RAG bot</a></li>
+</ul></nav>
+<p class="lead">A large language model trained on the internet doesn't know your codebase, your documents, or your database. <strong>Retrieval-Augmented Generation (RAG)</strong> fixes that: instead of hoping the model memorized your data during training, you search your data at query time and stuff the relevant pieces into the prompt as context. This lesson covers the full pipeline — embeddings, chunking, vector databases, similarity search, reranking, and the production patterns that separate a working RAG system from a demo that hallucinates.</p>
+
+<h2 id="why-rag-exists">Why RAG exists</h2>
+<p><span class="level beginner">Beginner</span> There are two ways to give an LLM new knowledge:</p>
+
+<table>
+  <thead><tr><th>Approach</th><th>How</th><th>Cost</th><th>When</th></tr></thead>
+  <tbody>
+    <tr><td><strong>Retrain / fine-tune</strong></td><td>Adjust model weights on your data</td><td>High (GPU hours, expertise)</td><td>Style/tone changes, domain adaptation</td></tr>
+    <tr><td><strong>RAG</strong></td><td>Search your data, inject results into the prompt</td><td>Low (a DB query + more tokens)</td><td>Factual knowledge that changes, large corpora</td></tr>
+  </tbody>
+</table>
+
+<p>RAG wins for most use cases because knowledge is <strong>decoupled from the model</strong>: you can add, update, or delete documents without retraining. The model is the reasoning engine; your vector database is the knowledge store.</p>
+
+<p>The pipeline, end to end:</p>
+
+<pre><code>DOCUMENTS          EMBEDDINGS         VECTOR DB          QUERY TIME
+──────────          ──────────         ──────────         ──────────
+pdf, md, code  ──►  chunk  ──►  embed  ──►  store  ···  embed query ──► search ──► top-k chunks ──► LLM prompt ──► answer
+  (ingest)         (split)    (API)      (index)           (retrieve)          (rerank?)          (generate)
+</code></pre>
+
+<h2 id="embeddings-turning-text-into-vectors">Embeddings: turning text into vectors</h2>
+<p><span class="level beginner">Beginner</span> An <strong>embedding</strong> is a vector (a list of floats) that captures the semantic meaning of a piece of text. Text with similar meaning produces vectors close together in high-dimensional space. The key property: <em>"cat sat on the mat"</em> and <em>"feline rested on the rug"</em> produce nearby vectors even though no words match.</p>
+
+<pre><code># OpenAI embeddings API
+curl https://api.openai.com/v1/embeddings \
+  -H "Authorization: Bearer $OPENAI_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "text-embedding-3-small",
+    "input": "How do I configure pgvector for similarity search?"
+  }'
+
+# Response: a 1536-dimensional vector
+{
+  "data": [{
+    "embedding": [0.0023, -0.0091, 0.0438, ...1536 floats...],
+    "index": 0
+  }],
+  "model": "text-embedding-3-small",
+  "usage": { "prompt_tokens": 12, "total_tokens": 12 }
+}
+</code></pre>
+
+<p>You're not limited to OpenAI. Free local options that run on your machine:</p>
+
+<pre><code># Ollama serves embedding models too
+ollama pull nomic-embed-text
+curl http://localhost:11434/api/embeddings -d '{
+  "model": "nomic-embed-text",
+  "prompt": "How do I configure pgvector?"
+}'
+# {"embedding": [0.023, -0.041, ...]}
+</code></pre>
+
+<blockquote class="tip">Embedding models are much cheaper and faster than chat models. A 1536-dim embedding for a chunk of text costs fractions of a cent. Don't overthink the choice — start with <code>text-embedding-3-small</code> (OpenAI) or <code>nomic-embed-text</code> (local), measure recall on your data, and upgrade only if results are poor.</blockquote>
+
+<h3 id="choosing-an-embedding-model">Choosing an embedding model</h3>
+<p><span class="level intermediate">Intermediate</span> The main dimensions:</p>
+
+<table>
+  <thead><tr><th>Model</th><th>Dims</th><th>Provider</th><th>Notes</th></tr></thead>
+  <tbody>
+    <tr><td>text-embedding-3-small</td><td>1536</td><td>OpenAI</td><td>Cheap, good default</td></tr>
+    <tr><td>text-embedding-3-large</td><td>3072</td><td>OpenAI</td><td>Better recall, more storage</td></tr>
+    <tr><td>nomic-embed-text</td><td>768</td><td>Ollama (local)</td><td>Free, runs on laptop</td></tr>
+    <tr><td>mxbai-embed-large</td><td>1024</td><td>Ollama (local)</td><td>Strong open model</td></tr>
+    <tr><td>BGE-large-en</td><td>1024</td><td>HuggingFace</td><td>Open weights, self-host</td></tr>
+  </tbody>
+</table>
+
+<p>The dimension count matters for storage cost and search speed, not just quality. A 3072-dim vector takes 4x the storage of a 768-dim one. Many providers support <strong>dimension reduction</strong> — you can request fewer dimensions from a large model to trade a little recall for storage savings:</p>
+
+<pre><code>// OpenAI: request a shorter embedding (512 dims instead of 1536)
+{
+  "model": "text-embedding-3-small",
+  "input": "...",
+  "dimensions": 512   // truncates the vector; still usable
+}
+</code></pre>
+
+<h2 id="chunking-splitting-documents-into-search-units">Chunking: splitting documents into search units</h2>
+<p><span class="level beginner">Beginner</span> You can't embed an entire book into one vector — the model would average out all the meaning into mush. You <strong>chunk</strong> documents into smaller pieces, embed each one separately, and search over the chunks.</p>
+
+<p>The simplest approach — fixed-size chunks with overlap:</p>
+
+<pre><code>def chunk_text(text, chunk_size=512, overlap=50):
+    """Split text into overlapping chunks of ~chunk_size tokens."""
+    chunks = []
+    start = 0
+    while start &lt; len(text):
+        end = start + chunk_size
+        chunks.append(text[start:end])
+        start += chunk_size - overlap  # overlap keeps context at boundaries
+    return chunks
+
+text = open("docs/architecture.md").read()
+for i, chunk in enumerate(chunk_text(text)):
+    embedding = embed(chunk)
+    vector_db.insert({"id": f"arch-{i}", "text": chunk, "embedding": embedding})
+</code></pre>
+
+<p>But fixed-size splitting breaks sentences and loses structure. Better approaches:</p>
+
+<table>
+  <thead><tr><th>Strategy</th><th>How</th><th>Best for</th></tr></thead>
+  <tbody>
+    <tr><td>Fixed-size + overlap</td><td>N tokens, slide by N-overlap</td><td>Quick prototype, uniform text</td></tr>
+    <tr><td>Sentence-aware</td><td>Split on sentence boundaries, group to target size</td><td>Most prose (docs, articles)</td></tr>
+    <tr><td>Recursive splitting</td><td>Try paragraph → sentence → word, keep the largest intact unit</td><td>Mixed content (Markdown, HTML)</td></tr>
+    <tr><td>Structure-aware</td><td>Split on headers (##), one chunk per section</td><td>Codebases, technical docs</td></tr>
+    <tr><td>Semantic chunking</td><td>Embed sentences, split where embedding distance spikes</td><td>Long-form essays, transcripts</td></tr>
+  </tbody>
+</table>
+
+<h3 id="chunk-size-the-central-tradeoff">Chunk size: the central tradeoff</h3>
+<p><span class="level intermediate">Intermediate</span></p>
+
+<table>
+  <thead><tr><th>Small chunks (100-200 tokens)</th><th>Large chunks (500-1000 tokens)</th></tr></thead>
+  <tbody>
+    <tr><td>↑ Precision: the embedding captures one idea</td><td>↑ Context: each chunk has surrounding detail</td></tr>
+    <tr><td>↓ Recall: may miss info split across boundaries</td><td>↓ Precision: the embedding averages multiple ideas</td></tr>
+    <tr><td>↓ Requires more chunks in the prompt</td><td>↑ Fewer chunks needed, but each is "fatter"</td></tr>
+  </tbody>
+</table>
+
+<blockquote class="tip">Start at 256-512 tokens with 50-token overlap. That's the sweet spot for most documentation. Measure retrieval quality (did the top-k chunks actually contain the answer?) and adjust from there — not the other way around.</blockquote>
+
+<h3 id="metadata-the-part-most-people-skip">Metadata: the part most people skip</h3>
+<p>Every chunk should carry metadata, not just text and embedding. This is what lets you <strong>filter</strong> before searching:</p>
+
+<pre><code>{
+  "text": "To configure pgvector, run CREATE EXTENSION vector...",
+  "embedding": [0.002, ...],
+  "metadata": {
+    "source": "docs/database-setup.md",
+    "section": "pgvector",
+    "page": 3,
+    "language": "en",
+    "doc_type": "tutorial",
+    "last_updated": "2026-10-15"
+  }
+}
+</code></pre>
+
+<p>With metadata filters, a query like "show me database setup for Postgres" can pre-filter to <code>doc_type=tutorial</code> and <code>section=pgvector</code> before the vector search, which dramatically improves precision.</p>
+
+<h2 id="vector-databases-storing-and-searching-embeddings">Vector databases: storing and searching embeddings</h2>
+<p><span class="level beginner">Beginner</span> A vector database stores embeddings and answers the question: "given this query vector, what are the K closest vectors?" The distance metric is almost always <strong>cosine similarity</strong> (how aligned two vectors are, regardless of magnitude).</p>
+
+<h3 id="option-1-pgvector-postgres-extension">Option 1: pgvector (Postgres extension)</h3>
+<p>If you already have Postgres, you may not need a separate database. <code>pgvector</code> adds a <code>vector</code> type and similarity operators:</p>
+
+<pre><code>-- Install the extension
+CREATE EXTENSION vector;
+
+-- Create a table with a vector column
+CREATE TABLE documents (
+  id        serial PRIMARY KEY,
+  content   text NOT NULL,
+  embedding  vector(1536),
+  source    text,
+  section   text
+);
+
+-- Insert with an embedding (generated by your app)
+INSERT INTO documents (content, embedding, source, section)
+VALUES ('pgvector setup guide...', '[0.002, -0.009, ...]', 'docs/db.md', 'pgvector');
+
+-- Cosine similarity search: find the 5 most similar chunks
+SELECT content, source, 1 - (embedding &lt;=&gt; '[0.003, ...]') AS similarity
+FROM documents
+WHERE section = 'pgvector'                    -- pre-filter by metadata
+ORDER BY embedding &lt;=&gt; '[0.003, ...]'          -- cosine distance (lower = closer)
+LIMIT 5;
+</code></pre>
+
+<p>The <code>&lt;=&gt;</code> operator is cosine distance. Add an index for speed:</p>
+
+<pre><code>-- HNSW index (faster, approximate nearest neighbor)
+CREATE INDEX ON documents USING hnsw (embedding vector_cosine_ops)
+  WITH (m = 16, ef_construction = 64);
+
+-- Or IVFFlat (faster to build, slightly less recall)
+CREATE INDEX ON documents USING ivfflat (embedding vector_cosine_ops)
+  WITH (lists = 100);
+</code></pre>
+
+<h3 id="option-2-qdrant-dedicated-vector-db">Option 2: Qdrant (dedicated vector DB)</h3>
+<p>For scale beyond what Postgres handles comfortably (millions of vectors), a dedicated vector database like Qdrant is purpose-built:</p>
+
+<pre><code># Run Qdrant locally with Docker
+docker run -p 6333:6333 qdrant/qdrant
+
+# Create a collection
+curl -X PUT http://localhost:6333/collections/docs \
+  -H "Content-Type: application/json" \
+  -d '{
+    "vectors": { "size": 1536, "distance": "Cosine" }
+  }'
+
+# Upsert points
+curl -X PUT http://localhost:6333/collections/docs/points \
+  -H "Content-Type: application/json" \
+  -d '{
+    "points": [{
+      "id": 1,
+      "vector": [0.002, -0.009, ...],
+      "payload": { "text": "pgvector setup...", "section": "pgvector" }
+    }]
+  }'
+
+# Search with metadata filter
+curl -X POST http://localhost:6333/collections/docs/points/search \
+  -H "Content-Type: application/json" \
+  -d '{
+    "vector": [0.003, ...],
+    "filter": { "must": [{ "key": "section", "match": { "value": "pgvector" }}]},
+    "limit": 5
+  }'
+</code></pre>
+
+<h3 id="option-3-in-process-for-prototypes">Option 3: In-process (for prototypes)</h3>
+<p>For small datasets or local-first apps, you can use an in-process store:</p>
+
+<pre><code>// ChromaDB — embeds in your Node/Bun process
+import { ChromaClient } from "chromadb";
+const client = new ChromaClient({ path: "http://localhost:8000" });
+const collection = await client.getOrCreateCollection({ name: "docs" });
+
+await collection.add({
+  ids: ["doc-1"],
+  documents: ["pgvector setup guide..."],
+  metadatas: [{ source: "docs/db.md" }],
+  // embeddings auto-generated if you configure an embedding function
+});
+
+const results = await collection.query({
+  queryTexts: ["how to set up pgvector?"],
+  nResults: 5,
+  where: { source: "docs/db.md" },   // metadata filter
+});
+</code></pre>
+
+<blockquote class="warn">In-process stores (ChromaDB in-memory, FAISS) lose their data on restart unless you configure persistence. For production, use pgvector, Qdrant, or another server-based store that handles durability.</blockquote>
+
+<h2 id="the-full-rag-pipeline-in-code">The full RAG pipeline in code</h2>
+<p><span class="level intermediate">Intermediate</span> Here's a complete, runnable RAG pipeline in TypeScript (works under Bun):</p>
+
+<pre><code>// rag.ts — a complete RAG pipeline
+// Run: bun run rag.ts
+
+const EMBED_MODEL = "text-embedding-3-small";
+const CHAT_MODEL = "gpt-4o-mini";
+const CHUNK_SIZE = 400;   // tokens
+const OVERLAP = 50;
+const TOP_K = 5;          // chunks to retrieve
+
+// 1. INGEST: chunk + embed + store
+async function ingest(filePath: string, store: DocStore) {
+  const text = await Bun.file(filePath).text();
+  const chunks = chunkText(text, CHUNK_SIZE, OVERLAP);
+  for (const [i, chunk] of chunks.entries()) {
+    const embedding = await embed(chunk);
+    await store.insert({
+      id: `${filePath}-${i}`,
+      text: chunk,
+      embedding,
+      metadata: { source: filePath, chunkIndex: i },
+    });
+  }
+  console.log(`Ingested ${chunks.length} chunks from ${filePath}`);
+}
+
+// 2. RETRIEVE: embed query, search top-k
+async function retrieve(query: string, store: DocStore) {
+  const queryEmbedding = await embed(query);
+  const results = await store.search(queryEmbedding, TOP_K);
+  return results;  // [{ text, score, metadata }, ...]
+}
+
+// 3. GENERATE: stuff chunks into the prompt, ask the model
+async function answer(query: string, chunks: SearchResult[]) {
+  const context = chunks
+    .map((c, i) =&gt; `[${i + 1}] ${c.metadata.source}\n${c.text}`)
+    .join("\n\n---\n\n");
+
+  const response = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${Bun.env.OPENAI_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: CHAT_MODEL,
+      messages: [
+        {
+          role: "system",
+          content: `Answer the user's question using ONLY the provided context.
+If the context doesn't contain the answer, say "I don't have that information."
+Cite sources by number: [1], [2], etc.`
+        },
+        {
+          role: "user",
+          content: `Context:\n${context}\n\nQuestion: ${query}`
+        }
+      ],
+      temperature: 0.1,   // low temp = more factual, less creative
+    }),
+  });
+
+  const data = await response.json();
+  return data.choices[0].message.content;
+}
+
+// 4. PIPELINE: put it together
+async function rag(query: string, store: DocStore) {
+  const chunks = await retrieve(query, store);
+  console.log(`Retrieved ${chunks.length} chunks:`);
+  chunks.forEach((c, i) =&gt; console.log(`  [${i+1}] ${c.metadata.source} (score: ${c.score.toFixed(3)})`));
+  return answer(query, chunks);
+}
+
+// --- helpers ---
+async function embed(text: string): Promise&lt;number[]&gt; {
+  const r = await fetch("https://api.openai.com/v1/embeddings", {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${Bun.env.OPENAI_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ model: EMBED_MODEL, input: text }),
+  });
+  return (await r.json()).data[0].embedding;
+}
+
+function chunkText(text: string, size: number, overlap: number): string[] {
+  const tokens = text.split(/(\s+)/);  // simplistic; use a real tokenizer
+  const chunks: string[] = [];
+  for (let i = 0; i &lt; tokens.length; i += size - overlap) {
+    chunks.push(tokens.slice(i, i + size).join(""));
+    if (i + size &gt;= tokens.length) break;
+  }
+  return chunks;
+}
+
+// Run it
+const store = new MemoryDocStore();  // swap for pgvector/Qdrant in prod
+await ingest("docs/architecture.md", store);
+await ingest("docs/api-reference.md", store);
+const result = await rag("How is the vector store configured?", store);
+console.log(result);
+</code></pre>
+
+<h2 id="reranking-the-step-that-doubles-accuracy">Reranking: the step that doubles accuracy</h2>
+<p><span class="level advanced">Advanced</span> Vector search is fast but imprecise — it finds <em>semantically similar</em> text, not necessarily text that <em>answers the question</em>. A <strong>reranker</strong> is a second model that scores each retrieved chunk against the query with a cross-attention mechanism (the query and the chunk are read together, not embedded separately).</p>
+
+<pre><code>// Two-stage retrieval: broad recall + precise rerank
+async function retrieveWithRerank(query: string, store: DocStore) {
+  // Stage 1: vector search — retrieve 20 candidates (broad net)
+  const queryEmbedding = await embed(query);
+  const candidates = await store.search(queryEmbedding, 20);
+
+  // Stage 2: rerank — score each candidate against the query
+  const reranked = await rerank(query, candidates);
+
+  // Return only the top 5 after reranking
+  return reranked.slice(0, 5);
+}
+
+// Using Cohere's rerank API
+async function rerank(query: string, docs: SearchResult[]) {
+  const r = await fetch("https://api.cohere.com/v2/rerank", {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${Bun.env.COHERE_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: "rerank-english-v3.0",
+      query: query,
+      documents: docs.map(d =&gt; d.text),
+      top_n: 5,
+    }),
+  });
+  const data = await r.json();
+  // data.results: [{ index: 0, relevance_score: 0.98 }, ...]
+  return data.results
+    .sort((a: any, b: any) =&gt; b.relevance_score - a.relevance_score)
+    .map((r: any) =&gt; ({ ...docs[r.index], score: r.relevance_score }));
+}
+</code></pre>
+
+<blockquote class="tip">Reranking is the single highest-ROI improvement you can make to a RAG system. Retrieve 20-50 chunks with vector search (cheap, fast), then rerank to 5 (slower, but only 20-50 calls). You get the recall of a broad search with the precision of a cross-encoder. Most production RAG systems use this two-stage approach.</blockquote>
+
+<h2 id="advanced-patterns">Advanced patterns</h2>
+<p><span class="level advanced">Advanced</span></p>
+
+<h3 id="hybrid-search-vector-keyword">Hybrid search: vector + keyword</h3>
+<p>Vector search is great for semantic similarity but terrible for exact matches (product names, error codes, IDs). <strong>Hybrid search</strong> combines vector similarity with traditional keyword search (BM25/full-text) and merges the rankings:</p>
+
+<pre><code>-- pgvector: combine full-text search with vector search
+WITH vector_results AS (
+  SELECT id, content, 1 - (embedding &lt;=&gt; $1) AS score
+  FROM documents ORDER BY embedding &lt;=&gt; $1 LIMIT 20
+),
+keyword_results AS (
+  SELECT id, content, ts_rank(tsv, query) AS score
+  FROM documents, plainto_tsquery('english', $2) query
+  WHERE tsv @@ query
+  ORDER BY score DESC LIMIT 20
+)
+-- Reciprocal Rank Fusion: merge by rank, not raw score
+SELECT id, content,
+  COALESCE(1.0 / (60 + v.score_rank), 0) +
+  COALESCE(1.0 / (60 + k.score_rank), 0) AS fused_score
+FROM vector_results v
+FULL OUTER JOIN keyword_results k USING (id)
+ORDER BY fused_score DESC
+LIMIT 5;
+</code></pre>
+
+<h3 id="query-expansion">Query expansion</h3>
+<p>The user's query is often shorter and vaguer than the documents it should match. Expand it before searching:</p>
+
+<pre><code>// Ask the LLM to rewrite the query before retrieval
+async function expandQuery(query: string): Promise&lt;string[]&gt; {
+  const r = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${Bun.env.OPENAI_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: "gpt-4o-mini",
+      messages: [{
+        role: "system",
+        content: "Rewrite the user's question as 3 search queries that would find the answer in a documentation database. Return JSON array."
+      }, { role: "user", content: query }],
+      response_format: { type: "json_object" },
+    }),
+  });
+  return JSON.parse((await r.json()).choices[0].message.content).queries;
+}
+
+// Search with all expanded queries, deduplicate, then rerank
+const queries = await expandQuery(userQuery);
+const allResults = await Promise.all(queries.map(q =&gt; retrieve(q, store)));
+const unique = dedupe(allResults.flat());
+const reranked = await rerank(userQuery, unique);
+</code></pre>
+
+<h3 id="parent-document-retrieval">Parent-document retrieval</h3>
+<p>Sometimes the <em>chunk</em> that matches the query is too small to contain the full answer. <strong>Parent-document retrieval</strong> embeds small chunks (for precise search) but returns the larger parent document (for complete context):</p>
+
+<pre><code>// Store: small chunks for search, parent doc for context
+{
+  "parent_id": "architecture.md",
+  "parent_text": "full section text...",
+  "chunk_id": "architecture.md-3",
+  "chunk_text": "small chunk for embedding...",
+  "embedding": [...]
+}
+
+// At retrieval time: search chunks, return parent_text
+SELECT d.parent_text, max(1 - (d.embedding &lt;=&gt; $1)) AS score
+FROM documents d
+ORDER BY d.embedding &lt;=&gt; $1
+LIMIT 5;
+-- Each result is the full parent section, not just the matching chunk
+</code></pre>
+
+<h3 id="evaluation-measuring-rag-quality">Evaluation: measuring RAG quality</h3>
+<p>A RAG system without evaluation is a black box. Build a small eval set (20-50 question-answer pairs from your docs) and measure:</p>
+
+<table>
+  <thead><tr><th>Metric</th><th>What it measures</th><th>How to compute</th></tr></thead>
+  <tbody>
+    <tr><td><strong>Context recall</strong></td><td>Did the retrieved chunks contain the answer?</td><td>LLM judge: "does the gold answer appear in the context?"</td></tr>
+    <tr><td><strong>Context precision</strong></td><td>Were the top-k chunks relevant, or mostly noise?</td><td>LLM judge: "is each chunk relevant to the question?"</td></tr>
+    <tr><td><strong>Faithfulness</strong></td><td>Is the answer grounded in the context, or hallucinated?</td><td>LLM judge: "is every claim in the answer supported by a source?"</td></tr>
+    <tr><td><strong>Answer relevance</strong></td><td>Does the answer actually address the question?</td><td>LLM judge: "does the answer respond to what was asked?"</td></tr>
+  </tbody>
+</table>
+
+<pre><code>// Simple faithfulness check
+async function checkFaithfulness(answer: string, context: string): Promise&lt;boolean&gt; {
+  const r = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: { "Authorization": `Bearer ${Bun.env.OPENAI_API_KEY}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: "gpt-4o-mini",
+      messages: [
+        { role: "system", content: "Is every claim in the ANSWER supported by the CONTEXT? Reply only true or false." },
+        { role: "user", content: `CONTEXT:\n${context}\n\nANSWER:\n${answer}` }
+      ],
+      temperature: 0,
+    }),
+  });
+  return (await r.json()).choices[0].message.content.trim() === "true";
+}
+</code></pre>
+
+<blockquote class="warn">Don't skip evaluation. A RAG system that "feels good" in testing can silently retrieve irrelevant chunks and hallucinate confidently. A 30-question eval set catches regressions when you change chunk size, embedding model, or top-k — and gives you numbers to optimize instead of vibes.</blockquote>
+
+<h2 id="cost-management">Cost management</h2>
+<p><span class="level intermediate">Intermediate</span> RAG costs come from two places:</p>
+
+<table>
+  <thead><tr><th>Operation</th><th>Cost driver</th><th>How to reduce</th></tr></thead>
+  <tbody>
+    <tr><td>Embedding (ingest)</td><td>One-time: chunk count × tokens</td><td>Cache embeddings; only re-embed changed docs</td></tr>
+    <tr><td>Embedding (query)</td><td>Per-query: one embed call</td><td>Negligible — don't optimize</td></tr>
+    <tr><td>Vector search</td><td>Database compute</td><td>Use HNSW indexes; filter by metadata first</td></tr>
+    <tr><td>LLM generation</td><td>Context tokens × output tokens</td><td>Limit top-k; use smaller models; cache common answers</td></tr>
+  </tbody>
+</table>
+
+<p>The biggest cost lever is <strong>context length</strong>: 5 chunks × 400 tokens = 2,000 tokens of context per query. With GPT-4o at $2.50/1M input tokens, that's $0.005 per query just for context. At 10,000 queries/day, that's $50/day. Switching to GPT-4o-mini ($0.15/1M input) drops it to $3/day.</p>
+
+<pre><code>// Cache common answers to avoid redundant LLM calls
+const cache = new Map&lt;string, string&gt;();
+async function ragWithCache(query: string, store: DocStore) {
+  const cacheKey = query.toLowerCase().trim();
+  if (cache.has(cacheKey)) return cache.get(cacheKey)!;
+  const result = await rag(query, store);
+  cache.set(cacheKey, result);
+  return result;
+}
+</code></pre>
+
+<h2 id="common-mistakes">Common mistakes</h2>
+<ul>
+  <li><strong>Chunking too large.</strong> A 2000-token chunk means the embedding averages a whole page — precision drops. Most docs work best at 256-512 tokens.</li>
+  <li><strong>No metadata filtering.</strong> Searching 100k vectors without pre-filtering is slow and noisy. Filter by source, section, date, or type first.</li>
+  <li><strong>Skipping reranking.</strong> Vector search alone gets you 60-70% of the way. Reranking adds 15-20 percentage points of accuracy for a small cost.</li>
+  <li><strong>No eval set.</strong> "It looks good in testing" is not evaluation. Build 20-50 QA pairs and measure context recall + faithfulness.</li>
+  <li><strong>Stuffing too much context.</strong> Top-k=20 with 1000-token chunks means 20k tokens of context — the model gets lost. Use top-k=5 after reranking, with smaller chunks.</li>
+  <li><strong>Not handling "I don't know."</strong> If the system prompt says "answer from context" but doesn't include an explicit escape hatch, the model will hallucinate when context is insufficient. Always include "if the context doesn't contain the answer, say so."</li>
+  <li><strong>Re-embedding unchanged docs.</strong> Version your embeddings. Store a hash of each document; only re-chunk and re-embed when the hash changes.</li>
+</ul>
+
+<h2 id="exercises">Exercises</h2>
+<ol>
+  <li>Build a RAG pipeline over your own project's <code>README.md</code> and <code>AGENTS.md</code>. Ask it 5 questions about the project and check whether the retrieved chunks contain the answer.</li>
+  <li>Add metadata filtering: tag each chunk by file and section, then filter queries to a specific file.</li>
+  <li>Implement two-stage retrieval (vector search top-20 + rerank top-5) and compare answer quality to vector search alone.</li>
+  <li>Build a 10-question eval set. Measure context recall and faithfulness for your pipeline. Then change chunk size from 256 to 512 and see if the numbers improve or regress.</li>
+  <li>Add a cache layer. Measure the cache hit rate and cost savings over 100 repeated queries.</li>
+</ol>
+
+<h2 id="mini-project-documentation-rag-bot">Mini-project: Documentation RAG bot</h2>
+<p>Build a CLI tool that ingests a folder of Markdown documentation, chunks and embeds it into a local vector store (pgvector or Qdrant), and answers questions from the command line with source citations. Requirements:</p>
+<ul>
+  <li><code>bun run ingest ./docs/</code> — walk the folder, chunk each <code>.md</code> file, embed, and store with metadata (filename, section header, modified date).</li>
+  <li><code>bun run ask "How do I configure X?"</code> — embed the query, retrieve top-5, optionally rerank, and print the answer with <code>[source: file, chunk N]</code> citations.</li>
+  <li>Only re-embed files whose content hash has changed since the last ingest (store hashes in a sidecar JSON file).</li>
+  <li>Include a <code>--verbose</code> flag that prints the retrieved chunks and their similarity scores before the answer, so you can debug retrieval quality.</li>
+  <li>Add a 5-question eval mode (<code>bun run eval</code>) that checks whether the answer contains expected keywords from a <code>eval.json</code> file.</li>
+</ul>
+
+<section class="further"><h2 id="further-reading">Further reading</h2>
+<p>Official documentation for the tools and APIs covered on this page:</p>
+<ul class="further-list"><li><a href="https://platform.openai.com/docs/guides/embeddings" target="_blank" rel="noopener">OpenAI: Embeddings guide ↗</a></li>
+<li><a href="https://www.pinecone.io/learn/retrieval-augmented-generation/" target="_blank" rel="noopener">Pinecone: RAG guide ↗</a></li>
+<li><a href="https://github.com/pgvector/pgvector" target="_blank" rel="noopener">pgvector docs ↗</a></li></ul></section>
+  <nav class="pager">
+<a class="prev" href="prompt-engineering.html"><small>Previous</small>🤖 Prompt Engineering</a>
+<a class="next" href="agentic-coding.html"><small>Next</small>🤖 Agentic Coding</a>
+  </nav>
+</main>
+<button type="button" class="fab top" id="fab-top" aria-label="Back to top">↑ Top</button>
+<div class="banner" id="update-banner" role="status">A new version is available.<button type="button">Reload</button></div>
+<div class="banner" id="offline-banner" role="status">You're offline — showing cached lessons.</div>
+<script src="../app.js" defer></script>
+</body>
+</html>
