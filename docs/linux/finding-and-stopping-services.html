@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="en" data-base="../">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0d1117">
+<title>Finding &amp; Stopping Services and Ports — Linux</title>
+<meta name="description" content="Which process owns a port, what is running on the server, and how to stop it safely: ss, lsof, fuser, ps, SIGTERM before SIGKILL, systemd, Docker, and the macOS equivalents.">
+<link rel="canonical" href="https://danegigi.github.io/Tutorials/linux/finding-and-stopping-services.html">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Dev Tutorials">
+<meta property="og:title" content="Finding &amp; Stopping Services and Ports — Linux">
+<meta property="og:description" content="Which process owns a port, what is running on the server, and how to stop it safely: ss, lsof, fuser, ps, SIGTERM before SIGKILL, systemd, Docker, and the macOS equivalents.">
+<meta property="og:url" content="https://danegigi.github.io/Tutorials/linux/finding-and-stopping-services.html">
+<meta property="og:image" content="https://danegigi.github.io/Tutorials/icon-512.png">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Finding &amp; Stopping Services and Ports — Linux">
+<meta name="twitter:description" content="Which process owns a port, what is running on the server, and how to stop it safely: ss, lsof, fuser, ps, SIGTERM before SIGKILL, systemd, Docker, and the macOS equivalents.">
+<meta name="twitter:image" content="https://danegigi.github.io/Tutorials/icon-512.png">
+<link rel="manifest" href="../manifest.webmanifest">
+<link rel="icon" href="../icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="../icon-192.png">
+<link rel="stylesheet" href="../app.css">
+<script>/* set theme before paint to avoid flash */(function(){try{var t=localStorage.getItem('tut.theme');document.documentElement.setAttribute('data-theme',t||'dark');}catch(e){document.documentElement.setAttribute('data-theme','dark');}})();</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"LearningResource","name":"Finding & Stopping Services and Ports","description":"Which process owns a port, what is running on the server, and how to stop it safely: ss, lsof, fuser, ps, SIGTERM before SIGKILL, systemd, Docker, and the macOS equivalents.","url":"https://danegigi.github.io/Tutorials/linux/finding-and-stopping-services.html","inLanguage":"en","isPartOf":{"@type":"Course","name":"Linux — Dev Tutorials","url":"https://danegigi.github.io/Tutorials/linux/"},"learningResourceType":"Tutorial"},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Dev Tutorials","item":"https://danegigi.github.io/Tutorials/"},{"@type":"ListItem","position":2,"name":"Linux","item":"https://danegigi.github.io/Tutorials/linux/"},{"@type":"ListItem","position":3,"name":"Finding & Stopping Services and Ports","item":"https://danegigi.github.io/Tutorials/linux/finding-and-stopping-services.html"}]}]}</script>
+
+</head>
+<body class="lesson">
+<header class="nav">
+  <a class="brand" href="../index.html">📚 Dev Tutorials</a>
+  <span class="crumb">Finding &amp; Stopping Services and Ports — Linux</span>
+  <span class="spacer"></span>
+  <a class="navbtn" href="../search.html">🔎 Search</a>
+  <button class="navbtn" id="install-btn" type="button">⬇️ Install</button>
+  <button class="navbtn" id="theme-btn" type="button" aria-label="Toggle theme">🌙 Dark</button>
+</header>
+<main class="wrap lesson-body">
+  <h1 class="page-title">Finding &amp; Stopping Services and Ports</h1>
+  <div class="lesson-tools" data-lesson-id="linux/finding-and-stopping-services">
+    <button id="done-btn" type="button" aria-pressed="false">○ Mark complete</button>
+    <button id="mark-btn" type="button" aria-pressed="false">☆ Bookmark</button>
+    <a class="navbtn" href="index.html" style="margin-left:auto">All Linux lessons →</a>
+  </div>
+<nav class="toc" aria-label="On this page"><strong>On this page</strong><ul>
+<li class="lvl2"><a href="#the-four-step-routine">The four-step routine</a></li>
+<li class="lvl2"><a href="#step-1-see-what-is-listening">Step 1: see what is listening</a></li>
+<li class="lvl3"><a href="#one-specific-port">One specific port</a></li>
+<li class="lvl3"><a href="#macos">macOS</a></li>
+<li class="lvl2"><a href="#step-2-identify-the-process">Step 2: identify the process</a></li>
+<li class="lvl2"><a href="#step-3-stop-it">Step 3: stop it</a></li>
+<li class="lvl3"><a href="#shortcuts">Shortcuts</a></li>
+<li class="lvl2"><a href="#step-4-verify-the-port-is-free">Step 4: verify the port is free</a></li>
+<li class="lvl2"><a href="#when-kill-doesnt-stick">When kill doesn't stick</a></li>
+<li class="lvl3"><a href="#systemd-linux-servers">systemd (Linux servers)</a></li>
+<li class="lvl3"><a href="#docker">Docker</a></li>
+<li class="lvl3"><a href="#homebrew-and-launchd-macos">Homebrew and launchd (macOS)</a></li>
+<li class="lvl2"><a href="#a-full-inventory-of-a-server">A full inventory of a server</a></li>
+<li class="lvl2"><a href="#common-port-problems">Common port problems</a></li>
+<li class="lvl3"><a href="#address-already-in-use-eaddrinuse">&quot;Address already in use&quot; (EADDRINUSE)</a></li>
+<li class="lvl3"><a href="#permission-denied-on-port-80-or-443">Permission denied on port 80 or 443</a></li>
+<li class="lvl3"><a href="#bound-to-the-wrong-interface">Bound to the wrong interface</a></li>
+<li class="lvl3"><a href="#zombie-and-uninterruptible-processes">Zombie and uninterruptible processes</a></li>
+<li class="lvl2"><a href="#scripting-it-safely">Scripting it safely</a></li>
+<li class="lvl3"><a href="#waiting-for-a-port-to-open">Waiting for a port to open</a></li>
+<li class="lvl3"><a href="#check-from-the-outside">Check from the outside</a></li>
+<li class="lvl2"><a href="#common-mistakes">Common mistakes</a></li>
+<li class="lvl2"><a href="#exercises">Exercises</a></li>
+<li class="lvl2"><a href="#mini-project-a-port-doctor-script">Mini-project: a port doctor script</a></li>
+</ul></nav>
+<p class="lead">Sooner or later you hit "address already in use", a server that feels slow, or a service you don't remember starting. The routine is always the same four steps: <strong>find</strong> what is listening, <strong>identify</strong> the process, <strong>stop</strong> it the right way, and <strong>verify</strong> it is gone. This lesson covers that routine on Linux servers and on macOS (zsh), including the cases where a plain <code>kill</code> doesn't work because systemd, Docker or launchd restarts the process.</p>
+
+<h2 id="the-four-step-routine">The four-step routine</h2>
+<p><span class="level beginner">Beginner</span></p>
+
+<table>
+  <thead><tr><th>Step</th><th>Question</th><th>Linux</th><th>macOS</th></tr></thead>
+  <tbody>
+    <tr><td>1. Find</td><td>What is listening on this port?</td><td><code>ss -ltnp</code></td><td><code>lsof -nP -iTCP -sTCP:LISTEN</code></td></tr>
+    <tr><td>2. Identify</td><td>What is that process, and who started it?</td><td><code>ps -p PID -o pid,ppid,user,etime,cmd</code></td><td><code>ps -p PID -o pid,ppid,user,etime,command</code></td></tr>
+    <tr><td>3. Stop</td><td>Ask it to exit, then force if needed</td><td><code>kill PID</code>, then <code>kill -9 PID</code></td><td>same</td></tr>
+    <tr><td>4. Verify</td><td>Is the port free?</td><td><code>ss -ltn 'sport = :3000'</code></td><td><code>lsof -nP -iTCP:3000 -sTCP:LISTEN</code></td></tr>
+  </tbody>
+</table>
+
+<h2 id="step-1-see-what-is-listening">Step 1: see what is listening</h2>
+<p><span class="level beginner">Beginner</span> On Linux, <code>ss</code> is the modern replacement for <code>netstat</code>:</p>
+
+<pre><code>$ sudo ss -ltnp
+State   Recv-Q  Send-Q  Local Address:Port   Peer Address:Port  Process
+LISTEN  0       4096          0.0.0.0:22          0.0.0.0:*      users:(("sshd",pid=812,fd=3))
+LISTEN  0       511           0.0.0.0:80          0.0.0.0:*      users:(("nginx",pid=1204,fd=6))
+LISTEN  0       4096        127.0.0.1:5432        0.0.0.0:*      users:(("postgres",pid=990,fd=5))
+LISTEN  0       128                 *:3000              *:*      users:(("node",pid=20311,fd=19))
+</code></pre>
+
+<p>The flags: <code>-l</code> listening sockets only, <code>-t</code> TCP, <code>-n</code> numeric ports (no name lookup), <code>-p</code> show the owning process. Use <code>-u</code> for UDP and drop <code>-l</code> to see established connections.</p>
+
+<blockquote class="warn">Without <code>sudo</code>, <code>ss -p</code> only shows processes owned by your user. A port that appears to have no owner is usually owned by root or another user. Re-run with <code>sudo</code> before concluding nothing is there.</blockquote>
+
+<h3 id="one-specific-port">One specific port</h3>
+<pre><code>$ sudo ss -ltnp 'sport = :3000'
+$ sudo lsof -nP -iTCP:3000 -sTCP:LISTEN
+COMMAND   PID  USER   FD   TYPE DEVICE SIZE/OFF NODE NAME
+node    20311  gina   19u  IPv6 0x1234      0t0  TCP *:3000 (LISTEN)
+$ sudo fuser -n tcp 3000
+3000/tcp:            20311
+</code></pre>
+
+<p>All three answer the same question. <code>ss</code> is installed everywhere, <code>lsof</code> is the one that works the same on Linux and macOS, and <code>fuser</code> is the shortest.</p>
+
+<h3 id="macos">macOS</h3>
+<p>macOS has no <code>ss</code> and its <code>netstat</code> does not show process IDs. Use <code>lsof</code>:</p>
+
+<pre><code># Everything listening on TCP
+lsof -nP -iTCP -sTCP:LISTEN
+
+# One port
+lsof -nP -iTCP:3000 -sTCP:LISTEN
+
+# Just the PID (handy in scripts)
+lsof -ti tcp:3000
+</code></pre>
+
+<p><code>-n</code> skips DNS lookups and <code>-P</code> skips port-name lookups. Both make the command much faster and keep the output numeric.</p>
+
+<h2 id="step-2-identify-the-process">Step 2: identify the process</h2>
+<p><span class="level beginner">Beginner</span> A PID tells you little. Find out what it is, how long it has been running, and who its parent is:</p>
+
+<pre><code>$ ps -p 20311 -o pid,ppid,user,etime,cmd
+    PID    PPID USER         ELAPSED CMD
+  20311   20290 gina         02:14:37 node server.js --port 3000
+
+# What started it? Follow the parent
+$ ps -p 20290 -o pid,ppid,user,cmd
+    PID    PPID USER     CMD
+  20290       1 gina     npm run dev
+</code></pre>
+
+<p>A parent PID of <code>1</code> means systemd (or launchd on macOS) owns the process. That is your signal that a plain <code>kill</code> may be undone by a supervisor. More ways to look:</p>
+
+<pre><code>ls -l /proc/20311/cwd        # Linux: which directory it was started from
+ls -l /proc/20311/exe        # Linux: the real binary
+pstree -ps 20311             # the parent chain, if pstree is installed
+systemctl status 20311       # Linux: is this PID part of a systemd service?
+lsof -p 20311                # every file and socket it has open
+</code></pre>
+
+<blockquote class="tip">Read the full command line before you kill anything. Two processes called <code>node</code> or <code>python</code> can be a throwaway dev server and your production worker.</blockquote>
+
+<h2 id="step-3-stop-it">Step 3: stop it</h2>
+<p><span class="level beginner">Beginner</span> Always ask politely first. <code>kill</code> with no flag sends <strong>SIGTERM</strong> (15), which lets the process close connections, flush buffers and remove lock files:</p>
+
+<pre><code>kill 20311            # SIGTERM: graceful
+sleep 3
+kill -0 20311 && echo "still running"   # signal 0 only tests that the PID exists
+kill -9 20311         # SIGKILL: cannot be caught, no cleanup. Last resort.
+</code></pre>
+
+<table>
+  <thead><tr><th>Signal</th><th>Number</th><th>Use</th></tr></thead>
+  <tbody>
+    <tr><td>SIGTERM</td><td>15</td><td>Default. Request a clean shutdown.</td></tr>
+    <tr><td>SIGINT</td><td>2</td><td>Same as Ctrl+C.</td></tr>
+    <tr><td>SIGHUP</td><td>1</td><td>Many daemons reload their config on this. Not a stop.</td></tr>
+    <tr><td>SIGKILL</td><td>9</td><td>Forced. Kernel removes the process. Data in flight is lost.</td></tr>
+    <tr><td>SIGSTOP / SIGCONT</td><td>19 / 18</td><td>Pause and resume without killing.</td></tr>
+  </tbody>
+</table>
+
+<h3 id="shortcuts">Shortcuts</h3>
+<pre><code># Kill whatever owns port 3000 (gracefully)
+kill $(lsof -ti tcp:3000)
+
+# Linux: fuser can do it directly
+sudo fuser -k -TERM -n tcp 3000
+
+# By name (matches the process name)
+pkill node
+pkill -f "server.js --port 3000"     # match the full command line, much safer than a bare name
+
+# See what pkill would hit first
+pgrep -af "server.js"
+</code></pre>
+
+<blockquote class="warn"><code>pkill node</code> kills <em>every</em> node process you own, including the ones you forgot about. Run <code>pgrep -af</code> with the same pattern first, and prefer <code>-f</code> with a specific command line or a PID.</blockquote>
+
+<h2 id="step-4-verify-the-port-is-free">Step 4: verify the port is free</h2>
+<p><span class="level beginner">Beginner</span></p>
+
+<pre><code>$ lsof -nP -iTCP:3000 -sTCP:LISTEN
+$ echo $?
+1
+</code></pre>
+
+<p>No output and exit code <code>1</code> means nothing is listening, so the port is free. Exit code <code>0</code> with output means something still holds it. This is the opposite of what many people expect, because for <code>lsof</code> "success" means "found a match". On Linux, <code>ss -ltn 'sport = :3000'</code> printing only the header line means the same thing.</p>
+
+<h2 id="when-kill-doesnt-stick">When kill doesn't stick</h2>
+<p><span class="level intermediate">Intermediate</span> If the process returns a few seconds after you kill it, something is supervising it. Stop it at the source, not the PID.</p>
+
+<table>
+  <thead><tr><th>Supervisor</th><th>How to spot it</th><th>Stop it with</th></tr></thead>
+  <tbody>
+    <tr><td>systemd (Linux)</td><td><code>systemctl status PID</code> shows a unit; PPID is 1</td><td><code>sudo systemctl stop NAME</code></td></tr>
+    <tr><td>Docker</td><td><code>ss</code> shows <code>docker-proxy</code> or <code>com.docker.backend</code>; <code>docker ps</code> lists the port</td><td><code>docker stop ID</code></td></tr>
+    <tr><td>Homebrew (macOS)</td><td>Process is a brew-installed daemon</td><td><code>brew services stop NAME</code></td></tr>
+    <tr><td>launchd (macOS)</td><td>PPID is 1, plist in <code>~/Library/LaunchAgents</code></td><td><code>launchctl bootout gui/$(id -u)/LABEL</code></td></tr>
+    <tr><td>PM2 / supervisor / forever</td><td>Parent is a node/python supervisor</td><td><code>pm2 stop NAME</code></td></tr>
+    <tr><td>Kubernetes port-forward</td><td>Local process is <code>kubectl port-forward</code></td><td><code>kill</code> that local PID; the pod itself is unaffected</td></tr>
+  </tbody>
+</table>
+
+<h3 id="systemd-linux-servers">systemd (Linux servers)</h3>
+<pre><code># What services are running?
+systemctl list-units --type=service --state=running
+
+# Which unit owns this PID?
+systemctl status 1204
+# nginx.service - A high performance web server
+#    Active: active (running) since Mon 2026-11-02 09:12:44 UTC; 2h ago
+#  Main PID: 1204 (nginx)
+
+# Stop it now (it will come back at reboot)
+sudo systemctl stop nginx
+
+# Stop it now AND keep it from starting at boot
+sudo systemctl disable --now nginx
+
+# Prove it is gone
+systemctl is-active nginx          # inactive
+sudo ss -ltnp 'sport = :80'        # no rows
+</code></pre>
+
+<blockquote class="tip">Services can also be started on demand by a <em>socket unit</em>. If a port keeps reopening after you stop the service, check <code>systemctl list-sockets</code> and stop the <code>.socket</code> unit too.</blockquote>
+
+<h3 id="docker">Docker</h3>
+<pre><code>$ docker ps --format 'table {{.ID}}\t{{.Names}}\t{{.Ports}}'
+CONTAINER ID   NAMES     PORTS
+a1b2c3d4e5f6   web       0.0.0.0:3000-&gt;3000/tcp
+$ docker stop web
+$ docker ps --filter publish=3000      # empty means nothing publishes that port
+</code></pre>
+
+<p>Killing the <code>docker-proxy</code> process directly does not stop the container and can leave Docker in an odd state. Always stop the container.</p>
+
+<h3 id="homebrew-and-launchd-macos">Homebrew and launchd (macOS)</h3>
+<pre><code>brew services list                 # what brew is running
+brew services stop postgresql@16
+
+launchctl list | grep -i myapp     # loaded jobs
+launchctl bootout gui/$(id -u)/com.example.myapp
+</code></pre>
+
+<h2 id="a-full-inventory-of-a-server">A full inventory of a server</h2>
+<p><span class="level intermediate">Intermediate</span> When you land on an unfamiliar server, build the picture in this order:</p>
+
+<pre><code># 1. Everything listening, with owners
+sudo ss -ltnup
+
+# 2. What systemd is running
+systemctl list-units --type=service --state=running --no-pager
+
+# 3. Containers
+docker ps 2&gt;/dev/null
+
+# 4. The heaviest processes
+ps aux --sort=-%mem | head -10
+ps aux --sort=-%cpu | head -10
+
+# 5. Who is connected right now
+ss -tn state established | head
+who
+
+# 6. What changed recently
+journalctl --since "1 hour ago" -p warning --no-pager | tail -30
+</code></pre>
+
+<p>Anything listening on <code>0.0.0.0</code> or <code>*</code> is reachable from the network. Anything on <code>127.0.0.1</code> is local only. A database or cache bound to <code>0.0.0.0</code> that you did not expect is a finding worth acting on.</p>
+
+<h2 id="common-port-problems">Common port problems</h2>
+<p><span class="level intermediate">Intermediate</span></p>
+
+<h3 id="address-already-in-use-eaddrinuse">"Address already in use" (EADDRINUSE)</h3>
+<pre><code>Error: listen EADDRINUSE: address already in use :::3000
+</code></pre>
+<p>Run the four-step routine on that port. If nothing is listening but the error persists, the port may be in <code>TIME_WAIT</code> after a recent shutdown. Wait about a minute, or have the server set <code>SO_REUSEADDR</code> (most frameworks do by default).</p>
+
+<h3 id="permission-denied-on-port-80-or-443">Permission denied on port 80 or 443</h3>
+<p>Ports below 1024 are privileged. Run behind a reverse proxy on a high port, or grant the binary the capability instead of running as root:</p>
+<pre><code>sudo setcap 'cap_net_bind_service=+ep' /usr/local/bin/myserver</code></pre>
+
+<h3 id="bound-to-the-wrong-interface">Bound to the wrong interface</h3>
+<p>If <code>ss</code> shows <code>127.0.0.1:3000</code> you cannot reach it from another machine, and if it shows <code>0.0.0.0:3000</code> everyone can. Check the app's host setting rather than the firewall first.</p>
+
+<h3 id="zombie-and-uninterruptible-processes">Zombie and uninterruptible processes</h3>
+<p>A process in state <code>Z</code> (zombie) is already dead and waiting for its parent to collect it. You cannot kill it, but killing the parent clears it. A process in state <code>D</code> (uninterruptible sleep, usually stuck on disk or NFS) ignores even <code>kill -9</code> until the I/O returns.</p>
+<pre><code>ps -eo pid,ppid,stat,cmd | awk '$3 ~ /^[ZD]/'</code></pre>
+
+<h2 id="scripting-it-safely">Scripting it safely</h2>
+<p><span class="level advanced">Advanced</span> A small helper that frees a port, tries SIGTERM, waits, then escalates, and refuses to touch root-owned processes:</p>
+
+<pre><code>#!/usr/bin/env bash
+# freeport.sh PORT  : stop whatever is listening on PORT
+set -euo pipefail
+port="${1:?usage: freeport.sh PORT}"
+
+pids=$(lsof -ti "tcp:${port}" -sTCP:LISTEN || true)
+[ -z "$pids" ] &amp;&amp; { echo "port ${port} is already free"; exit 0; }
+
+for pid in $pids; do
+  owner=$(ps -o user= -p "$pid" | tr -d ' ')
+  cmd=$(ps -o command= -p "$pid")
+  if [ "$owner" = "root" ] &amp;&amp; [ "$(id -u)" -ne 0 ]; then
+    echo "pid ${pid} is owned by root, skipping: ${cmd}" &gt;&amp;2
+    continue
+  fi
+  echo "stopping ${pid} (${owner}): ${cmd}"
+  kill "$pid"
+done
+
+for _ in 1 2 3 4 5; do
+  sleep 1
+  lsof -ti "tcp:${port}" -sTCP:LISTEN &gt;/dev/null || { echo "port ${port} is free"; exit 0; }
+done
+
+echo "still listening after 5s, sending SIGKILL" &gt;&amp;2
+kill -9 $(lsof -ti "tcp:${port}" -sTCP:LISTEN) 2&gt;/dev/null || true
+</code></pre>
+
+<h3 id="waiting-for-a-port-to-open">Waiting for a port to open</h3>
+<pre><code># Block until something listens on 5432, or fail after 30 seconds
+timeout 30 bash -c 'until (echo &gt; /dev/tcp/127.0.0.1/5432) 2&gt;/dev/null; do sleep 1; done' \
+  &amp;&amp; echo up || echo "timed out"
+</code></pre>
+
+<h3 id="check-from-the-outside">Check from the outside</h3>
+<p><code>ss</code> and <code>lsof</code> tell you what the machine thinks. To test what a remote client sees, use <code>nc -zv host 3000</code> or <code>curl -v telnet://host:3000</code>. If the local check passes and the remote one fails, look at the bind address, the firewall and the cloud security group, in that order.</p>
+
+<h2 id="common-mistakes">Common mistakes</h2>
+<ul>
+  <li><strong>Jumping to <code>kill -9</code>.</strong> SIGKILL skips cleanup, so you can end up with corrupted files, stale lock files and dropped in-flight requests. Start with plain <code>kill</code>.</li>
+  <li><strong>Killing by name.</strong> <code>pkill node</code> or <code>killall python</code> hits every match. Use the PID, or <code>pkill -f</code> with a full command line after checking it with <code>pgrep -af</code>.</li>
+  <li><strong>Forgetting <code>sudo</code> when looking.</strong> A port with no visible owner usually belongs to another user. Look with <code>sudo</code> before deciding it is a ghost.</li>
+  <li><strong>Fighting the supervisor.</strong> If it comes back after <code>kill</code>, stop the systemd unit, container, brew service or PM2 app instead.</li>
+  <li><strong>Reading exit codes backwards.</strong> For <code>lsof</code> and <code>grep</code>, exit 0 means "found something". An empty result with exit 1 is the good outcome when you are freeing a port.</li>
+  <li><strong>Stopping a service that is only disabled-at-boot.</strong> <code>systemctl disable</code> does not stop it now, and <code>stop</code> does not stop it at the next boot. Use <code>disable --now</code> for both.</li>
+  <li><strong>Not checking what you are about to kill.</strong> Run <code>ps -p PID -o cmd</code> first, especially on a shared or production host.</li>
+</ul>
+
+<h2 id="exercises">Exercises</h2>
+<ol>
+  <li>Start a throwaway server with <code>python3 -m http.server 8123</code>. Find its PID three different ways (<code>ss</code> or <code>lsof</code>, <code>fuser</code>, <code>pgrep -af</code>), then stop it with SIGTERM and verify the port is free.</li>
+  <li>Start the same server twice and read the "address already in use" error. Use the four-step routine to fix it without restarting your shell.</li>
+  <li>Run <code>sudo ss -ltnp</code> on a machine you manage and write down every listening port, its owner, and whether it binds to <code>0.0.0.0</code> or <code>127.0.0.1</code>. Pick one that surprises you and trace it to its unit or container.</li>
+  <li>Create a systemd service that runs a simple server (see the Processes &amp; Services lesson). Kill its PID and watch <code>Restart=always</code> bring it back, then stop it properly with <code>systemctl stop</code>.</li>
+  <li>Start a container with a published port (<code>docker run -d -p 8124:80 nginx</code>), find it from the host with both <code>ss</code> and <code>docker ps</code>, and stop it.</li>
+</ol>
+
+<h2 id="mini-project-a-port-doctor-script">Mini-project: a port doctor script</h2>
+<p>Write <code>portdoctor.sh PORT</code> that diagnoses one port in a single command. Requirements:</p>
+<ul>
+  <li>Print who is listening: PID, user, full command line, how long it has been running, and the bind address.</li>
+  <li>Say what supervises it: a systemd unit (with <code>systemctl status</code> summary), a Docker container (name and image), a brew service, or "none (plain process)".</li>
+  <li>Print the recommended stop command for that case, but do not run it unless <code>--stop</code> is passed.</li>
+  <li>With <code>--stop</code>, send SIGTERM, wait up to 5 seconds, then offer SIGKILL only after an explicit confirmation prompt.</li>
+  <li>Refuse to touch PID 1, root-owned processes (unless run with <code>sudo</code>), or <code>sshd</code>.</li>
+  <li>Work on both Linux (<code>ss</code>) and macOS (<code>lsof</code>) by detecting <code>uname</code>, and exit non-zero if the port is still in use at the end.</li>
+</ul>
+
+<section class="further"><h2 id="further-reading">Further reading</h2>
+<p>Official documentation for the tools and APIs covered on this page:</p>
+<ul class="further-list"><li><a href="https://man7.org/linux/man-pages/man8/ss.8.html" target="_blank" rel="noopener">ss (man) ↗</a></li>
+<li><a href="https://man7.org/linux/man-pages/man8/lsof.8.html" target="_blank" rel="noopener">lsof (man) ↗</a></li>
+<li><a href="https://man7.org/linux/man-pages/man1/kill.1.html" target="_blank" rel="noopener">kill (man) ↗</a></li>
+<li><a href="https://man7.org/linux/man-pages/man1/fuser.1.html" target="_blank" rel="noopener">fuser (man) ↗</a></li></ul></section>
+  <nav class="pager">
+<a class="prev" href="processes-and-services.html"><small>Previous</small>🐧 Processes &amp; Services</a>
+<a class="next" href="performance-monitoring.html"><small>Next</small>🐧 Performance Monitoring</a>
+  </nav>
+</main>
+<button type="button" class="fab top" id="fab-top" aria-label="Back to top">↑ Top</button>
+<div class="banner" id="update-banner" role="status">A new version is available.<button type="button">Reload</button></div>
+<div class="banner" id="offline-banner" role="status">You're offline — showing cached lessons.</div>
+<script src="../app.js" defer></script>
+</body>
+</html>

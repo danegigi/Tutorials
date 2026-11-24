@@ -898,6 +898,17 @@ export const SECTIONS = [
         ],
       },
       {
+        slug: "finding-and-stopping-services",
+        title: "Finding & Stopping Services and Ports",
+        blurb: "Which process owns a port, what is running on the server, and how to stop it safely: ss, lsof, fuser, ps, SIGTERM before SIGKILL, systemd, Docker, and the macOS equivalents.",
+        further: [
+          ref("ss (man)", "https://man7.org/linux/man-pages/man8/ss.8.html"),
+          ref("lsof (man)", "https://man7.org/linux/man-pages/man8/lsof.8.html"),
+          ref("kill (man)", "https://man7.org/linux/man-pages/man1/kill.1.html"),
+          ref("fuser (man)", "https://man7.org/linux/man-pages/man1/fuser.1.html"),
+        ],
+      },
+      {
         slug: "performance-monitoring",
         title: "Performance Monitoring",
         blurb: "CPU, memory, disk, and network under load: top/vmstat/iostat/free/sar and the USE method in practice.",
